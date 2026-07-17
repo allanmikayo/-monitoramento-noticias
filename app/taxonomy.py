@@ -71,25 +71,30 @@ def build_index(db: Session) -> TaxonomyIndex:
     )
 
 
-def resolve_company_ids(matched_keywords: list[str], taxonomy: "TaxonomyIndex") -> set[int]:
-    """Decide quais empresas um artigo deve ficar associado, a partir das
-    keywords que bateram no título/resumo.
+def resolve_coverage(matched_keywords: list[str], taxonomy: "TaxonomyIndex") -> tuple[set[int], set[int]]:
+    """Decide como marcar um artigo a partir das keywords que bateram no
+    título/resumo. Retorna (company_ids, sector_ids).
 
-    Regra (pedido explícito do Allan, 17/07/2026): se alguma keyword
-    casada é o nome/alias de uma empresa ESPECÍFICA, usa só essas (preciso
-    -- é isso que o artigo realmente cita). Só quando NENHUMA empresa
-    específica bate, mas um termo de SETOR bate (ex.: "varejo", "crédito
-    privado"), associa a TODAS as empresas cadastradas naquele(s) setor(es)
-    -- notícia setorial/macro é relevante pra quem cobre o setor inteiro,
-    mesmo sem citar nenhum emissor pelo nome."""
+    Regra (pedido explícito do Allan, 17/07/2026, revisada no mesmo dia):
+    se alguma keyword casada é o nome/alias de uma empresa ESPECÍFICA, o
+    artigo fica ligado só a essas empresas (preciso -- é isso que ele
+    realmente cita), sem tag de setor. Se NENHUMA empresa específica bateu
+    mas um termo de SETOR bateu (ex.: "saneamento", "Copom"), o artigo NÃO
+    fica mais "grudado" em toda empresa do setor (isso inflava a lista de
+    chips com empresas que a notícia nem cita) -- em vez disso ganha uma
+    tag do PRÓPRIO SETOR (Article.sector_tags), sinalizando que é
+    relevante pra quem cobre o setor inteiro sem apontar pra uma empresa
+    específica. Continua contando como "minha cobertura" (is_covered
+    depende só de ter batido alguma keyword, ver pipeline.py)."""
     company_ids: set[int] = set()
-    sector_fallback_ids: set[int] = set()
+    sector_ids: set[int] = set()
     for kw in matched_keywords:
         norm = normalize(kw)
         comp_ids = taxonomy.keyword_to_companies.get(norm, set())
         if comp_ids:
             company_ids |= comp_ids
         else:
-            for sector_id in taxonomy.keyword_to_sectors.get(norm, set()):
-                sector_fallback_ids |= taxonomy.companies_by_sector.get(sector_id, set())
-    return company_ids or sector_fallback_ids
+            sector_ids |= taxonomy.keyword_to_sectors.get(norm, set())
+    if company_ids:
+        return company_ids, set()
+    return set(), sector_ids

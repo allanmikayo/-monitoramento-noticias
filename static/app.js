@@ -77,6 +77,12 @@
       const companyChips = (a.companies || [])
         .map((c) => `<span class="company-chip" title="Empresa casada por keyword/alias nesta noticia">${c.name}</span>`)
         .join("");
+      // Noticia setorial (bateu so' termo de setor, sem citar empresa
+      // especifica) ganha uma tag do SETOR em vez de ficar "grudada" em
+      // toda empresa do setor -- pedido do Allan, 17/07/2026.
+      const sectorChips = (a.sector_tags || [])
+        .map((s) => `<span class="sector-chip" title="Noticia setorial: afeta todo o setor, sem citar empresa especifica">Setor: ${s.name}</span>`)
+        .join("");
       const foraCobertura = a.is_covered === false && a.article_type !== "rating_action";
       card.innerHTML = `
         <div class="card-meta">
@@ -87,6 +93,7 @@
         </div>
         <h3><a href="${a.url}" target="_blank" rel="noopener">${a.title}</a></h3>
         ${a.snippet ? `<p class="snippet">${a.snippet}</p>` : ""}
+        ${sectorChips ? `<div class="companies">${sectorChips}</div>` : ""}
         ${companyChips ? `<div class="companies">${companyChips}</div>` : ""}
       `;
       listEl.appendChild(card);

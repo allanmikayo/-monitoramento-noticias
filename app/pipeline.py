@@ -12,7 +12,7 @@ from . import config, store
 from .db import SessionLocal
 from .filter import match_keywords
 from .models import RunLog, Source
-from .taxonomy import build_index, resolve_company_ids
+from .taxonomy import build_index, resolve_coverage
 
 logger = logging.getLogger(__name__)
 
@@ -66,10 +66,9 @@ def _run_source(source_info: dict, taxonomy) -> dict:
 
                 # Empresa especifica citada -> so' ela (preciso). Se nenhuma
                 # empresa especifica bateu mas um termo de SETOR bateu ->
-                # associa a todas as empresas daquele setor (pedido do
-                # Allan: noticia setorial/macro sem citar emissor ainda e'
-                # relevante pra quem cobre o setor inteiro).
-                company_ids = resolve_company_ids(matched, taxonomy)
+                # o artigo ganha uma tag do SETOR (nao fica grudado em toda
+                # empresa do setor -- pedido do Allan, 17/07/2026).
+                company_ids, sector_ids = resolve_coverage(matched, taxonomy)
 
                 article_type = raw.article_type or _TYPE_BY_CATEGORY.get(source_info["category"], "news")
 
@@ -89,6 +88,7 @@ def _run_source(source_info: dict, taxonomy) -> dict:
                     published_at=raw.published_at,
                     matched_keywords=matched,
                     company_ids=sorted(company_ids),
+                    sector_ids=sorted(sector_ids),
                     is_covered=is_covered,
                 )
                 if is_new:

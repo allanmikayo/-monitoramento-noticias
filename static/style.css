@@ -152,6 +152,15 @@ h2 { font-size: 1.05rem; margin: 20px 0 8px; color: var(--header); font-weight: 
   font-weight: 600; background: var(--accent-tint); color: var(--accent-dark); border: 1px solid #ffd9b8;
 }
 
+/* Tag de SETOR (17/07/2026): noticia setorial/macro que nao cita empresa
+   especifica -- solida em laranja pra se destacar dos chips de empresa
+   (contorno claro), deixando visualmente obvio que e' um alerta pro
+   setor inteiro, nao uma empresa em particular. */
+.sector-chip {
+  display: inline-block; padding: 2px 10px; border-radius: 999px; font-size: 0.74rem;
+  font-weight: 700; background: var(--accent); color: #fff;
+}
+
 /* Badges de tipo de artigo -- ação de rating e fato relevante são o sinal
    de maior prioridade pra um analista de crédito, então ganham destaque
    sólido em laranja; notícia/research ficam discretas (contorno). */

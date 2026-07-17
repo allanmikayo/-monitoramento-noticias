@@ -15,8 +15,9 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from app.db import Base, engine, run_migrations
+from app.db import Base, SessionLocal, engine, run_migrations
 from app.pipeline import run_pipeline
+from app.seed_sources import sync_known_sources
 
 
 def main() -> None:
@@ -28,6 +29,17 @@ def main() -> None:
     # computador local apontando pro Supabase, ver CLAUDE.md).
     Base.metadata.create_all(engine)
     run_migrations()
+
+    # Sincroniza fontes novas do config.py automaticamente (17/07/2026) --
+    # antes só o seed manual local fazia isso, então cadastrar uma fonte
+    # nova exigia rodar o seed contra o Supabase toda vez. Agora a própria
+    # rodada agendada do GitHub Actions já traz fontes novas sozinha.
+    with SessionLocal() as db:
+        n_new, n_synced = sync_known_sources(db)
+        if n_new or n_synced:
+            logging.getLogger(__name__).info(
+                "Fontes sincronizadas: %d nova(s), %d atualizada(s)", n_new, n_synced
+            )
 
     summary = run_pipeline(triggered_by="scheduler")
     print(json.dumps(summary, indent=2, ensure_ascii=False))

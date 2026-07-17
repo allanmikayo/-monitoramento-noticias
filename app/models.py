@@ -129,6 +129,19 @@ article_company = Table(
     Column("company_id", Integer, ForeignKey("companies.id"), primary_key=True),
 )
 
+# Tag de SETOR (17/07/2026, pedido do Allan): quando uma noticia bate so'
+# com um termo de setor (ex.: "saneamento", "Copom") e nao cita nenhuma
+# empresa especifica da cobertura, antes isso grudava TODAS as empresas
+# daquele setor no artigo (poluia a lista de chips com empresas que a
+# noticia nem cita). Agora esse caso vira uma tag de SETOR separada (sem
+# empresa nenhuma anexada) -- ver taxonomy.resolve_coverage.
+article_sector = Table(
+    "article_sector",
+    Base.metadata,
+    Column("article_id", Integer, ForeignKey("articles.id"), primary_key=True),
+    Column("sector_id", Integer, ForeignKey("sectors.id"), primary_key=True),
+)
+
 
 class Article(Base):
     __tablename__ = "articles"
@@ -153,6 +166,7 @@ class Article(Base):
     is_covered: Mapped[bool] = mapped_column(Boolean, default=True)
 
     companies: Mapped[list["Company"]] = relationship(secondary=article_company)
+    sector_tags: Mapped[list["Sector"]] = relationship(secondary=article_sector)
 
 
 # ---------------------------------------------------------------------------

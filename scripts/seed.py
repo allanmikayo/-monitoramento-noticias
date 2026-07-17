@@ -20,6 +20,7 @@ from app.auth import hash_password
 from app import config
 from app.db import Base, SessionLocal, engine, run_migrations
 from app.models import AppSetting, Company, CompanyAlias, Sector, Source, User
+from app.seed_sources import sync_known_sources
 
 XLSX_PATH = Path(__file__).resolve().parent.parent / "data" / "Setores.xlsx"
 
@@ -155,24 +156,7 @@ def run() -> None:
         # notas) -- NÃO mexe em 'enabled', porque isso é controlado pelo
         # usuário na aba "Fontes & Empresas" (ligar/desligar fonte) e
         # sobrescrever aqui reverteria a escolha dele a cada reinício.
-        existing_sources = {s.name: s for s in db.query(Source).all()}
-        n_sources = n_synced = 0
-        SYNC_FIELDS = ("url", "scraper_module", "category", "kind", "notes")
-        for src in config.KNOWN_SOURCES:
-            current = existing_sources.get(src["name"])
-            if current is None:
-                db.add(Source(**src))
-                n_sources += 1
-                continue
-            changed = False
-            for field in SYNC_FIELDS:
-                novo_valor = src.get(field)
-                if novo_valor is not None and getattr(current, field) != novo_valor:
-                    setattr(current, field, novo_valor)
-                    changed = True
-            if changed:
-                n_synced += 1
-        db.commit()
+        n_sources, n_synced = sync_known_sources(db)
         print(f"Fontes: {n_sources} novas | {n_synced} atualizadas")
         if n_synced:
             print(

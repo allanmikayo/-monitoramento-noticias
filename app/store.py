@@ -7,10 +7,10 @@ import json
 from datetime import datetime, timedelta, timezone
 from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
 
-from sqlalchemy import delete, select
+from sqlalchemy import delete, exists, select
 from sqlalchemy.orm import Session, selectinload
 
-from .models import Article, article_company
+from .models import Article, article_company, article_sector
 
 TRACKING_PARAMS = {
     "utm_source", "utm_medium", "utm_campaign", "utm_term", "utm_content",
@@ -44,11 +44,13 @@ def upsert_article(
     published_at: datetime | None,
     matched_keywords: list[str],
     company_ids: list[int],
+    sector_ids: list[int] | None = None,
     is_covered: bool = True,
 ) -> bool:
     """Insere se novo; se já existir, atualiza campos (mantendo o corpo mais
-    longo) e garante que as empresas casadas estejam associadas. Retorna
-    True se o artigo era novo."""
+    longo) e garante que as empresas/setores casados estejam associados.
+    Retorna True se o artigo era novo."""
+    sector_ids = sector_ids or []
     norm_url = normalize_url(url)
     existing = db.scalar(select(Article).where(Article.url == norm_url))
 
@@ -69,6 +71,7 @@ def upsert_article(
         db.add(art)
         db.flush()
         _set_companies(db, art, company_ids)
+        _set_sectors(db, art, sector_ids)
         return True
 
     existing.title = title or existing.title
@@ -85,6 +88,7 @@ def upsert_article(
     if is_covered and not existing.is_covered:
         existing.is_covered = True
     _set_companies(db, existing, company_ids)
+    _set_sectors(db, existing, sector_ids)
     return False
 
 
@@ -116,6 +120,26 @@ def _set_companies(db: Session, art: Article, company_ids: list[int]) -> None:
         db.execute(article_company.insert().values(article_id=art.id, company_id=cid))
 
 
+def _set_sectors(db: Session, art: Article, sector_ids: list[int]) -> None:
+    """Mesma lógica de `_set_companies`, mas pra tag de SETOR (17/07/2026) --
+    a foto exata do casamento mais recente, sem acumular tag antiga."""
+    existing_ids = {s.id for s in art.sector_tags}
+    new_ids = set(sector_ids)
+
+    to_remove = existing_ids - new_ids
+    if to_remove:
+        db.execute(
+            article_sector.delete().where(
+                article_sector.c.article_id == art.id,
+                article_sector.c.sector_id.in_(to_remove),
+            )
+        )
+
+    to_add = new_ids - existing_ids
+    for sid in to_add:
+        db.execute(article_sector.insert().values(article_id=art.id, sector_id=sid))
+
+
 def list_articles(
     db: Session,
     *,
@@ -139,7 +163,8 @@ def list_articles(
     # busca tudo em poucas consultas agrupadas, independente de quantos
     # artigos/empresas existam.
     stmt = select(Article).options(
-        selectinload(Article.companies).selectinload(Company.sector)
+        selectinload(Article.companies).selectinload(Company.sector),
+        selectinload(Article.sector_tags),
     ).where(
         ((Article.published_at.is_not(None)) & (Article.published_at >= cutoff))
         | ((Article.published_at.is_(None)) & (Article.found_at >= cutoff))
@@ -154,12 +179,25 @@ def list_articles(
         # nomeada -- uma agência rebaixando qualquer emissor do mercado de
         # crédito privado é relevante pra um analista de credit research).
         stmt = stmt.where((Article.is_covered.is_(True)) | (Article.article_type == "rating_action"))
-    if sector_id or company_id:
-        stmt = stmt.join(Article.companies)
-        if company_id:
-            stmt = stmt.where(Company.id == company_id)
-        if sector_id:
-            stmt = stmt.where(Company.sector_id == sector_id)
+    if company_id:
+        stmt = stmt.join(Article.companies).where(Company.id == company_id)
+    elif sector_id:
+        # Um artigo pode estar ligado a um setor de duas formas: via empresa
+        # especifica daquele setor (article_company -> companies.sector_id),
+        # ou via tag direta de setor (article_sector, quando so' bateu termo
+        # setorial -- ver taxonomy.resolve_coverage, 17/07/2026). Usa EXISTS
+        # em vez de JOIN pra não multiplicar linha nem exigir DISTINCT.
+        empresa_do_setor = exists().where(
+            article_company.c.article_id == Article.id,
+            article_company.c.company_id.in_(
+                select(Company.id).where(Company.sector_id == sector_id)
+            ),
+        )
+        tag_de_setor = exists().where(
+            article_sector.c.article_id == Article.id,
+            article_sector.c.sector_id == sector_id,
+        )
+        stmt = stmt.where(empresa_do_setor | tag_de_setor)
     stmt = stmt.order_by(Article.published_at.desc().nullslast(), Article.found_at.desc()).limit(limit)
     return list(db.scalars(stmt).unique())
 

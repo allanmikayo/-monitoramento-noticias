@@ -512,3 +512,86 @@ real daqui).
   corte final continua sendo feito depois, então pedir mais do site não
   tem desvantagem, só reduz o risco de perder documento por causa de um
   filtro de período curto demais.
+
+## Deploy na nuvem: primeira rodada real (17/07/2026)
+
+Allan seguiu o `DEPLOY.md` do início ao fim: Supabase criado, banco
+seedado, GitHub Actions rodando a cada 5 min, site no Vercel
+(`monitoramento-noticias.vercel.app`) respondendo login e dashboard.
+Erros encontrados e corrigidos ao vivo (guardar pra não repetir):
+
+- **`DATABASE_URL` colado com lixo junto**: tanto no Vercel quanto no
+  secret do GitHub, ao copiar do Bloco de Notas o Allan grudou texto de
+  outra linha junto (ex.: `...supabase.com:6543/postgres\n   BOOTSTRAP_...`
+  ou uma senha errada) -- causou `database "postgres\n..." does not
+  exist` e `password authentication failed`. Nem sempre dá pra "revelar"
+  o valor salvo (variáveis marcadas "Sensitive" no Vercel são write-only,
+  igual GitHub Secrets) -- quando isso acontece, a saída é ler o `.env`
+  LOCAL dele (que já está confirmado funcionando) e mandar a string exata
+  pra ele colar de novo, em vez de pedir pra digitar/copiar de novo.
+- **N+1 queries -> timeout 504 em `/fontes`**: sem eager loading,
+  `sector.companies` + `company.aliases` (e `article.companies` +
+  `company.sector` no dashboard) disparavam uma consulta por linha. No
+  SQLite local isso nunca apareceu (latência ~0), mas no Postgres do
+  Supabase com `NullPool` (conexão nova a cada consulta) virava uma
+  cascata de idas-e-voltas de rede que estourava os 10s de timeout do
+  Vercel. Corrigido com `selectinload` em `store.list_articles` e
+  `app.py:sources_page`. **Lição**: qualquer novo `.all()`/loop que
+  acesse relationship (`.companies`, `.aliases`, `.sector`, etc.) precisa
+  vir com eager loading pensado pra Postgres+serverless, não só testado
+  local em SQLite.
+- Repositório GitHub saiu com hífen extra no nome
+  (`allanmikayo/-monitoramento-noticias`) -- sem efeito prático, só
+  atenção redobrada ao copiar a URL em `GITHUB_REPO`/remote git.
+
+## Tag de setor + fontes sem empresa específica (17/07/2026)
+
+Pedido do Allan: notícias setoriais/macro (ex.: "nova lei do saneamento",
+Copom) que não citam nenhuma empresa específica da cobertura estavam
+sendo capturadas mas ficando de fora de "Minha cobertura" -- porque
+faltava termo de SETOR cadastrado que batesse com o texto (o mecanismo de
+fallback setorial já existia, só faltava dado). Duas mudanças:
+
+1. **`taxonomy.resolve_coverage`** (renomeado de `resolve_company_ids`):
+   se bateu empresa específica, só ela. Se só bateu termo de setor, o
+   artigo NÃO fica mais grudado em toda empresa do setor (poluía os chips
+   com empresas que a notícia nem cita) -- em vez disso ganha uma
+   **tag de setor própria** (`Article.sector_tags`, tabela nova
+   `article_sector`, mesma estrutura de `article_company`). Aparece no
+   card como um chip laranja sólido "Setor: Nome", separado dos chips de
+   empresa. Continua contando como "minha cobertura" normalmente.
+   `store.list_articles` filtra por `sector_id` considerando as DUAS
+   formas de vínculo (empresa do setor OU tag direta), via `EXISTS` (não
+   `JOIN`, pra não multiplicar linha).
+2. **Setor sem empresa nenhuma agora é permitido** -- criado um setor
+   "Economia" (botão "+ Novo setor" em Fontes & Empresas, rota
+   `POST /fontes/setor`) só com termos de setor (Copom, Selic, Banco
+   Central), sem nenhuma empresa cadastrada. Serve pra conteúdo
+   puramente macro que não é sobre nenhum emissor específico.
+3. **Bulk-add de termos/aliases com `;`**: os campos de "termo extra do
+   setor" e "alias de empresa" em Fontes & Empresas agora aceitam vários
+   valores de uma vez, separados por `;` (ex.: `ANEEL; tarifa de
+   energia`). Sempre foi salvo direto no banco (nunca era "só da sessão")
+   -- isso já era assim antes, só não estava claro pro Allan.
+4. **Fonte nova: Banco Central — Comunicados do Copom**
+   (`https://www.bcb.gov.br/api/feed/sitebcb/sitefeeds/comunicadoscopom`,
+   feed Atom confirmado ao vivo, `generic_rss`). Precisa do termo "Copom"
+   (e opcionalmente "Selic"/"Banco Central") cadastrado no setor
+   "Economia" pra aparecer em "Minha cobertura".
+5. **Valor Econômico religado**: a URL antiga (`valor.globo.com/rss/valor`)
+   nunca foi confirmada; achada a de verdade
+   (`https://www.valor.com.br/rss`) via a página pública de descoberta do
+   feeder.co (o link "Follow now" de lá expõe a URL original do feed --
+   não precisou de login nenhum, o gate de login do feeder.co é só pro
+   produto deles). O domínio `valor.com.br`/`valor.globo.com` é bloqueado
+   pras ferramentas de pesquisa deste assistente inspecionarem direto,
+   mas o robô do GitHub Actions roda separado e deve conseguir buscar
+   normalmente -- **fonte ainda está desabilitada no banco** (sync nunca
+   mexe em `enabled` de fonte existente), Allan precisa habilitar manual
+   em Fontes & Empresas e conferir o painel de diagnóstico depois.
+6. **`sync_known_sources` (novo, `app/seed_sources.py`)**: antes só o
+   seed manual local sincronizava `config.KNOWN_SOURCES` -> banco, então
+   cadastrar fonte nova exigia rodar `python -m scripts.seed` contra o
+   Supabase toda vez. Agora `scripts/run_once.py` (GitHub Actions) também
+   chama isso a cada rodada -- fonte nova no `config.py` + `git push`
+   já aparece sozinha na próxima execução agendada, sem passo manual.

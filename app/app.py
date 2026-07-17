@@ -267,6 +267,7 @@ def api_articles(
             "found_at": _iso_utc(a.found_at),
             "is_covered": a.is_covered,
             "companies": [{"id": c.id, "name": c.name, "sector": c.sector.name} for c in a.companies],
+            "sector_tags": [{"id": s.id, "name": s.name} for s in a.sector_tags],
         })
     return {"count": len(out), "articles": out}
 
@@ -404,11 +405,31 @@ def sources_page(request: Request, user: User = Depends(require_user), db: Sessi
 
 @app.post("/fontes/setor/{sector_id}/keyword")
 def add_sector_keyword(sector_id: int, keyword: str = Form(...), user: User = Depends(require_user), db: Session = Depends(get_db)):
-    keyword = keyword.strip()
-    if keyword:
-        exists = db.query(SectorKeyword).filter_by(sector_id=sector_id, keyword=keyword).first()
-        if not exists:
-            db.add(SectorKeyword(sector_id=sector_id, keyword=keyword))
+    # Aceita varios termos de uma vez, separados por ";" (pedido do Allan,
+    # 17/07/2026) -- ex.: "saneamento; ANEEL; tarifa de energia". Cada um
+    # vira uma SectorKeyword própria (fica salvo no banco, visível pra
+    # todo mundo, não some ao reiniciar).
+    termos = [t.strip() for t in keyword.split(";")]
+    existentes = {k.keyword for k in db.query(SectorKeyword).filter_by(sector_id=sector_id).all()}
+    for termo in termos:
+        if termo and termo not in existentes:
+            db.add(SectorKeyword(sector_id=sector_id, keyword=termo))
+            existentes.add(termo)
+    db.commit()
+    return RedirectResponse(url="/fontes", status_code=303)
+
+
+@app.post("/fontes/setor")
+def add_sector(nome: str = Form(...), user: User = Depends(require_user), db: Session = Depends(get_db)):
+    # Cria um setor novo, sem empresa nenhuma ainda -- util pra temas
+    # macro/transversais (ex.: "Economia", que so' usa termos de setor tipo
+    # "Copom"/"Selic" pra bater noticia, sem estar ligado a uma empresa
+    # especifica). Pedido do Allan, 17/07/2026.
+    nome = nome.strip()
+    if nome:
+        ja_existe = db.query(Sector).filter_by(name=nome).first()
+        if not ja_existe:
+            db.add(Sector(name=nome))
             db.commit()
     return RedirectResponse(url="/fontes", status_code=303)
 
@@ -425,12 +446,15 @@ def remove_sector_keyword(kw_id: int, user: User = Depends(require_user), db: Se
 @app.post("/fontes/empresa/{company_id}/alias")
 def add_company_alias(company_id: int, alias: str = Form(...), user: User = Depends(require_user), db: Session = Depends(get_db)):
     from .models import CompanyAlias
-    alias = alias.strip()
-    if alias:
-        exists = db.query(CompanyAlias).filter_by(company_id=company_id, alias=alias).first()
-        if not exists:
-            db.add(CompanyAlias(company_id=company_id, alias=alias))
-            db.commit()
+    # Mesma ideia do bulk-add de termos de setor: aceita varios aliases
+    # separados por ";" (ex.: "VALE3; Vale S.A.; Vale mining").
+    aliases = [a.strip() for a in alias.split(";")]
+    existentes = {a.alias for a in db.query(CompanyAlias).filter_by(company_id=company_id).all()}
+    for al in aliases:
+        if al and al not in existentes:
+            db.add(CompanyAlias(company_id=company_id, alias=al))
+            existentes.add(al)
+    db.commit()
     return RedirectResponse(url="/fontes", status_code=303)
 
 

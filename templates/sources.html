@@ -24,7 +24,12 @@
 </table>
 
 <h1>Setores, empresas e keywords</h1>
-<p class="muted">Cada empresa listada aqui é usada para casar (e marcar o setor de) as notícias coletadas. Adicione variações de nome/ticker em "aliases" para pegar mais menções.</p>
+<p class="muted">Cada empresa listada aqui é usada para casar (e marcar o setor de) as notícias coletadas. Adicione variações de nome/ticker em "aliases" para pegar mais menções. Em qualquer campo de termo/alias dá pra colar vários de uma vez separando por ";" (ex.: "ANEEL; tarifa de energia"). Tudo fica salvo no banco na hora — não some ao reiniciar, e vale pra todo mundo que usa o site.</p>
+
+<form method="post" action="/fontes/setor" class="inline-form" style="margin-bottom: 16px;">
+  <input type="text" name="nome" placeholder="Nome do setor novo (ex.: Economia)" size="30">
+  <button type="submit" class="btn-small">+ Novo setor</button>
+</form>
 
 {% for sector in sectors %}
 <details class="sector-block">
@@ -40,7 +45,7 @@
       </span>
     {% endfor %}
     <form method="post" action="/fontes/setor/{{ sector.id }}/keyword" class="inline-form">
-      <input type="text" name="keyword" placeholder="novo termo (ex.: ANEEL)" size="20">
+      <input type="text" name="keyword" placeholder="novo(s) termo(s), separe por ; (ex.: ANEEL; tarifa de energia)" size="34">
       <button type="submit" class="btn-small">+</button>
     </form>
   </div>
@@ -61,7 +66,7 @@
             </span>
           {% endfor %}
           <form method="post" action="/fontes/empresa/{{ c.id }}/alias" class="inline-form">
-            <input type="text" name="alias" placeholder="ex.: XXXX3" size="12">
+            <input type="text" name="alias" placeholder="ex.: XXXX3; Nome S.A." size="18">
             <button type="submit" class="btn-small">+</button>
           </form>
         </td>

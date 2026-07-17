@@ -123,6 +123,19 @@ KNOWN_SOURCES: list[dict] = [
                  "Allan; lastMonth nunca foi testado ao vivo e pode nao ser um valor aceito pelo site). "
                  "Listagem via Playwright (paginada), so' titulo/data/link (sem abrir cada artigo).",
     },
+    # Macro / Banco Central (pedido do Allan, 17/07/2026 -- setor "Economia",
+    # sem empresa nenhuma, so' bate por termos de setor tipo "Copom"/"Selic")
+    {
+        "domain": "bcb.gov.br",
+        "name": "Banco Central — Comunicados do Copom",
+        "category": "news",
+        "kind": "rss",
+        "scraper_module": "generic_rss",
+        "url": "https://www.bcb.gov.br/api/feed/sitebcb/sitefeeds/comunicadoscopom",
+        "mode": "all",
+        "notes": "Feed Atom oficial do BC, confirmado ao vivo (17/07/2026). Bate por termos de "
+                 "setor (ex.: 'Copom', 'Selic') cadastrados no setor 'Economia', nao por empresa.",
+    },
     # Reguladores / bolsa
     {
         "domain": "rad.cvm.gov.br",
@@ -245,12 +258,15 @@ KNOWN_SOURCES: list[dict] = [
         "category": "news",
         "kind": "rss",
         "scraper_module": "generic_rss",
-        "url": "https://valor.globo.com/rss/valor",
+        "url": "https://www.valor.com.br/rss",
         "mode": "specific",
-        "enabled": False,
-        "notes": "URL do feed NAO confirmada (dominio bloqueado para inspecao automatica; achei "
-                 "so o feed do Valor International em ingles, nao o site em portugues). Me manda "
-                 "a URL do RSS (ou a secao especifica, ex. Financas/Empresas) que eu ligo.",
+        "notes": "URL do feed achada via feeder.co (17/07/2026, a pedido do Allan) -- e' o feed "
+                 "PUBLICO de verdade do Valor (nao precisa de login; o login do feeder.co e' so' "
+                 "pro produto deles, o link 'Follow now' da pagina deles expoe a URL original do "
+                 "RSS). O dominio valor.com.br em si e' bloqueado pras minhas ferramentas de "
+                 "pesquisa inspecionarem direto, mas o robo do GitHub Actions roda num ambiente "
+                 "separado e deve conseguir buscar normalmente -- confira o painel de diagnostico "
+                 "apos a proxima varredura pra confirmar found > 0.",
     },
     # Pedido do Allan (17/07/2026)
     {
