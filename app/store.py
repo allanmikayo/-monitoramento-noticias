@@ -204,10 +204,20 @@ def list_articles(
 
 def cleanup_old_articles(db: Session, max_age_hours: int) -> int:
     cutoff = datetime.now(timezone.utc) - timedelta(hours=max_age_hours)
-    result = db.execute(
-        delete(Article).where(
-            (Article.published_at.is_not(None) & (Article.published_at < cutoff))
-            | (Article.published_at.is_(None) & (Article.found_at < cutoff))
-        )
+    where_antigo = (
+        (Article.published_at.is_not(None) & (Article.published_at < cutoff))
+        | (Article.published_at.is_(None) & (Article.found_at < cutoff))
     )
+    old_ids = [row[0] for row in db.execute(select(Article.id).where(where_antigo)).all()]
+    if not old_ids:
+        return 0
+    # BUG CORRIGIDO (17/07/2026): apagar o artigo direto sem antes limpar as
+    # linhas dele em article_company/article_sector quebrava no Postgres
+    # (ForeignKeyViolation -- "still referenced from table article_sector").
+    # No SQLite local nunca deu erro porque o SQLite não aplica chave
+    # estrangeira por padrão nesse projeto (o problema ficava escondido,
+    # só deixava linha órfã pra trás em vez de travar).
+    db.execute(article_company.delete().where(article_company.c.article_id.in_(old_ids)))
+    db.execute(article_sector.delete().where(article_sector.c.article_id.in_(old_ids)))
+    result = db.execute(delete(Article).where(Article.id.in_(old_ids)))
     return result.rowcount or 0
