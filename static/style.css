@@ -1,0 +1,209 @@
+/* Paleta pedida pelo Allan (17/07/2026): fundo cinza neutro, cabeçalhos
+   pretos, detalhes em laranja -- visual clean, sem elementos pesados
+   (sombras fortes, gradientes, cores múltiplas competindo por atenção).
+   Fonte Arial em todo o app. */
+:root {
+  --bg: #f2f2f2;
+  --page-bg: #f2f2f2;
+  --card-bg: #ffffff;
+  --header: #000000;
+  --text: #1a1a1a;
+  --muted: #6b6b6b;
+  --border: #d8d8d8;
+  --accent: #FF6200;
+  --accent-dark: #d95400;
+  --accent-tint: #fff1e6;
+  --ok: #1a7f4e;
+  --ok-tint: #e7f6ee;
+  --off: #a4302a;
+  --off-tint: #fdecea;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  font-family: Arial, Helvetica, sans-serif;
+  background: var(--page-bg);
+  color: var(--text);
+}
+a { color: var(--accent); text-decoration: none; }
+a:hover { color: var(--accent-dark); text-decoration: underline; }
+
+/* --------------------------------------------------------------------- */
+/* Topo -- pedido do Allan (17/07/2026): fundo preto, título em laranja   */
+/* negrito, abas em branco negrito (menores que o título).                */
+/* --------------------------------------------------------------------- */
+.topbar { background: #000000; border-bottom: none; }
+.topbar-inner {
+  max-width: 1280px; margin: 0 auto; padding: 14px 24px;
+  display: flex; align-items: center; gap: 28px;
+}
+.brand { color: var(--accent); font-weight: 700; font-size: 1.2rem; letter-spacing: -0.01em; }
+.brand:hover { color: var(--accent); text-decoration: none; }
+.topbar nav { display: flex; gap: 22px; flex: 1; }
+.topbar nav a { color: #ffffff; font-weight: 700; font-size: 0.85rem; padding-bottom: 2px; border-bottom: 2px solid transparent; }
+.topbar nav a:hover { color: var(--accent); border-bottom-color: var(--accent); text-decoration: none; }
+.user-box { display: flex; align-items: center; gap: 14px; color: #cfcfcf; font-size: 0.88rem; }
+.btn-link { color: var(--accent); font-weight: 700; }
+.btn-link:hover { color: #ffffff; }
+
+.container { max-width: 1280px; margin: 0 auto; padding: 24px; }
+
+h1 { font-size: 1.35rem; margin: 24px 0 10px; color: var(--header); font-weight: 700; }
+h2 { font-size: 1.05rem; margin: 20px 0 8px; color: var(--header); font-weight: 700; }
+.muted { color: var(--muted); }
+.small { font-size: 0.82rem; }
+
+/* --------------------------------------------------------------------- */
+/* Login / cadastro                                                       */
+/* --------------------------------------------------------------------- */
+.auth-box {
+  max-width: 380px; margin: 60px auto; background: var(--card-bg);
+  padding: 32px; border-radius: 10px; border: 1px solid var(--border);
+}
+.auth-box form { display: flex; flex-direction: column; gap: 6px; }
+.auth-box label { font-size: 0.85rem; margin-top: 8px; color: var(--muted); }
+.auth-box input {
+  padding: 9px 10px; border: 1px solid var(--border); border-radius: 6px; font-size: 0.95rem;
+  font-family: Arial, Helvetica, sans-serif;
+}
+
+/* --------------------------------------------------------------------- */
+/* Botões                                                                 */
+/* --------------------------------------------------------------------- */
+.btn-primary {
+  background: var(--accent); color: #fff; border: none; padding: 10px 18px;
+  border-radius: 6px; cursor: pointer; font-size: 0.9rem; font-weight: 600; margin-top: 14px;
+  font-family: Arial, Helvetica, sans-serif;
+}
+.btn-primary:hover { background: var(--accent-dark); }
+.btn-primary:disabled { opacity: 0.5; cursor: default; }
+.btn-small {
+  background: #fff; border: 1px solid var(--border); border-radius: 5px; color: var(--text);
+  padding: 5px 11px; font-size: 0.8rem; cursor: pointer; font-family: Arial, Helvetica, sans-serif;
+}
+.btn-small:hover { border-color: var(--accent); color: var(--accent); }
+.btn-danger { color: var(--off); }
+.btn-danger:hover { border-color: var(--off); color: var(--off); }
+
+.alert { padding: 10px 14px; border-radius: 6px; font-size: 0.88rem; }
+.alert-error { background: var(--off-tint); color: var(--off); }
+.alert-ok { background: var(--ok-tint); color: var(--ok); }
+
+/* --------------------------------------------------------------------- */
+/* Barra de filtros                                                       */
+/* --------------------------------------------------------------------- */
+.filters-bar {
+  display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+  background: var(--card-bg); border: 1px solid var(--border); border-radius: 8px;
+  padding: 12px 16px; margin-bottom: 12px;
+}
+.window-tabs { display: flex; gap: 4px; background: #f0f0f0; border-radius: 6px; padding: 3px; }
+.win-btn {
+  border: none; background: transparent; padding: 6px 14px; border-radius: 5px;
+  cursor: pointer; font-size: 0.85rem; color: var(--muted); font-weight: 600;
+  font-family: Arial, Helvetica, sans-serif;
+}
+.win-btn:hover { color: var(--text); }
+.win-btn.active { background: var(--accent); color: #fff; }
+.filters-bar select {
+  padding: 7px 10px; border: 1px solid var(--border); border-radius: 6px; font-size: 0.85rem;
+  font-family: Arial, Helvetica, sans-serif; background: #fff; color: var(--text);
+}
+.filters-bar .btn-primary { margin-top: 0; margin-left: auto; }
+
+.status-bar { display: flex; justify-content: space-between; font-size: 0.82rem; margin-bottom: 14px; color: var(--muted); }
+
+/* --------------------------------------------------------------------- */
+/* Notícias — grid de caixinhas (pedido do Allan, 17/07/2026: trocar a    */
+/* lista vertical por cards lado a lado, 3-4 por linha, título           */
+/* destacado, resumo e tags de empresa/setor).                           */
+/* --------------------------------------------------------------------- */
+.article-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 16px;
+  align-items: stretch;
+}
+.card {
+  background: var(--card-bg); border: 1px solid var(--border); border-radius: 10px;
+  padding: 16px 18px;
+  display: flex; flex-direction: column; gap: 8px;
+  transition: box-shadow 0.15s ease, border-color 0.15s ease;
+}
+.card:hover { box-shadow: 0 3px 14px rgba(0, 0, 0, 0.08); border-color: #c8c8c8; }
+.card h3 {
+  margin: 0; font-size: 1rem; line-height: 1.35; font-weight: 700;
+}
+.card h3 a { color: var(--header); }
+.card h3 a:hover { color: var(--accent); text-decoration: none; }
+.card-meta {
+  display: flex; gap: 8px; align-items: center; flex-wrap: wrap;
+  font-size: 0.75rem; color: var(--muted);
+}
+.card .source { font-weight: 700; color: var(--text); }
+.card .snippet {
+  font-size: 0.86rem; color: #454545; margin: 0; line-height: 1.45;
+  display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden;
+  flex: 1;
+}
+.card .companies { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 4px; }
+.company-chip {
+  display: inline-block; padding: 2px 10px; border-radius: 999px; font-size: 0.74rem;
+  font-weight: 600; background: var(--accent-tint); color: var(--accent-dark); border: 1px solid #ffd9b8;
+}
+
+/* Badges de tipo de artigo -- ação de rating e fato relevante são o sinal
+   de maior prioridade pra um analista de crédito, então ganham destaque
+   sólido em laranja; notícia/research ficam discretas (contorno). */
+.badge {
+  display: inline-block; padding: 2px 9px; border-radius: 999px; font-size: 0.68rem;
+  font-weight: 700; text-transform: uppercase; letter-spacing: 0.03em;
+}
+.badge-news { background: #eeeeee; color: var(--text); }
+.badge-rating_action { background: var(--accent); color: #fff; }
+.badge-fato_relevante { background: var(--header); color: #fff; }
+.badge-research { background: #eeeeee; color: var(--text); }
+
+.table { width: 100%; border-collapse: collapse; background: var(--card-bg); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; margin-bottom: 8px; }
+.table th, .table td { padding: 8px 12px; border-bottom: 1px solid var(--border); text-align: left; font-size: 0.87rem; }
+.table th { background: #f2f2f2; font-size: 0.76rem; text-transform: uppercase; color: var(--muted); font-weight: 700; }
+.table .actions { display: flex; gap: 6px; }
+
+.tag { padding: 2px 9px; border-radius: 999px; font-size: 0.74rem; background: #eeeeee; color: var(--muted); }
+.tag-ok { background: var(--ok-tint); color: var(--ok); }
+.tag-off { background: var(--off-tint); color: var(--off); }
+
+.sector-block { background: var(--card-bg); border: 1px solid var(--border); border-radius: 8px; margin-bottom: 10px; padding: 10px 16px; }
+.sector-block summary { cursor: pointer; font-weight: 700; padding: 4px 0; color: var(--header); }
+.sector-keywords { margin: 8px 0 14px; display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+
+.chip {
+  display: inline-flex; align-items: center; gap: 4px; background: #f0f0f0;
+  border-radius: 999px; padding: 2px 4px 2px 10px; font-size: 0.78rem; margin: 2px 4px 2px 0;
+}
+.chip-remove { border: none; background: none; cursor: pointer; color: var(--muted); font-size: 0.9rem; padding: 0 6px; }
+.chip-remove:hover { color: var(--off); }
+
+.inline-form { display: inline-flex; gap: 4px; align-items: center; margin: 0; }
+.inline-form input { padding: 4px 8px; border: 1px solid var(--border); border-radius: 5px; font-size: 0.78rem; font-family: Arial, Helvetica, sans-serif; }
+
+.form-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin: 10px 0; }
+.form-row input, .form-row select { padding: 7px 10px; border: 1px solid var(--border); border-radius: 6px; font-size: 0.85rem; font-family: Arial, Helvetica, sans-serif; }
+
+.progress-wrap {
+  display: flex; align-items: center; gap: 10px; margin-bottom: 10px;
+}
+.progress-track {
+  flex: 1; height: 8px; background: #e2e2e2; border-radius: 999px; overflow: hidden;
+}
+.progress-fill {
+  height: 100%; width: 0%; background: var(--accent); border-radius: 999px;
+  transition: width 0.3s ease;
+}
+
+.diagnostic-panel {
+  background: var(--card-bg); border: 1px solid var(--border); border-radius: 8px;
+  padding: 10px 16px; margin-bottom: 14px;
+}
+.diagnostic-panel summary { cursor: pointer; font-weight: 700; font-size: 0.88rem; padding: 4px 0; color: var(--header); }
+.diagnostic-panel .table { margin-top: 10px; margin-bottom: 0; }

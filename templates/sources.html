@@ -1,0 +1,74 @@
+{% extends "base.html" %}
+{% block title %}Fontes & Empresas{% endblock %}
+{% block content %}
+<h1>Fontes monitoradas</h1>
+<p class="muted">Sites que o robô varre a cada {{ 5 }} minutos. Fontes desabilitadas não são coletadas.</p>
+<table class="table">
+  <thead><tr><th>Fonte</th><th>Categoria</th><th>Domínio</th><th>Status</th><th></th></tr></thead>
+  <tbody>
+    {% for s in sources %}
+    <tr>
+      <td>{{ s.name }}</td>
+      <td>{{ {"rating_agency": "Agência de rating", "regulatory": "Regulatório", "news": "Imprensa"}.get(s.category, s.category) }}</td>
+      <td class="muted">{{ s.domain }}</td>
+      <td>{% if s.enabled %}<span class="tag tag-ok">ativa</span>{% else %}<span class="tag tag-off">desabilitada</span>{% endif %}</td>
+      <td>
+        <form method="post" action="/fontes/fonte/{{ s.id }}/toggle">
+          <button type="submit" class="btn-small">{% if s.enabled %}Desabilitar{% else %}Habilitar{% endif %}</button>
+        </form>
+      </td>
+    </tr>
+    {% if s.notes %}<tr><td colspan="5" class="muted small">{{ s.notes }}</td></tr>{% endif %}
+    {% endfor %}
+  </tbody>
+</table>
+
+<h1>Setores, empresas e keywords</h1>
+<p class="muted">Cada empresa listada aqui é usada para casar (e marcar o setor de) as notícias coletadas. Adicione variações de nome/ticker em "aliases" para pegar mais menções.</p>
+
+{% for sector in sectors %}
+<details class="sector-block">
+  <summary>{{ sector.name }} <span class="muted">({{ sector.companies|length }} empresas)</span></summary>
+
+  <div class="sector-keywords">
+    <strong>Termos extras do setor:</strong>
+    {% for kw in sector.extra_keywords %}
+      <span class="chip">{{ kw.keyword }}
+        <form method="post" action="/fontes/setor-keyword/{{ kw.id }}/remover" class="inline-form">
+          <button type="submit" class="chip-remove">×</button>
+        </form>
+      </span>
+    {% endfor %}
+    <form method="post" action="/fontes/setor/{{ sector.id }}/keyword" class="inline-form">
+      <input type="text" name="keyword" placeholder="novo termo (ex.: ANEEL)" size="20">
+      <button type="submit" class="btn-small">+</button>
+    </form>
+  </div>
+
+  <table class="table">
+    <thead><tr><th>Empresa</th><th>Analista</th><th>Aliases / tickers</th></tr></thead>
+    <tbody>
+      {% for c in sector.companies|sort(attribute='name') %}
+      <tr>
+        <td>{{ c.name }}</td>
+        <td class="muted">{{ c.analyst or "—" }}</td>
+        <td>
+          {% for al in c.aliases %}
+            <span class="chip">{{ al.alias }}
+              <form method="post" action="/fontes/alias/{{ al.id }}/remover" class="inline-form">
+                <button type="submit" class="chip-remove">×</button>
+              </form>
+            </span>
+          {% endfor %}
+          <form method="post" action="/fontes/empresa/{{ c.id }}/alias" class="inline-form">
+            <input type="text" name="alias" placeholder="ex.: XXXX3" size="12">
+            <button type="submit" class="btn-small">+</button>
+          </form>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</details>
+{% endfor %}
+{% endblock %}

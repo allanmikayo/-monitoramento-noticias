@@ -1,0 +1,1 @@
+postgresql+psycopg://postgres.ggomvbrjsefsaloxvksp:[monitoramento-noticias]@aws-1-sa-east-1.pooler.supabase.com:6543/postgres

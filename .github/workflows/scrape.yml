@@ -1,0 +1,48 @@
+name: Varredura de noticias (a cada 5 min)
+
+# Roda scripts/run_once.py, que faz UMA varredura completa (todas as fontes
+# habilitadas) e grava direto no banco do Supabase -- ver CLAUDE.md, secao
+# "Roteiro de migracao para a nuvem". `workflow_dispatch` existe pra o botao
+# "Forcar atualizacao" do site (hospedado no Vercel) poder acionar uma
+# rodada extra sob demanda, alem do cron.
+on:
+  schedule:
+    - cron: "*/5 * * * *"
+  workflow_dispatch: {}
+
+# Se uma rodada ainda estiver rodando quando a proxima do cron disparar
+# (Playwright pode demorar), a nova espera na fila em vez de rodar em cima
+# da anterior -- evita duas varreduras escrevendo no banco ao mesmo tempo.
+concurrency:
+  group: scrape
+  cancel-in-progress: false
+
+jobs:
+  scrape:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Baixar o codigo
+        uses: actions/checkout@v4
+
+      - name: Preparar Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Instalar dependencias
+        run: pip install -r requirements.txt
+
+      - name: Instalar navegadores do Playwright
+        run: |
+          python -m playwright install --with-deps chromium
+          # Chrome "de verdade" (usado pelo coletor da S&P pra reduzir
+          # deteccao de robo, com fallback automatico pro Chromium se
+          # isso falhar aqui -- nao trava o job) -- ver app/sources/spglobal.py
+          python -m playwright install --with-deps chrome || true
+
+      - name: Rodar a varredura
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: python -m scripts.run_once

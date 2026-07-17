@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+{% block title %}Notícias{% endblock %}
+{% block content %}
+<script type="application/json" id="companies-data">{{ companies_json | safe }}</script>
+
+<div class="filters-bar">
+  <div class="window-tabs" id="window-tabs">
+    <button data-window="24h" class="win-btn">Últimas 24h</button>
+    <button data-window="5d" class="win-btn active">Últimos 5 dias</button>
+    <button data-window="30d" class="win-btn">Último mês</button>
+  </div>
+
+  <select id="filter-sector">
+    <option value="">Todos os setores</option>
+    {% for s in sectors %}<option value="{{ s.id }}">{{ s.name }}</option>{% endfor %}
+  </select>
+
+  <select id="filter-company"><option value="">Todas as empresas</option></select>
+
+  <select id="filter-type">
+    <option value="">Todos os tipos</option>
+    <option value="news">Notícia</option>
+    <option value="rating_action">Ação de rating</option>
+    <option value="fato_relevante">Documento CVM</option>
+    <option value="research">Research</option>
+  </select>
+
+  <select id="filter-coverage" title="Minha cobertura: empresas/setores que você acompanha + todas as ações de rating. Todos: tudo que foi capturado, mesmo sem bater com sua cobertura.">
+    <option value="minha">Cobertura: Minha cobertura</option>
+    <option value="todos">Cobertura: Todos</option>
+  </select>
+
+  <button id="btn-refresh" class="btn-primary">Forçar atualização</button>
+</div>
+
+<div id="progress-wrap" class="progress-wrap" style="display:none;">
+  <div class="progress-track"><div id="progress-fill" class="progress-fill"></div></div>
+  <span id="progress-label" class="muted small"></span>
+</div>
+
+<div class="status-bar">
+  <span id="status-text">Carregando…</span>
+  <span id="countdown" class="muted"></span>
+</div>
+
+<details id="diagnostic-panel" class="diagnostic-panel">
+  <summary>Diagnóstico da última varredura <span id="diagnostic-summary" class="muted"></span></summary>
+  <table class="table" id="diagnostic-table">
+    <thead><tr><th>Fonte</th><th>Encontrados</th><th>Relevantes p/ sua cobertura</th><th>Novos no banco</th><th>Situação</th></tr></thead>
+    <tbody id="diagnostic-tbody"></tbody>
+  </table>
+</details>
+
+<div id="article-list" class="article-list"></div>
+
+<script>window.SCAN_INTERVAL_MINUTES = {{ scan_interval_minutes }};</script>
+<script src="/static/app.js"></script>
+{% endblock %}

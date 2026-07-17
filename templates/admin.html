@@ -1,0 +1,78 @@
+{% extends "base.html" %}
+{% block title %}Administração{% endblock %}
+{% block content %}
+<h1>Usuários</h1>
+<table class="table">
+  <thead><tr><th>Nome</th><th>E-mail</th><th>Papel</th><th>Status</th><th>Criado em</th><th></th></tr></thead>
+  <tbody>
+    {% for u in users %}
+    <tr>
+      <td>{{ u.name }}</td>
+      <td>{{ u.email }}</td>
+      <td>
+        <span class="tag {{ 'tag-ok' if u.role == 'admin' else '' }}">{{ 'admin' if u.role == 'admin' else 'usuário' }}</span>
+      </td>
+      <td>
+        {% if not u.email_confirmed %}<span class="tag tag-off">e-mail não confirmado</span>
+        {% elif not u.active %}<span class="tag tag-off">inativo</span>
+        {% else %}<span class="tag tag-ok">ativo</span>{% endif %}
+      </td>
+      <td class="muted">{{ u.created_at | brt("%d/%m/%Y %H:%M") }}</td>
+      <td class="actions">
+        {% if u.id != user.id %}
+        <form method="post" action="/admin/usuarios/{{ u.id }}/role" class="inline-form">
+          <button type="submit" class="btn-small">{{ 'Tornar usuário' if u.role == 'admin' else 'Tornar admin' }}</button>
+        </form>
+        <form method="post" action="/admin/usuarios/{{ u.id }}/ativo" class="inline-form">
+          <button type="submit" class="btn-small">{{ 'Desativar' if u.active else 'Ativar' }}</button>
+        </form>
+        <form method="post" action="/admin/usuarios/{{ u.id }}/remover" class="inline-form" onsubmit="return confirm('Remover este usuário?');">
+          <button type="submit" class="btn-small btn-danger">Remover</button>
+        </form>
+        {% else %}<span class="muted">(você)</span>{% endif %}
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+
+<h2>Adicionar usuário</h2>
+<form method="post" action="/admin/usuarios" class="form-row">
+  <input type="text" name="name" placeholder="Nome" required>
+  <input type="email" name="email" placeholder="E-mail" required>
+  <input type="password" name="password" placeholder="Senha inicial" required minlength="6">
+  <select name="role"><option value="user">Usuário</option><option value="admin">Admin</option></select>
+  <button type="submit" class="btn-primary">Adicionar</button>
+</form>
+<p class="muted small">Usuários criados aqui já entram confirmados — não precisam clicar em link de e-mail.</p>
+
+<h1>Sessões ativas</h1>
+<table class="table">
+  <thead><tr><th>Usuário</th><th>Início</th><th>Última atividade</th><th>Expira em</th><th>IP</th><th></th></tr></thead>
+  <tbody>
+    {% for s in sessions %}
+    <tr>
+      <td>{{ s.user.name }}</td>
+      <td class="muted">{{ s.created_at | brt("%d/%m %H:%M") }}</td>
+      <td class="muted">{{ s.last_seen_at | brt("%d/%m %H:%M") }}</td>
+      <td class="muted">{{ s.expires_at | brt("%d/%m %H:%M") }}</td>
+      <td class="muted">{{ s.ip_address or "—" }}</td>
+      <td>
+        <form method="post" action="/admin/sessao/{{ s.id }}/revogar" class="inline-form">
+          <button type="submit" class="btn-small btn-danger">Encerrar</button>
+        </form>
+      </td>
+    </tr>
+    {% else %}
+    <tr><td colspan="6" class="muted">Nenhuma sessão ativa no momento.</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+
+<h1>Configurações</h1>
+<form method="post" action="/admin/configuracoes" class="form-row">
+  <label>Duração da sessão (minutos)</label>
+  <input type="number" name="session_ttl_minutes" value="{{ session_ttl_minutes }}" min="5">
+  <button type="submit" class="btn-primary">Salvar</button>
+</form>
+{% endblock %}

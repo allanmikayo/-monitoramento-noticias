@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% block title %}Minha conta{% endblock %}
+{% block content %}
+<div class="auth-box">
+  <h1>Minha conta</h1>
+  <p class="muted">{{ user.name }} — {{ user.email }}</p>
+  {% if erro %}<p class="alert alert-error">{{ erro }}</p>{% endif %}
+  {% if msg %}<p class="alert alert-ok">{{ msg }}</p>{% endif %}
+  <form method="post" action="/minha-conta/senha">
+    <label>Senha atual</label>
+    <input type="password" name="current_password" required>
+    <label>Nova senha (mínimo 6 caracteres)</label>
+    <input type="password" name="new_password" required minlength="6">
+    <button type="submit" class="btn-primary">Trocar senha</button>
+  </form>
+</div>
+{% endblock %}

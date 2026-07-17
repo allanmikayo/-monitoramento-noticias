@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{% block title %}Monitoramento de Notícias{% endblock %} — Crédito Privado</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  {% if user %}
+  <header class="topbar">
+    <div class="topbar-inner">
+      <a class="brand" href="/">Monitoramento de Notícias</a>
+      <nav>
+        <a href="/">Notícias</a>
+        <a href="/fontes">Fontes &amp; Empresas</a>
+        {% if user.role == 'admin' %}<a href="/admin">Administração</a>{% endif %}
+      </nav>
+      <div class="user-box">
+        <a href="/minha-conta" class="btn-link">{{ user.name }}</a>
+        <a href="/logout" class="btn-link">Sair</a>
+      </div>
+    </div>
+  </header>
+  {% endif %}
+  <main class="container">
+    {% block content %}{% endblock %}
+  </main>
+</body>
+</html>
