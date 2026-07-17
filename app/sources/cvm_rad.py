@@ -81,15 +81,43 @@ def _selecionar_periodo_mes(page) -> None:
     inicio_str = (hoje - relativedelta(months=1)).strftime("%d/%m/%Y")
     fim_str = hoje.strftime("%d/%m/%Y")
     try:
+        # BUG CORRIGIDO (17/07/2026): found=4 (so' hoje) + error=null nos
+        # logs do GitHub Actions indicava que isto falhava CALADO -- sem
+        # lancar excecao (senao apareceria o warning abaixo nos logs), mas
+        # tambem sem aplicar o filtro de verdade. Suspeita: `Escape` so
+        # fecha o popup do datepicker (jQuery UI) sem "commitar" o valor
+        # (sem disparar change/blur), entao o site mantinha o filtro padrao
+        # mesmo com o campo aparentando preenchido. Isso e' plausivel ser
+        # so' no Ubuntu headless do Actions e nao ter aparecido nos testes
+        # locais do Allan no Windows (timing diferente). Troquei por `Tab`
+        # (commita o campo de verdade) e adicionei checagens que jogam uma
+        # excecao explicita (cai no except abaixo, com log detalhado) se o
+        # radio ou os campos nao ficarem com o valor esperado -- assim, se
+        # continuar falhando, o log do proximo run vai dizer EXATAMENTE em
+        # qual passo travou, em vez de falhar mudo de novo.
+        page.wait_for_selector("#rdPeriodo", state="visible", timeout=10000)
         page.check("#rdPeriodo")
-        page.wait_for_timeout(400)
-        page.fill("#txtDataIni", inicio_str)
-        page.keyboard.press("Escape")  # fecha o datepicker (jQuery UI) se ele abriu
-        page.fill("#txtDataFim", fim_str)
-        page.keyboard.press("Escape")
-        page.wait_for_timeout(200)
+        page.wait_for_timeout(500)
+        if not page.is_checked("#rdPeriodo"):
+            raise RuntimeError("radio #rdPeriodo nao ficou marcado depois do check()")
+
+        for campo, valor in (("#txtDataIni", inicio_str), ("#txtDataFim", fim_str)):
+            page.click(campo)
+            page.fill(campo, "")
+            page.fill(campo, valor)
+            page.keyboard.press("Tab")  # commita o valor (dispara change/blur) -- Escape so fecha o popup
+            page.wait_for_timeout(400)
+            valor_atual = page.input_value(campo)
+            if valor not in valor_atual:
+                raise RuntimeError(f"campo {campo} ficou com {valor_atual!r}, esperado {valor!r}")
+
+        page.wait_for_timeout(300)
         page.click("#btnConsulta")
-        page.wait_for_timeout(2500)
+        page.wait_for_timeout(3000)
+        try:
+            page.wait_for_load_state("networkidle", timeout=8000)
+        except Exception:  # noqa: BLE001
+            pass  # nao critico -- so' uma folga extra pra tabela terminar de recarregar
     except Exception as e:  # noqa: BLE001
         logger.warning(
             "cvm_rad: falha ao selecionar periodo de 1 mes (%s) -- segue com o "
@@ -297,6 +325,24 @@ def fetch(url: str) -> list[RawArticle]:
             page.wait_for_timeout(4000)
             _selecionar_periodo_mes(page)
             _maximizar_itens_por_pagina(page)
+
+            # Diagnostico (17/07/2026): loga a data mais antiga vista na
+            # primeira pagina logo apos tentar aplicar o filtro de 1 mes --
+            # se aparecer so' a data de hoje aqui, confirma que o filtro nao
+            # pegou (mesmo sem excecao), em vez de descobrir isso so' pelo
+            # "found" baixo no resumo final.
+            try:
+                _diag_soup = BeautifulSoup(page.content(), "lxml")
+                _diag_linhas = _parse_tabela(_diag_soup)
+                _diag_datas = [a.published_at for a in _diag_linhas if a.published_at]
+                if _diag_datas:
+                    logger.info(
+                        "cvm_rad: apos filtro de periodo, pagina 1 tem %d linha(s), "
+                        "data mais antiga = %s, mais recente = %s",
+                        len(_diag_linhas), min(_diag_datas).date(), max(_diag_datas).date(),
+                    )
+            except Exception:  # noqa: BLE001
+                pass  # so' diagnostico -- nunca deve derrubar a coleta de verdade
 
             for page_num in range(1, MAX_PAGES + 1):
                 html = page.content()
