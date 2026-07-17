@@ -9,7 +9,7 @@ import threading
 from datetime import datetime, timezone
 from zoneinfo import ZoneInfo
 
-from fastapi import Cookie, Depends, FastAPI, Form, HTTPException, Request
+from fastapi import Cookie, Depends, FastAPI, Form, Header, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
@@ -332,6 +332,24 @@ def api_force_refresh(user: User = Depends(require_user), db: Session = Depends(
     thread = threading.Thread(target=_run_pipeline_in_background, daemon=True)
     thread.start()
     return {"already_running": False, **refresh_state.snapshot()}
+
+
+@app.post("/api/cron-trigger")
+def api_cron_trigger(x_cron_secret: str | None = Header(default=None, alias="X-Cron-Secret")):
+    # Endpoint SEM login -- pensado pra ser chamado por um serviço externo
+    # de cron gratuito (cron-job.org), já que o `schedule:` do GitHub
+    # Actions não é pontual (17/07/2026: Allan reparou que não batia certo
+    # a cada 5 min -- é limitação documentada do próprio GitHub, não bug
+    # daqui). Protegido por um segredo simples no header (não por sessão de
+    # usuário, porque quem chama não é um navegador logado).
+    if not config.CRON_SECRET or x_cron_secret != config.CRON_SECRET:
+        raise HTTPException(status_code=403, detail="Segredo inválido ou não configurado (CRON_SECRET)")
+    if not config.CLOUD_MODE:
+        raise HTTPException(status_code=400, detail="Só funciona em modo nuvem (GITHUB_TOKEN/GITHUB_REPO)")
+    ok, err = _dispatch_github_workflow()
+    if not ok:
+        raise HTTPException(status_code=502, detail=f"Falha ao acionar o GitHub Actions: {err}")
+    return {"dispatched": True}
 
 
 @app.get("/api/refresh-status")

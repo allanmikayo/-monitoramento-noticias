@@ -595,3 +595,18 @@ fallback setorial já existia, só faltava dado). Duas mudanças:
    Supabase toda vez. Agora `scripts/run_once.py` (GitHub Actions) também
    chama isso a cada rodada -- fonte nova no `config.py` + `git push`
    já aparece sozinha na próxima execução agendada, sem passo manual.
+
+## Cron pontual de verdade (17/07/2026)
+
+Allan reparou que o robô não rodava exatamente a cada 5 min no GitHub
+Actions -- confirmado que é limitação conhecida/documentada do GitHub
+(`schedule:` não tem garantia de pontualidade, atrasa em horário de
+pico). Solução: `.github/workflows/scrape.yml` agora só mantém o
+`schedule:` como fallback horário (`0 * * * *`); quem dispara de verdade
+a cada 5 min é um serviço externo gratuito (**cron-job.org**, até 1x/min
+grátis) chamando o novo endpoint `POST /api/cron-trigger` (`app/app.py`),
+protegido por um header `X-Cron-Secret` comparado contra a env var
+`CRON_SECRET` (não usa sessão de usuário -- quem chama é um serviço
+externo, não um navegador logado). Esse endpoint só chama a mesma
+`_dispatch_github_workflow()` já usada pelo botão "Forçar atualização".
+Passo a passo de configuração no cron-job.org: `DEPLOY.md`, Parte 5.

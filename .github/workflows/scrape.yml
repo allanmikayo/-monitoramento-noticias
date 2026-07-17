@@ -1,13 +1,17 @@
-name: Varredura de noticias (a cada 5 min)
+name: Varredura de noticias
 
 # Roda scripts/run_once.py, que faz UMA varredura completa (todas as fontes
 # habilitadas) e grava direto no banco do Supabase -- ver CLAUDE.md, secao
-# "Roteiro de migracao para a nuvem". `workflow_dispatch` existe pra o botao
-# "Forcar atualizacao" do site (hospedado no Vercel) poder acionar uma
-# rodada extra sob demanda, alem do cron.
+# "Roteiro de migracao para a nuvem". `workflow_dispatch` existe pra: (1) o
+# botao "Forcar atualizacao" do site poder acionar uma rodada sob demanda,
+# e (2) o endpoint /api/cron-trigger (chamado por um cron externo gratuito,
+# cron-job.org) acionar a cada 5 min DE VERDADE -- o `schedule:` abaixo e'
+# so' um FALLBACK de 1x/hora, porque o schedule nativo do GitHub Actions
+# nao e' pontual (o proprio GitHub nao garante horario, atrasa bastante em
+# horario de pico -- documentado, nao e' bug daqui). 17/07/2026.
 on:
   schedule:
-    - cron: "*/5 * * * *"
+    - cron: "0 * * * *"
   workflow_dispatch: {}
 
 # Se uma rodada ainda estiver rodando quando a proxima do cron disparar

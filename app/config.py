@@ -37,6 +37,15 @@ GITHUB_BRANCH = os.getenv("GITHUB_BRANCH", "main")
 GITHUB_WORKFLOW_FILE = os.getenv("GITHUB_WORKFLOW_FILE", "scrape.yml")
 CLOUD_MODE = bool(GITHUB_TOKEN and GITHUB_REPO)
 
+# Segredo pro endpoint /api/cron-trigger (17/07/2026): o `schedule:` do
+# GitHub Actions não é pontual (o próprio GitHub não garante horário --
+# atrasa bastante em horário de pico), então quem dispara a varredura a
+# cada 5 min de verdade é um serviço externo de cron gratuito
+# (cron-job.org) chamando esse endpoint, que por sua vez aciona o mesmo
+# workflow_dispatch do botão "Forçar atualização". Vazio = endpoint fica
+# desativado (retorna 403 sempre).
+CRON_SECRET = os.getenv("CRON_SECRET", "")
+
 # Sessão de login
 DEFAULT_SESSION_TTL_MINUTES = int(os.getenv("SESSION_TTL_MINUTES", "480"))  # 8h
 

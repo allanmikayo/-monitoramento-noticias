@@ -174,6 +174,41 @@ Me manda:
 
 Com o log exato eu consigo corrigir rápido — sem ele, fico advinhando.
 
+---
+
+## Parte 5 — Deixar a atualização pontual de verdade (cron-job.org)
+
+O agendamento nativo do GitHub Actions (`schedule:` no workflow) não é
+pontual — o próprio GitHub não garante horário exato, e pode atrasar
+bastante em horário de pico. Por isso a varredura de 5 em 5 minutos de
+verdade é acionada por um serviço externo gratuito, o **cron-job.org**
+(permite até 1x por minuto, de graça, sem cartão de crédito).
+
+1. Gere uma senha/segredo aleatório qualquer (pode ser uma frase longa
+   sem espaços) — vai ser o `CRON_SECRET`.
+2. No Vercel, vá em **Settings → Environment Variables** e adicione:
+   `CRON_SECRET` = o segredo que você gerou. Redeploy depois de salvar.
+3. Acesse **https://cron-job.org**, crie uma conta gratuita.
+4. Clique em **"Create cronjob"**.
+5. Em **URL**, coloque:
+   ```
+   https://monitoramento-noticias.vercel.app/api/cron-trigger
+   ```
+6. Em **Execution schedule**, escolha **"Every 5 minutes"**.
+7. Procure a aba/seção **"Advanced"** (ou "Headers"/"Request method") e
+   configure:
+   - **Request method**: `POST`
+   - Adicione um **header customizado**: nome `X-Cron-Secret`, valor = o
+     mesmo segredo do passo 1/2.
+8. Salve. O primeiro disparo já deve acionar uma varredura — confira a
+   aba **Actions** do GitHub pra ver se apareceu uma execução nova.
+
+O `schedule:` do GitHub Actions continua ativo como reserva (roda 1x por
+hora, caso o cron-job.org fique fora do ar por algum motivo) — não
+precisa mexer nele.
+
+---
+
 ## Coisas pra lembrar depois
 
 - Se adicionar/mudar fonte, empresa ou setor no seu computador local, isso
