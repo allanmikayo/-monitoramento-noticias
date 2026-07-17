@@ -452,6 +452,24 @@ def add_sector(nome: str = Form(...), user: User = Depends(require_user), db: Se
     return RedirectResponse(url="/fontes", status_code=303)
 
 
+@app.post("/fontes/setor/{sector_id}/empresa")
+def add_company(
+    sector_id: int, nome: str = Form(...), analista: str = Form(""),
+    user: User = Depends(require_user), db: Session = Depends(get_db),
+):
+    # Antes só dava pra cadastrar empresa importando Setores.xlsx (rodando
+    # o seed local) -- pedido do Allan (17/07/2026): adicionar direto pela
+    # aba Fontes & Empresas, sem precisar mexer em planilha/script.
+    nome = nome.strip()
+    analista = analista.strip() or None
+    if nome:
+        ja_existe = db.query(Company).filter_by(sector_id=sector_id, name=nome).first()
+        if not ja_existe:
+            db.add(Company(sector_id=sector_id, name=nome, analyst=analista))
+            db.commit()
+    return RedirectResponse(url="/fontes", status_code=303)
+
+
 @app.post("/fontes/setor-keyword/{kw_id}/remover")
 def remove_sector_keyword(kw_id: int, user: User = Depends(require_user), db: Session = Depends(get_db)):
     kw = db.get(SectorKeyword, kw_id)

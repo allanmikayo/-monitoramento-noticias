@@ -74,6 +74,11 @@
       {% endfor %}
     </tbody>
   </table>
+  <form method="post" action="/fontes/setor/{{ sector.id }}/empresa" class="inline-form" style="margin-top: 8px;">
+    <input type="text" name="nome" placeholder="Nova empresa neste setor" size="22">
+    <input type="text" name="analista" placeholder="Analista (opcional)" size="14">
+    <button type="submit" class="btn-small">+ Empresa</button>
+  </form>
 </details>
 {% endfor %}
 {% endblock %}
