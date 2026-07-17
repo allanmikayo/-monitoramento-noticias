@@ -26,7 +26,11 @@
   const diagnosticSummary = document.getElementById("diagnostic-summary");
   const diagnosticTbody = document.getElementById("diagnostic-tbody");
 
-  let currentWindow = "5d";
+  // Padrao 30 dias (pedido do Allan, 17/07/2026) -- noticias/documentos
+  // CVM tem published_at mais "curto" que acoes de rating (paginas de
+  // rating listam historico mais largo por natureza), entao uma janela
+  // inicial generosa evita a sensacao de "sumiu noticia" logo que abre.
+  let currentWindow = "30d";
   const scanIntervalMs = (window.SCAN_INTERVAL_MINUTES || 5) * 60 * 1000;
   let secondsLeft = Math.floor(scanIntervalMs / 1000);
   let pollTimer = null;

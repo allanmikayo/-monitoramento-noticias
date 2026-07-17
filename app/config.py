@@ -12,7 +12,7 @@ WINDOW_PRESETS = {
     "5d": 24 * 5,
     "30d": 24 * 30,
 }
-DEFAULT_WINDOW = "5d"  # comeca mostrando 5 dias -- mais generoso logo no inicio de uso
+DEFAULT_WINDOW = "30d"  # comeca mostrando 30 dias (pedido do Allan, 17/07/2026)
 
 # Intervalo do scanner automático (minutos)
 SCAN_INTERVAL_MINUTES = int(os.getenv("SCAN_INTERVAL_MINUTES", "5"))
