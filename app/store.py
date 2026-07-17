@@ -8,7 +8,7 @@ from datetime import datetime, timedelta, timezone
 from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
 
 from sqlalchemy import delete, select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
 from .models import Article, article_company
 
@@ -130,7 +130,17 @@ def list_articles(
     from .models import Company
 
     cutoff = datetime.now(timezone.utc) - timedelta(hours=window_hours)
-    stmt = select(Article).where(
+    # BUG CORRIGIDO (17/07/2026): sem isso, cada artigo dispara uma consulta
+    # separada pra carregar `.companies` e cada empresa outra pra carregar
+    # `.sector` (N+1) -- no SQLite local isso e' rapido o bastante pra nao
+    # incomodar, mas no Postgres/Supabase hospedado (Vercel, com NullPool =
+    # conexao nova a cada consulta) isso somava centenas de idas-e-voltas de
+    # rede e estourava o timeout de 10s da funcao serverless. selectinload
+    # busca tudo em poucas consultas agrupadas, independente de quantos
+    # artigos/empresas existam.
+    stmt = select(Article).options(
+        selectinload(Article.companies).selectinload(Company.sector)
+    ).where(
         ((Article.published_at.is_not(None)) & (Article.published_at >= cutoff))
         | ((Article.published_at.is_(None)) & (Article.found_at >= cutoff))
     )

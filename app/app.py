@@ -13,7 +13,7 @@ from fastapi import Cookie, Depends, FastAPI, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
 from . import auth, config, refresh_state, store
 from .db import Base, SessionLocal, engine, get_db, run_migrations
@@ -381,7 +381,21 @@ def account_change_password(
 
 @app.get("/fontes", response_class=HTMLResponse)
 def sources_page(request: Request, user: User = Depends(require_user), db: Session = Depends(get_db)):
-    sectors = db.query(Sector).order_by(Sector.name).all()
+    # BUG CORRIGIDO (17/07/2026): sem eager loading, o template percorre
+    # sector.companies e, pra CADA empresa, company.aliases -- ~17 setores x
+    # ~96 empresas vira mais de 100 consultas separadas ao banco. No Postgres
+    # hospedado (Vercel + NullPool = conexao nova a cada consulta) isso
+    # estourava os 10s de timeout da funcao serverless (504 em /fontes).
+    # selectinload agrupa tudo em poucas consultas.
+    sectors = (
+        db.query(Sector)
+        .options(
+            selectinload(Sector.companies).selectinload(Company.aliases),
+            selectinload(Sector.extra_keywords),
+        )
+        .order_by(Sector.name)
+        .all()
+    )
     sources = db.query(Source).order_by(Source.category, Source.name).all()
     return templates.TemplateResponse(
         request, "sources.html", {"user": user, "sectors": sectors, "sources": sources}
