@@ -172,6 +172,7 @@ h2 { font-size: 1.05rem; margin: 20px 0 8px; color: var(--header); font-weight: 
 .badge-rating_action { background: var(--accent); color: #fff; }
 .badge-fato_relevante { background: var(--header); color: #fff; }
 .badge-research { background: #eeeeee; color: var(--text); }
+.badge-assembleia { background: #6a3fb5; color: #fff; }
 
 .table { width: 100%; border-collapse: collapse; background: var(--card-bg); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; margin-bottom: 8px; }
 .table th, .table td { padding: 8px 12px; border-bottom: 1px solid var(--border); text-align: left; font-size: 0.87rem; }

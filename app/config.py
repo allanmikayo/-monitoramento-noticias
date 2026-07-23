@@ -159,6 +159,45 @@ KNOWN_SOURCES: list[dict] = [
                  "de arquivamentos do mercado inteiro nesta fonte).",
     },
     {
+        "domain": "oliveiratrust.com.br",
+        "name": "Oliveira Trust — Assembleias (AGD/AGT) de Debêntures",
+        "category": "regulatory",
+        "kind": "api",
+        "scraper_module": "oliveiratrust",
+        "url": "https://services-ft.oliveiratrust.com.br/app/v1/titulos/documentos",
+        "mode": "all",
+        "notes": "API JSON publica (sem Playwright), confirmada ao vivo (23/07/2026). Filtra por "
+                 "empresa da cobertura dentro do scraper (mesmo padrao do CVM RAD) -- so' debentures "
+                 "nesta 1a versao, CRI/CRA e Relatorios Anuais ficaram de fora (pedido do Allan).",
+    },
+    {
+        "domain": "vortx.com.br",
+        "name": "Vórtx — Assembleias de Debêntures",
+        "category": "regulatory",
+        "kind": "html",
+        "scraper_module": "vortx",
+        "url": "https://www.vortx.com.br/investidor/dcm",
+        "mode": "all",
+        "notes": "Playwright (SPA Next.js) -- busca por empresa da cobertura, abre cada operacao de "
+                 "debenture e le a aba Assembleias. CUSTO ALTO: ~96 buscas + 1 navegacao Playwright por "
+                 "operacao encontrada -- pode deixar a varredura lenta, avaliar depois do 1o uso real. "
+                 "Nao consegui calibrar o parser de linha COM assembleia de verdade (so' testei "
+                 "operacoes sem nenhuma cadastrada) -- ver docstring do modulo.",
+    },
+    {
+        "domain": "pentagonotrustee.com.br",
+        "name": "Pentágono — Publicações (Assembleias/Editais de Debêntures)",
+        "category": "regulatory",
+        "kind": "html",
+        "scraper_module": "pentagono",
+        "url": "https://www.pentagonotrustee.com.br/Site/Investidores",
+        "mode": "all",
+        "notes": "HTML server-rendered simples (sem Playwright), confirmado ao vivo (23/07/2026). Busca "
+                 "por empresa da cobertura, abre a aba Publicacoes de cada ativo e filtra pelo NOME DO "
+                 "ARQUIVO (AGD/AGT/edital/convocacao) -- essa aba mistura fato relevante e aviso aos "
+                 "debenturistas tambem, que ficam de fora por enquanto.",
+    },
+    {
         "domain": "fnet.bmfbovespa.com.br",
         "name": "B3 Fundos.NET — Comunicados (FIDC/Securitizadoras)",
         "category": "regulatory",

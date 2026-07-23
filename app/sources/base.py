@@ -84,7 +84,7 @@ class RawArticle:
     snippet: str = ""
     body: str = ""
     published_at: datetime | None = None
-    article_type: str = "news"  # news | rating_action | fato_relevante | research
+    article_type: str = "news"  # news | rating_action | fato_relevante | assembleia | research
 
 
 def get(url: str, **kwargs):
@@ -103,6 +103,32 @@ def get(url: str, **kwargs):
 
 def now_utc() -> datetime:
     return datetime.now(timezone.utc)
+
+
+def load_coverage_names() -> list[str]:
+    """Nomes + apelidos das empresas ATIVAS da cobertura -- usado pelas
+    fontes de AGD/assembleia das securitizadoras (vortx, oliveiratrust,
+    pentagono), que -- assim como o CVM RAD -- filtram por empresa da
+    cobertura DENTRO do scraper (o volume total de AGDs do mercado inteiro
+    é grande demais pra deixar tudo pro pipeline decidir, ver docstring de
+    cvm_rad.py). Compartilhado em base.py (23/07/2026) em vez de duplicado
+    em cada módulo novo -- cvm_rad.py mantém sua própria cópia local por
+    enquanto pra não arriscar mexer numa fonte já calibrada sem necessidade."""
+    try:
+        from ..db import SessionLocal
+        from ..models import Company, CompanyAlias
+
+        with SessionLocal() as db:
+            nomes: list[str] = []
+            for c in db.query(Company).filter(Company.active.is_(True)).all():
+                nomes.append(c.name)
+            for a in db.query(CompanyAlias).all():
+                if a.alias:
+                    nomes.append(a.alias)
+            return nomes
+    except Exception as e:  # noqa: BLE001
+        logger.warning("load_coverage_names: falha carregando empresas da cobertura: %s", e)
+        return []
 
 
 def fetch_rendered_html(

@@ -610,3 +610,87 @@ protegido por um header `X-Cron-Secret` comparado contra a env var
 externo, não um navegador logado). Esse endpoint só chama a mesma
 `_dispatch_github_workflow()` já usada pelo botão "Forçar atualização".
 Passo a passo de configuração no cron-job.org: `DEPLOY.md`, Parte 5.
+
+## Assembleias (AGD/AGT) de debêntures — Oliveira Trust, Vórtx, Pentágono (23/07/2026)
+
+Pedido do Allan: incluir documentos de Assembleia Geral de Debenturistas
+(AGD/AGT) das 3 securitizadoras que ele acompanha, seguindo a mesma ideia
+de marcar empresa da cobertura vs. fora dela. Antes de codar, explorei ao
+vivo os 4 links que o Allan mandou usando o Chrome dele (não o sandbox
+deste ambiente, que não alcança esses domínios) — cada site tem uma
+arquitetura BEM diferente por baixo do capô, então cada scraper novo usa
+uma estratégia diferente:
+
+- **`app/sources/oliveiratrust.py`** — o melhor caso: achei uma API JSON
+  pública sem autenticação (`services-ft.oliveiratrust.com.br/app/v1/
+  titulos/documentos`) por trás da página "Central de Documentos". Coleta
+  é só `base.get()` (curl_cffi), sem Playwright. Resolve o link real do
+  PDF via 2 chamadas extra (`/titulos/{tit}` -> `codigo_operacao`, depois
+  `/titulos/fundos/downloads/{codigo_operacao}` -> lista com o link
+  final), só para os itens que batem com a cobertura.
+- **`app/sources/vortx.py`** — SPA em Next.js, precisa de Playwright pra
+  ler a aba "Assembleias" de cada operação (confirmado ao vivo que um GET
+  comum na página de detalhe não traz esse conteúdo, só a busca inicial é
+  server-rendered). Busca por empresa, pega os ids de operação (inclusive
+  da página 2+ via um truque com o header `RSC: 1` do Next.js, evitando
+  Playwright só pra paginar a busca), abre cada operação e filtra CRI/CRA
+  fora olhando o `<title>` da página.
+- **`app/sources/pentagono.py`** — o mais simples dos 3: site ASP.NET
+  clássico, server-rendered de verdade (confirmado que um GET comum já
+  traz o conteúdo da aba "Publicações", sem Playwright). Filtra por nome
+  de arquivo (AGD/AGT/edital/convocação) porque essa aba mistura fato
+  relevante e aviso aos debenturistas também.
+
+**Escopo desta 1ª versão (decisão do Allan, pergunta direta feita antes de
+codar)**: só **debêntures**, nas 3 fontes. CRI/CRA ficaram de fora de
+propósito — nos 3 sites, o nome do "ativo" que aparece na listagem de
+CRI/CRA é o veículo da securitizadora (ex.: "CIA PROVINCIA SEC 42E"), não
+a empresa devedora, então o casamento por keyword de empresa não bate
+direto — precisaria de uma 2ª etapa (abrir a escritura/documento pra achar
+o devedor real) antes de valer a pena ligar. Relatórios anuais também
+ficaram de fora por enquanto (secundário no pedido original, e a Oliveira
+Trust nem tem data exata pra relatório, só o ano).
+
+**Tipo de artigo novo**: `assembleia` (`Article.article_type`), com badge
+roxo próprio no dashboard (`static/style.css`/`app.js`/
+`templates/dashboard.html`). Assim como o CVM RAD, essas 3 fontes novas
+filtram por empresa da cobertura **dentro do próprio scraper** (não
+deixam pro pipeline decidir) — o volume total de AGD do mercado inteiro é
+grande demais (Oliveira Trust sozinha tem 1.612 registros históricos só
+de debênture) pra deixar sem filtro. Nova função compartilhada
+`base.load_coverage_names()` (mesma lógica que já existia isolada em
+`cvm_rad.py`) evita triplicar esse helper.
+
+**Verificação ao vivo (23/07/2026)**: nos últimos 30 dias (23/06 a
+23/07/2026), confirmei pelo menos 1 AGD de empresa da cobertura na
+Oliveira Trust — **Hidrovias do Brasil**, AGD de 26/06/2026, 2ª
+série/4ª emissão. Não achei exemplo ao vivo de AGD com conteúdo em Vórtx
+nem Pentágono nas poucas empresas que testei manualmente (Suzano, Cosan,
+JSL, Vale, Cogna, MRV, Oncoclínicas) — não é evidência de que não exista
+(só testei uma fração das 96 empresas à mão), mas também significa que o
+parser de linha do Vórtx (`_extrair_assembleias_do_painel`) NÃO foi
+calibrado contra um painel de Assembleias com conteúdo de verdade — está
+propositalmente genérico (procura qualquer linha com data dd/mm/aaaa
+dentro do painel ativo). Se vier `found` baixo ou título estranho no
+primeiro uso real, o próprio scraper salva `data/debug_vortx.html`
+automaticamente pra eu calibrar, igual foi feito com CVM RAD/Moody's/
+Fitch nas rodadas anteriores.
+
+**Custo de rede — atenção**: diferente das fontes antigas (que trazem tudo
+num único GET/tabela), Vórtx e Pentágono não têm uma página central "todas
+as assembleias do mercado" — a única forma de achar documento por empresa
+é buscar as ~96 empresas da cobertura uma a uma. Pentágono é HTTP puro
+(rápido, mas ainda ~100-250 requisições por rodada); Vórtx é pior porque
+cada operação encontrada precisa de uma navegação Playwright inteira (aba
+de Assembleias). Se isso deixar a varredura muito mais lenta que o
+intervalo de 5 minutos, ou parecer abuso pro servidor de alguma das duas
+(rate limit, IP bloqueado), me avisa que a gente ajusta — reduzir a
+frequência só dessas 2 fontes, ou trocar por uma lista fixa de
+ativos/operações já conhecidos em vez de buscar tudo de novo toda rodada.
+
+**Depois de puxar o código**, além do `Reiniciar Monitoramento.bat`
+de sempre, é preciso rodar `python -m scripts.seed` (ou deixar o próprio
+`scripts/run_once.py`/agendador sincronizar sozinho, já que
+`sync_known_sources` roda a cada execução) pra essas 3 fontes novas
+aparecerem em "Fontes & Empresas" — elas entram **habilitadas** por
+padrão, então vão rodar já na primeira varredura depois do deploy.

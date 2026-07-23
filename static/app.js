@@ -54,6 +54,7 @@
       news: "Notícia",
       rating_action: "Ação de rating",
       fato_relevante: "Documento CVM",
+      assembleia: "Assembleia (AGD/AGT)",
       research: "Research",
     }[t] || t;
   }
