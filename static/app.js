@@ -33,6 +33,21 @@
   let currentWindow = "30d";
   const scanIntervalMs = (window.SCAN_INTERVAL_MINUTES || 5) * 60 * 1000;
   let secondsLeft = Math.floor(scanIntervalMs / 1000);
+
+  // BUG REAL (27/07/2026): o botão "Forçar atualização" passou a só
+  // renderizar pra quem está logado (`{% if user %}` em dashboard.html,
+  // já que a Visão Geral virou pública) -- `refreshBtn` fica `null` pra
+  // visitante anônimo, e as linhas que mexiam nele direto
+  // (`refreshBtn.disabled = ...`) travavam a IIFE inteira com
+  // TypeError logo na inicialização, antes até de `loadArticles()`
+  // rodar -- ou seja, quebrava a página toda pro público, não só o
+  // botão. Esse helper (e os `if (refreshBtn)` abaixo) tornam todo
+  // acesso ao botão seguro quando ele não existe no DOM.
+  function setRefreshBtnState(disabled, text) {
+    if (!refreshBtn) return;
+    refreshBtn.disabled = disabled;
+    refreshBtn.textContent = text;
+  }
   let pollTimer = null;
 
   function populateCompanies() {
@@ -192,8 +207,7 @@
       }
       // terminou
       hideProgress();
-      refreshBtn.disabled = false;
-      refreshBtn.textContent = "Forçar atualização";
+      setRefreshBtnState(false, "Forçar atualização");
       if (s.error) {
         statusEl.textContent = "A atualização falhou: " + s.error;
       } else if (s.summary) {
@@ -204,15 +218,13 @@
       await loadArticles();
     } catch (e) {
       hideProgress();
-      refreshBtn.disabled = false;
-      refreshBtn.textContent = "Forçar atualização";
+      setRefreshBtnState(false, "Forçar atualização");
       statusEl.textContent = "Erro ao verificar o progresso da atualização.";
     }
   }
 
   async function forceRefresh() {
-    refreshBtn.disabled = true;
-    refreshBtn.textContent = "Buscando…";
+    setRefreshBtnState(true, "Buscando…");
     setProgress(0, 1, "");
     statusEl.textContent = "Varrendo fontes agora, pode levar alguns segundos…";
     try {
@@ -225,8 +237,7 @@
       // novo depois de um tempo, em vez de tentar a barra de progresso.
       if (data.dispatched_to_github) {
         hideProgress();
-        refreshBtn.disabled = false;
-        refreshBtn.textContent = "Forçar atualização";
+        setRefreshBtnState(false, "Forçar atualização");
         statusEl.textContent = "Atualização disparada no GitHub Actions — leva alguns minutos pra aparecer aqui.";
         setTimeout(() => { loadArticles(); loadStatus(); }, 90000);
         return;
@@ -239,8 +250,7 @@
       pollRefreshStatus();
     } catch (e) {
       hideProgress();
-      refreshBtn.disabled = false;
-      refreshBtn.textContent = "Forçar atualização";
+      setRefreshBtnState(false, "Forçar atualização");
       statusEl.textContent = "Erro ao iniciar a atualização.";
     }
   }
@@ -261,10 +271,10 @@
   companySelect.addEventListener("change", loadArticles);
   typeSelect.addEventListener("change", loadArticles);
   coverageSelect.addEventListener("change", loadArticles);
-  refreshBtn.addEventListener("click", forceRefresh);
+  if (refreshBtn) refreshBtn.addEventListener("click", forceRefresh);
 
   setInterval(() => {
-    if (refreshBtn.disabled) return; // nao conta regressiva enquanto ja esta atualizando
+    if (refreshBtn && refreshBtn.disabled) return; // nao conta regressiva enquanto ja esta atualizando
     secondsLeft -= 1;
     if (secondsLeft <= 0) {
       secondsLeft = Math.floor(scanIntervalMs / 1000);
@@ -283,8 +293,7 @@
       const resp = await fetch("/api/refresh-status");
       const s = await resp.json();
       if (s.running) {
-        refreshBtn.disabled = true;
-        refreshBtn.textContent = "Buscando…";
+        setRefreshBtnState(true, "Buscando…");
         pollRefreshStatus();
       }
     } catch (e) { /* ignora */ }

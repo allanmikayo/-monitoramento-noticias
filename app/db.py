@@ -88,6 +88,35 @@ def run_migrations() -> None:
         # TRUE (nao 1) -- Postgres nao aceita inteiro cru como default de
         # BOOLEAN (SQLite aceita os dois; TRUE funciona nos dois bancos).
         "ALTER TABLE articles ADD COLUMN is_covered BOOLEAN DEFAULT TRUE",
+        # BUG CORRIGIDO (23/07/2026): a primeira versao do modulo de spreads
+        # criou `debentures` com VARCHAR(20)/(10) -- estourou
+        # (StringDataRightTruncation) na primeira captura real do Allan
+        # contra o Supabase (SQLite nao teria acusado, nao impoe VARCHAR(N)
+        # de verdade). `Base.metadata.create_all` so cria tabela nova, nao
+        # altera coluna existente -- por isso o ALTER explicito aqui pra
+        # quem ja rodou a versao antiga contra Postgres. ALTER COLUMN TYPE
+        # nao existe no SQLite (cai no except e e ignorado, sem problema --
+        # SQLite so tem "type affinity", nunca aplicou o limite mesmo).
+        "ALTER TABLE debentures ALTER COLUMN codigo TYPE VARCHAR(40)",
+        "ALTER TABLE debentures ALTER COLUMN indexador TYPE VARCHAR(30)",
+        "ALTER TABLE debentures ALTER COLUMN incentivada TYPE VARCHAR(20)",
+        "ALTER TABLE debentures ALTER COLUMN cnpj TYPE VARCHAR(30)",
+        # NOVO (24/07/2026): liga a debênture ao cadastro de empresas do
+        # monitoramento de notícias -- aba "Marcação Emissores" (ver
+        # scripts/match_debenture_issuers.py).
+        "ALTER TABLE debentures ADD COLUMN company_id INTEGER",
+        # NOVO (27/07/2026): spread em bps calculado por negócio da B3 --
+        # ver app/models.py NegocioB3.spread e app/spreads/b3_trades.py.
+        "ALTER TABLE negocios_b3 ADD COLUMN spread FLOAT",
+        # NOVO (27/07/2026, mesmo dia): referência de NTN-B específica de
+        # cada papel (vinda da Anbima) -- ver app/models.py
+        # Debenture.referencia_ntnb. Corrige compute_trade_spreads, que
+        # antes usava sempre o vértice mais curto pra todo negócio IPCA+.
+        "ALTER TABLE debentures ADD COLUMN referencia_ntnb VARCHAR(20)",
+        # NOVO (27/07/2026, mesmo dia): curva de NTN-B inteira cacheada por
+        # dia (não só o vértice mais curto) -- ver app/models.py
+        # NtnbReferencia.curva_json.
+        "ALTER TABLE ntnb_referencia ADD COLUMN curva_json TEXT",
     ]
     with engine.connect() as conn:
         for stmt in statements:

@@ -13,8 +13,7 @@
         <span class="tag {{ 'tag-ok' if u.role == 'admin' else '' }}">{{ 'admin' if u.role == 'admin' else 'usuário' }}</span>
       </td>
       <td>
-        {% if not u.email_confirmed %}<span class="tag tag-off">e-mail não confirmado</span>
-        {% elif not u.active %}<span class="tag tag-off">inativo</span>
+        {% if not u.active %}<span class="tag tag-off">pendente de aprovação / inativo</span>
         {% else %}<span class="tag tag-ok">ativo</span>{% endif %}
       </td>
       <td class="muted">{{ u.created_at | brt("%d/%m/%Y %H:%M") }}</td>
@@ -24,7 +23,7 @@
           <button type="submit" class="btn-small">{{ 'Tornar usuário' if u.role == 'admin' else 'Tornar admin' }}</button>
         </form>
         <form method="post" action="/admin/usuarios/{{ u.id }}/ativo" class="inline-form">
-          <button type="submit" class="btn-small">{{ 'Desativar' if u.active else 'Ativar' }}</button>
+          <button type="submit" class="btn-small">{{ 'Desativar' if u.active else 'Aprovar' }}</button>
         </form>
         <form method="post" action="/admin/usuarios/{{ u.id }}/remover" class="inline-form" onsubmit="return confirm('Remover este usuário?');">
           <button type="submit" class="btn-small btn-danger">Remover</button>
@@ -44,7 +43,7 @@
   <select name="role"><option value="user">Usuário</option><option value="admin">Admin</option></select>
   <button type="submit" class="btn-primary">Adicionar</button>
 </form>
-<p class="muted small">Usuários criados aqui já entram confirmados — não precisam clicar em link de e-mail.</p>
+<p class="muted small">Usuários criados aqui já entram aprovados. Quem se cadastra sozinho em /cadastro fica "pendente de aprovação" na tabela acima até você clicar em "Aprovar".</p>
 
 <h1>Sessões ativas</h1>
 <table class="table">
@@ -73,6 +72,17 @@
 <form method="post" action="/admin/configuracoes" class="form-row">
   <label>Duração da sessão (minutos)</label>
   <input type="number" name="session_ttl_minutes" value="{{ session_ttl_minutes }}" min="5">
+  <button type="submit" class="btn-primary">Salvar</button>
+</form>
+
+<h2 style="margin-top:24px;">Spreads de Debêntures — tickers excluídos</h2>
+<p class="muted small">
+  Tickers nessa lista são tirados de toda conta de spread (KPIs, gráficos, tabela de Detalhes,
+  cards da aba Emissores) — separados por ponto e vírgula (<code>;</code>), ex.: <code>AAAA11;BBBB22</code>.
+</p>
+<form method="post" action="/admin/configuracoes/spread-tickers-excluidos" class="form-row">
+  <input type="text" name="spread_tickers_excluidos" value="{{ spread_tickers_excluidos }}"
+         placeholder="AAAA11;BBBB22;CCCC33" style="flex:1;min-width:320px;">
   <button type="submit" class="btn-primary">Salvar</button>
 </form>
 {% endblock %}

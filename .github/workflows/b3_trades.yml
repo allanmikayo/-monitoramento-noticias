@@ -1,0 +1,69 @@
+name: Negócio a negócio B3 (debêntures/CRI/CRA)
+
+# Roda scripts/fetch_b3_trades.py sem argumentos (só o dia de hoje). Pedido
+# do Allan (24/07/2026): atualizar a cada 15 min ENQUANTO O MERCADO ESTÁ
+# ABERTO (10h-16h de pregão de renda fixa na B3, com folga até 18h pra
+# pegar negócios de Registro que aparecem um pouco depois do fechamento --
+# ver app/spreads/b3_trades.py).
+#
+# Igual à varredura de notícias (scrape.yml): o `schedule:` nativo do
+# GitHub Actions NÃO é pontual o suficiente pra uma cadência de 15 min (é
+# limitação documentada do próprio GitHub, já vimos isso na prática com a
+# varredura de notícias, 17/07/2026). Quem dispara de verdade a cada 15
+# min é um serviço externo de cron gratuito (cron-job.org) chamando
+# POST /api/cron-trigger?job=b3_trades (ver app/app.py) -- o `schedule:`
+# abaixo é só um FALLBACK de 1x/hora nas horas de pregão, caso o cron
+# externo tenha uma falha.
+on:
+  schedule:
+    - cron: "0 12-21 * * 1-5"  # 12h-21h UTC = 9h-18h BRT, seg-sex (fallback horário)
+  # `start`/`end` opcionais -- vazio (uso normal, disparado pelo relay a
+  # cada 15 min) = só hoje. Preenchidos = backfill pontual manual (Allan
+  # via Actions -> "Run workflow", pedido dele 24/07/2026: catch-up dos
+  # últimos 5 dias na primeira subida do módulo pro Supabase).
+  workflow_dispatch:
+    inputs:
+      start:
+        description: "Data inicial (AAAA-MM-DD) -- deixe em branco pro uso normal (só hoje)"
+        required: false
+        default: ""
+      end:
+        description: "Data final (AAAA-MM-DD) -- deixe em branco (usa a mesma que start, ou hoje)"
+        required: false
+        default: ""
+
+concurrency:
+  group: b3_trades
+  cancel-in-progress: false
+
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Baixar o codigo
+        uses: actions/checkout@v4
+
+      - name: Preparar Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Instalar dependencias
+        run: pip install -r requirements.txt
+
+      - name: Capturar negócio a negócio
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          # NOVO (27/07/2026): calcular spread (bps) de cada negócio IPCA+
+          # Incentivadas precisa da taxa de NTN-B do dia (mesma API da
+          # Anbima usada em spreads_daily.yml) -- ver
+          # app/spreads/b3_trades.py::compute_trade_spreads.
+          ANBIMA_CLIENT_ID: ${{ secrets.ANBIMA_CLIENT_ID }}
+          ANBIMA_CLIENT_SECRET: ${{ secrets.ANBIMA_CLIENT_SECRET }}
+        run: |
+          ARGS=""
+          if [ -n "${{ github.event.inputs.start }}" ]; then ARGS="$ARGS --start ${{ github.event.inputs.start }}"; fi
+          if [ -n "${{ github.event.inputs.end }}" ]; then ARGS="$ARGS --end ${{ github.event.inputs.end }}"; fi
+          python -m scripts.fetch_b3_trades $ARGS

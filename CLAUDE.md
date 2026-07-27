@@ -148,18 +148,27 @@ código nem reiniciar o servidor.
 
 ## Autenticação e admin
 
-- Cadastro (`/cadastro`) cria usuário com `email_confirmed=False` e envia
-  (ou loga, se SMTP não configurado) um link de confirmação válido por 48h.
-- Sem SMTP configurado no `.env`, o link aparece no **log do servidor**
-  (stdout) — suficiente para testar localmente. Para produção, configure
-  `SMTP_HOST`/`SMTP_USER`/`SMTP_PASSWORD` (Gmail com senha de app, ou um
-  serviço como Resend/SendGrid, que têm free tier).
-- Usuários criados pelo admin (`/admin`) já entram confirmados.
+**MUDOU (27/07/2026)** -- login deixou de ser obrigatório pra tudo. Ver
+seção dedicada mais abaixo ("Login virou opcional...") pro desenho
+completo. Resumo:
+
+- **Notícias (`/`) e Spreads (`/spreads`) são públicas** -- não precisa
+  de login pra ver. Login vira uma opção ("Entrar") no canto superior
+  direito do header, só necessário pra **Fontes & Empresas** e
+  **Administração**.
+- Cadastro (`/cadastro`) cria usuário com `active=False` (**pendente de
+  aprovação**) -- sem e-mail de confirmação nenhum. Só entra depois que
+  o Allan aprova em `/admin` (botão "Aprovar" na tabela de usuários,
+  mesmo mecanismo que já existia pra ativar/desativar).
+- Usuários criados pelo admin (`/admin`) já entram aprovados
+  (`active=True`) -- não passam pelo estado pendente.
 - Sessão expira em `SESSION_TTL_MINUTES` (default 480 = 8h), configurável
   em `/admin`. Painel admin lista sessões ativas (usuário, início, última
   atividade, expiração, IP) com botão "Encerrar".
 - `role` (`admin`/`user`) controla quem vê `/admin`. O primeiro admin é
-  criado pelo seed a partir de `BOOTSTRAP_ADMIN_EMAIL`.
+  criado pelo seed a partir de `BOOTSTRAP_ADMIN_EMAIL`. Um usuário comum
+  (`role=user`) aprovado já vê "Fontes & Empresas" no header, mas não
+  "Administração" (`require_admin` continua exigindo `role=admin`).
 
 ## Limitações conhecidas / próximos passos
 
@@ -301,6 +310,1073 @@ só como Postgres gerenciado gratuito, não como serviço de Auth.
    `BOOTSTRAP_ADMIN_PASSWORD` etc.).
 6. Gerar um GitHub Personal Access Token com escopo `actions:write` (ou
    fine-grained equivalente) pro Vercel poder acionar o workflow.
+
+### Cards da aba Emissores: taxa → spread (bps) — 27/07/2026
+
+Allan pediu pra trocar os dois cards do topo da aba Emissores (criados na
+rodada anterior, ver seção logo abaixo) de TAXA pra SPREAD em bps --
+mesma unidade do resto do dashboard inteiro:
+- **Card Anbima**: `anbima_spread`/`anbima_spread_3m` agora usam
+  `DebentureSpread.spread` (já calculado, em bps) em vez de
+  `taxa_indicativa` -- mudança pequena, o dado já existia.
+- **Card B3**: pedido mais complexo -- "IPCA+ incentivadas tem que
+  buscar a NTNB referência, para CDI não precisa de cálculos adicionais,
+  igual você já aprendeu a fazer na atualização de spreads". O negócio a
+  negócio da B3 só tem a `taxa` crua, não o spread -- precisa calcular,
+  reaproveitando EXATAMENTE a fórmula de `fetch.fetch_spreads`:
+  - CDI + Tradicionais: `spread = taxa * 100`.
+  - IPCA + Incentivadas: `spread = ((1+taxa/100)/(1+taxa_ntnb/100)-1)*10000`.
+    **CORRIGIDO (27/07/2026, mesmo dia, ver seção "Bug real: spread B3
+    negativo" logo abaixo)**: a primeira versão usava sempre a NTN-B de
+    vértice mais curto do dia pra `taxa_ntnb`, já que o negócio a negócio
+    da B3 não traz `referencia_ntnb` por papel como o boletim da Anbima
+    traz. Allan apontou que isso está errado -- agora `taxa_ntnb` usa a
+    referência ESPECÍFICA que a Anbima associa a cada papel
+    (`Debenture.referencia_ntnb`, persistida a partir do boletim diário),
+    e só cai no vértice mais curto quando o papel não tem essa referência
+    própria (mesma regra que `fetch_spreads` já usa pro card Anbima --
+    não inventamos fórmula nova, só paramos de pular essa etapa no lado
+    B3).
+  - Indexador fora dessas duas classes (`classe == "Outros"`) ou ticker
+    sem `Debenture` cadastrado (CRI/CRA, que não têm cadastro próprio
+    ainda): `spread` fica `None`.
+
+  **Decisão de arquitetura**: calcular o spread NA HORA DE GRAVAR (
+  `b3_trades.compute_trade_spreads`, chamado de
+  `persist.save_negocios_b3`), não em tempo real quando o dashboard
+  carrega -- evita bater na API da Anbima (OAuth + rate limit) a cada
+  carregamento de página; o card só faz uma agregação simples sobre um
+  valor já calculado e guardado (`NegocioB3.spread`, coluna nova). Isso
+  significa que **o job de negócio a negócio (`scripts/fetch_b3_trades.py`
+  / `b3_trades.yml`) agora também depende de `ANBIMA_CLIENT_ID`/
+  `ANBIMA_CLIENT_SECRET`** -- adicionado como env do step no workflow
+  (mesmos secrets já pedidos pro `spreads_daily.yml`, não é segredo novo
+  se o Allan já configurou pra rodada de deploy anterior).
+
+  Allan também pediu uma referência discreta pro card B3, no mesmo
+  espírito da "média 3M" do card Anbima, só que numa janela mais curta
+  (negócio da B3 é intradiário, 3 meses não faria sentido): **spread
+  ponderado das últimas 24 HORAS CORRIDAS** (não posições de pregão) --
+  `b3_spread_24h` em `queries.emissor_taxas`, calculado combinando
+  `data_negocio`+`horario` num datetime de verdade em `America/Sao_Paulo`
+  (fuso fixo, sem horário de verão) e comparando contra `agora - 24h`.
+
+**Migração**: `NegocioB3.spread` é coluna nova -- `ALTER TABLE
+negocios_b3 ADD COLUMN spread FLOAT` em `run_migrations()`. Como o
+dedupe por `trade_code` nunca REESCREVE linha já gravada, todo negócio
+capturado ANTES dessa correção fica com `spread=NULL` pra sempre a
+menos que alguém preencha manualmente -- por isso
+`scripts/backfill_b3_trade_spreads.py` (novo, roda uma vez, sem
+argumento): recalcula `spread` de todo `NegocioB3` com `spread IS NULL`,
+reaproveitando a mesma `compute_trade_spreads` (idempotente, seguro
+rodar de novo).
+
+Testado contra uma cópia do banco real (11.761 negócios já capturados,
+11.758 sem spread) com a chamada de NTN-B mockada: `compute_trade_spreads`
+bate a fórmula manual pros dois indexadores e devolve `None` certinho
+pra "Outros"/ticker sem cadastro/taxa nula; a janela de 24h testada com
+3 negócios sintéticos (agora, 20h atrás, 30h atrás) inclui certinho os
+dois primeiros e exclui o terceiro; o backfill rodou em ~0,5s fazendo só
+2 chamadas de NTN-B (uma por DATA distinta, cacheado -- não uma por
+negócio) e preencheu 4.101 dos 11.758 (o resto é legitimamente CRI/CRA/
+"Outros", sem o que calcular).
+
+### Bug real: negócio sumindo da captura B3 — 27/07/2026
+
+Allan filtrou "Energisa Sergipe" na aba Emissores e um negócio de hoje
+(ENSEB4, `trade_code` "#1009631632", 10:29:46) não aparecia -- nem na
+tabela de negociações nem no card de taxa B3. Descartei bug de
+matching/código primeiro (ENSEB4 bate certinho com o `Debenture` da
+Energisa Sergipe, `_normalize_codigo` não era o problema). Reproduzi
+direto no navegador contra a B3 pra investigar a fundo:
+
+- A consulta do dia CORRENTE (`/Trade/{hoje}/{hoje}/...`) às vezes
+  devolve HTTP 200 com JSON válido só que `table.values: []` e
+  `table.pageCount: 0` -- **não é erro de rede** (por isso o retry que já
+  existia em `_fetch_page`, que só cobria exceção/corpo HTTP vazio, não
+  pegava esse caso). Reproduzido com **5 tentativas seguidas** espaçadas
+  de 0,5s todas vazias, recuperando sozinho depois de ~10s (voltou a
+  devolver 1000 negócios na página 1 normalmente).
+- Confirmei que o negócio do Energisa Sergipe estava lá o tempo todo --
+  assim que a consulta voltou a responder, achei ele de primeira na
+  página 2 fazendo a mesma varredura que `fetch_trades` faz.
+- Ou seja: não é dado perdido/atrasado do lado da B3, é uma instabilidade
+  passageira da consulta do dia corrente especificamente (histórico de
+  dias passados nunca falhou nos testes) que o nosso código não estava
+  tratando -- se uma rodada do agendador (a cada 15 min) batesse
+  exatamente nessa janela, perdia o dia inteiro (ou parava cedo demais na
+  página que travou) sem nenhum erro visível no log.
+
+**Corrigido em `app/spreads/b3_trades.py`** com duas mudanças:
+1. `_fetch_page_sem_vazio()` -- camada de retry NOVA, separada do retry
+   de rede que já existia, que insiste (`EMPTY_RETRY_ATTEMPTS = 4`,
+   backoff de 3s/6s/9s) quando uma página vem com `values: []` sem
+   nenhum erro HTTP. Só desiste depois de esgotar as tentativas (aí sim
+   pode ser fim de semana/feriado de verdade, ou uma instabilidade mais
+   longa que o normal).
+2. `fetch_trades()` não derruba a captura inteira mais se uma página
+   falhar de vez (rede exaurida OU continuar vazia) -- loga um erro e
+   devolve o que já tinha coletado até ali em vez de propagar a exceção e
+   perder tudo (parcial é sempre melhor que nada; a próxima rodada do
+   agendador, 15 min depois, refaz o dia inteiro do zero e tende a
+   preencher o que ficou faltando).
+
+Testado com 3 cenários sintéticos (mock de `requests.post`): página 1
+vazia 2x seguido de recuperação (acha o negócio normalmente), página 1
+vazia em TODAS as tentativas (fim de semana de verdade -- não trava,
+devolve lista vazia), e falha de rede persistente na página 2 depois da
+página 1 ter funcionado (devolve o resultado parcial da página 1 em vez
+de perder tudo).
+
+### Cards de taxa no topo da aba Emissores — 24/07/2026
+
+Allan pediu dois cards acima da tabela de tickers: taxa Anbima mais
+recente do papel (ponderada por Estoque se o emissor tiver vários
+tickers, com uma média dos últimos 3 meses em destaque menor ao lado) e a
+taxa que está sendo negociada na B3 (ponderada por taxa × volume). Nova
+função `queries.emissor_taxas(db, nomes_emissor, classe)` +
+`GET /api/spreads/emissor/taxas` + os dois `kpi-card` no topo de
+`#emissor-conteudo` (reaproveita o CSS `.kpi-row`/`.kpi-card`/`.kpi-tag`
+que já existia na Visão Geral).
+
+**Bug real pego ANTES de mandar pro Allan** (testando com a Coelba, que
+tem papel de indexador fora do normal): a primeira versão ponderava
+`taxa_indicativa` de TODOS os tickers do emissor juntos, sem filtrar por
+`classe`. `taxa_indicativa` não é a mesma unidade pra todo indexador --
+"DI PERCENTUAL" guarda um número tipo 104,7 (% do CDI), enquanto
+"PREFIXADO"/"IPCA +"/"CDI +" guardam uma taxa normal tipo 0,7-15. Esses
+indexadores fora do padrão caem em `classe == "Outros"` (`compute_classe`)
+-- misturados com o resto, geravam uma "taxa média" sem sentido nenhum
+(9,41% pra Coelba, puxada por um papel de 104,7%). Corrigido exigindo
+`classe` como parâmetro obrigatório e filtrando os tickers por ela --
+MESMA regra de nunca misturar "IPCA + Incentivadas"/"CDI + Tradicionais"/
+"Outros" que já vale pro resto do dashboard inteiro, agora estendida
+também pros negócios da B3 (taxa de um CDI+ e de um IPCA+ não são
+comparáveis entre si tampouco). Os cards agora reagem ao filtro de classe
+já existente na aba (`#emissor-classe-tabs`) -- igual o gráfico de spread
+já fazia; só a tabela de tickers continua mostrando todos os tickers
+juntos (comportamento antigo, intencional, é só listagem informativa).
+
+Testado contra o banco real (cópia) nas duas classes da Coelba
+separadamente -- números batem com o esperado (IPCA+ ~8,4%, CDI+ ~0,86%
+de spread) depois do fix.
+
+### Cache da NTN-B de referência (evitar bater na Anbima a cada 15min) — 27/07/2026
+
+Allan notou que o card B3 (seção acima) faz `compute_trade_spreads` buscar
+a NTN-B na Anbima toda vez que roda -- e como o job de negócio a negócio
+roda de 15 em 15 min durante o pregão inteiro (~30-40 ciclos/dia), isso é
+~30-40 chamadas OAuth+API por dia só pra um valor que "não vai mudar ao
+longo do dia" (a taxa indicativa da NTN-B é publicada uma vez por dia).
+Pediu pra cachear.
+
+- **`NtnbReferencia`** (`app/models.py`) -- tabela nova, chave primária
+  `data` (Date), guarda `min_ntnb`/`min_venc` (vértice mais curto do dia,
+  usado como FALLBACK -- ver correção abaixo), `curva_json` (a curva
+  inteira, `{vencimento: taxa}`, ampliado no mesmo dia) e `captured_at`.
+  Tabela nova = `Base.metadata.create_all` cria sozinho; `curva_json` foi
+  ADICIONADO depois (coluna nova numa tabela que já existia nesse mesmo
+  dia) -- por isso tem entrada em `run_migrations()`.
+- **`fetch.fetch_ntnb_curve(dt)`** -- extraído do meio de `fetch_spreads`
+  (que já buscava a curva de NTN-B pra calcular spread IPCA+ sem
+  `referencia_ntnb` própria) pra virar uma função só, reaproveitada em
+  dois lugares em vez de duas cópias da mesma lógica. `fetch_spreads`
+  agora devolve `(rows, ntnb_rates, min_ntnb, min_venc)` -- **mudança de
+  assinatura**, o único chamador (`scripts/fetch_debenture_spreads.py`)
+  foi atualizado junto.
+- **`persist.cache_ntnb_referencia(db, dt, ntnb_rates, min_ntnb, min_venc)`**
+  -- chamado logo depois de `persist_day` no job diário de spreads
+  (`scripts/fetch_debenture_spreads.py`, que já roda 1x/dia às 21h BRT,
+  ver seção de deploy abaixo), reaproveitando o que `fetch_spreads` já
+  calculou na mesma chamada -- **zero requisição extra** à Anbima só pra
+  popular o cache.
+- **`b3_trades._get_ntnb_curve(db, dt)`** -- ponto de leitura do cache:
+  olha `NtnbReferencia` primeiro, só bate na Anbima ao vivo (e já grava o
+  resultado pro próximo uso) se ainda não tiver cache pra aquele dia --
+  ex. antes do job diário rodar às 21h, ou primeira vez que o dia aparece
+  num negócio da B3.
+
+Efeito prático: na maioria dos dias, a partir das 21h (quando o job diário
+já rodou e cacheou a curva do dia), o job de negócio a negócio
+(`b3_trades.yml`, 15 em 15 min) **não bate mais na Anbima nenhuma vez** --
+só lê o cache. `ANBIMA_CLIENT_ID`/`ANBIMA_CLIENT_SECRET` continuam
+configurados nesse workflow como rede de segurança (fallback ao vivo pra
+cache-miss), mas o uso deve cair a quase zero.
+
+#### Bug real: spread B3 negativo/sem sentido — ASER12, 27/07/2026 (mesmo dia)
+
+Allan testou o card B3 depois do cache acima e reportou spread de
+**−47,5 bps** pra ASER12 (Águas do Sertão), estranho pra um papel de
+crédito privado. Passo a passo do que a fórmula original estava fazendo:
+taxa negociada 12,04% contra a NTN-B de **vértice mais curto do dia**
+(12,58%, vencimento 15/08/2026 -- só ~3 semanas depois do negócio).
+Allan apontou o erro de raiz: **a referência de NTN-B não é sempre a mais
+curta** -- tem que checar, pra CADA papel, a `referencia_ntnb` que a
+própria Anbima já manda no boletim de debêntures (mesmo campo que
+`fetch_spreads` sempre usou pro card Anbima); só cair no vértice mais
+curto quando esse papel não tiver essa referência própria.
+
+O bug: o negócio a negócio da B3 não traz `referencia_ntnb` por papel
+(só a Anbima traz isso, no boletim de debêntures) -- e a primeira versão
+de `compute_trade_spreads` não tinha de onde puxar essa informação, então
+sempre caía direto no fallback (vértice mais curto), que é o comportamento
+CORRETO só quando não existe referência própria -- e NTN-B de vértice bem
+curto perto do vencimento tem taxa tipicamente distorcida (iliquidez,
+efeito "pull to par"), o que explica o número sem sentido.
+
+**Correção**: `Debenture.referencia_ntnb` (coluna nova) passa a guardar a
+referência que a Anbima associa a cada papel, persistida a cada captura
+diária (`persist.persist_day`, igual `indexador`/`classe`) -- assim
+`compute_trade_spreads` consegue consultar essa referência por ticker
+mesmo sem o negócio da B3 trazer o dado. `_get_ntnb_curve` (acima) agora
+cacheia a CURVA INTEIRA (não só o vértice mais curto) pra permitir essa
+consulta por vencimento específico. `compute_trade_spreads`: pra cada
+negócio IPCA+, busca `referencia_ntnb` do ticker; se existir E estiver na
+curva do dia, usa essa taxa; senão cai no vértice mais curto (fallback,
+comportamento antigo preservado só pros casos sem referência própria).
+
+Testado contra cópia do banco real, com o ASER12 de verdade e a mesma
+curva de NTN-B do caso reportado (vértice mais curto 12,58%/15-08-2026
+distorcido, vs. uma referência de prazo mais longo simulada em 7,10%):
+com `referencia_ntnb` cadastrada, spread vira positivo e plausível (~462
+bps, contra os −47 bps errados); sem `referencia_ntnb` (papel hipotético),
+cai certinho no fallback e reproduz o número antigo (confirma que o
+fallback não quebrou); segunda chamada no mesmo dia reaproveita a curva
+cacheada (0 chamadas extras à API). `scripts/fetch_debenture_spreads.py`
+testado fim-a-fim com a nova 4-tupla, gravando `referencia_ntnb` no
+cadastro e a curva inteira no cache na mesma passada.
+
+#### Bug real (2): backfill não recalcula negócio que JÁ tinha spread errado — 27/07/2026 (mesmo dia)
+
+Allan aplicou a correção acima e rodou `fetch_debenture_spreads` +
+`backfill_b3_trade_spreads` de novo -- só 4 de 12245 negócios ganharam
+spread, muito abaixo do esperado. Causa raiz: `backfill_b3_trade_spreads`
+só processa negócio com `spread IS NULL`
+(`db.query(NegocioB3).filter(NegocioB3.spread.is_(None))`). Todo negócio
+IPCA+ que Allan já tinha rodado backfill ANTES dessa correção (ver
+diagnóstico do task #42, mais abaixo) ficou com o `spread` ERRADO da
+fórmula antiga (vértice mais curto) já gravado -- e como não é mais
+`NULL`, o backfill normal nunca mais toca nesses registros. Confirmado
+contra a cópia do banco real: ASER12 continuava com −47,3 bps mesmo
+depois da correção + backfill.
+
+**Correção**: nova flag `--recompute-ipca` em
+`scripts/backfill_b3_trade_spreads.py` -- reseta `spread=NULL` só nos
+negócios cujo ticker é classe "IPCA + Incentivadas" (não mexe em CDI+,
+que nunca teve esse bug -- a fórmula `taxa*100` não depende de NTN-B) e
+então roda o preenchimento normal, agora usando a referência certa.
+Rodar UMA VEZ só, logo depois de aplicar a correção acima:
+
+```
+python -m scripts.backfill_b3_trade_spreads --recompute-ipca
+```
+
+Testado contra cópia do banco real: reseta os ~2800 negócios IPCA+ já
+preenchidos, recalcula ASER12 pra spread positivo (confirmado diferente
+do valor antigo errado), e confirma que um negócio CDI+ de controle
+(já com spread) NÃO é alterado pelo reset.
+
+Depois de rodar essa flag uma vez, o fluxo normal (`backfill_b3_trade_spreads`
+sem flag, ou o próprio job de 15 em 15 min via `save_negocios_b3`)
+continua funcionando do jeito de sempre -- a flag é só pra essa correção
+pontual, não precisa virar rotina.
+
+**Diagnóstico do card "Negócios sem spread calculado" (Allan reportou,
+27/07/2026)**: card B3 mostrando "—" mesmo com a tabela de negociações
+exibindo dados. Investigando a cópia do banco real: 0 de ~12 mil
+`NegocioB3` tinham `spread` preenchido, incluindo a captura mais recente
+do próprio dia -- ou seja, **não era bug novo**, era o código de spread
+(seção "Cards da aba Emissores: taxa → spread" acima) ainda não ter sido
+aplicado (app não reiniciado) nem o backfill rodado. Resolve reiniciando
+o app e rodando `python -m scripts.backfill_b3_trade_spreads` -- mesmos
+passos de sempre, agora cobrindo cache + correção de referência também
+(não precisa repetir várias vezes por causa de cada correção separada).
+
+### Deploy do módulo Spreads (spreads + negócio a negócio B3) — 24/07/2026
+
+Até aqui (rodada 1-4 do módulo Spreads, ver seção própria mais abaixo) tudo
+rodava só LOCAL, no computador do Allan (agendador em processo, ver
+`app/scheduler.py`) — nunca tinha ido pro Vercel/Supabase/GitHub Actions.
+Allan pediu pra subir pro dashboard oficial online, com:
+- **Spreads de debêntures**: atualização 1x por dia, às 21h (horário de
+  Brasília).
+- **Negócio a negócio B3** (DEB/CRI/CRA): a cada 15 min, só enquanto o
+  mercado está aberto.
+
+**Dois workflows novos** (mesmo padrão do `scrape.yml` já existente):
+- `.github/workflows/spreads_daily.yml` — roda
+  `python -m scripts.fetch_debenture_spreads` (sem `--start`, captura só o
+  último dia útil publicado). `schedule: cron: "0 0 * * *"` (00h UTC =
+  21h BRT, Brasil não tem mais horário de verão desde 2019 -- fuso fixo,
+  sem ajuste sazonal no cron). Só isso já basta: 1x/dia não precisa da
+  mesma pontualidade que o negócio a negócio, o atraso documentado do
+  `schedule:` nativo do GitHub em horário de pico (minutos, não horas) não
+  importa aqui.
+- `.github/workflows/b3_trades.yml` — roda `python -m scripts.fetch_b3_trades`
+  (sem argumentos, captura só hoje). Precisa de verdade dos 15 em 15 min
+  -- mesma limitação de precisão do `schedule:` nativo que já motivou o
+  relay via cron-job.org pra notícias (17/07/2026), então o `schedule:`
+  aqui é só FALLBACK (1x/hora, 9h-18h BRT, seg-sex) e quem dispara de
+  verdade é o mesmo mecanismo de relay externo, ampliado:
+
+**`/api/cron-trigger` ganhou um parâmetro `job`** (`app/app.py`,
+`_CRON_JOBS`): `?job=news` (default, mantém compatibilidade com a
+configuração já existente no cron-job.org) aciona `scrape.yml`;
+`?job=b3_trades` aciona `b3_trades.yml`. `_dispatch_github_workflow()`
+foi generalizada pra aceitar qualquer arquivo de workflow (antes só
+disparava `config.GITHUB_WORKFLOW_FILE`). O job `b3_trades` tem uma
+checagem extra server-side (`_b3_market_aberto_agora()`, fuso
+`America/Sao_Paulo` fixo): fora de 9h-18h em dia útil, o endpoint devolve
+`{"dispatched": false, "reason": "..."}` sem acionar o GitHub Actions --
+proteção contra desperdiçar minutos do Actions/bater na B3 à toa se o
+cron externo disparar fora de hora (folga de 1h antes/depois do pregão
+oficial de 10h-16h pra cobrir negócios de Registro tardios, mesma lógica
+de `app/spreads/b3_trades.py`). `spreads_daily` NÃO passa por esse relay
+-- só `news` e `b3_trades` (`_CRON_JOBS`).
+
+**Segredos NOVOS que faltam no GitHub** (Settings → Secrets → Actions do
+repositório) -- `DATABASE_URL` já existia (usado por `scrape.yml`), esses
+dois são específicos do módulo Spreads e NUNCA foram configurados porque
+o módulo nunca rodou na nuvem antes:
+- `ANBIMA_CLIENT_ID`
+- `ANBIMA_CLIENT_SECRET`
+
+**Configuração nova no cron-job.org** (o mesmo serviço que já dispara
+`?job=news` a cada 5 min) -- duplicar aquele job, apontando pra
+`POST https://<url-do-vercel>/api/cron-trigger?job=b3_trades`, mesmo
+header `X-Cron-Secret`, intervalo de 15 min. Pode rodar 24/7 no
+cron-job.org sem se preocupar em restringir horário lá -- o guard de
+horário já vive no servidor (`_b3_market_aberto_agora`). `spreads_daily`
+NÃO precisa de nenhuma entrada nova no cron-job.org (roda só pelo
+`schedule:` nativo do workflow).
+
+**IMPORTANTE -- primeiro deploy do módulo inteiro, não só desta rodada**:
+nenhum arquivo do módulo Spreads (`app/spreads/`, `app/spreads_routes.py`,
+`templates/spreads.html`, `static/spreads.js`, os scripts de captura, os
+models `Debenture`/`DebentureSpread`/`NegocioB3`) tinha sido commitado no
+git ainda -- `git status` mostrou tudo como untracked/modified na hora de
+preparar esse deploy. Ou seja, isso não é "subir só as mudanças de hoje",
+é a primeira vez que o módulo inteiro vai pro Supabase/Vercel. Duas
+consequências:
+1. O banco Postgres do Supabase começa **sem nenhum spread/negócio
+   histórico** -- só o `DATABASE_URL` local (SQLite) tem os ~2 anos de
+   backfill que o Allan já rodou. **Decisão tomada (27/07/2026)**: o
+   Supabase NÃO recebe o backfill completo de 2 anos -- só os últimos 3
+   meses, pra começar mais leve (ver seção "Backfill de 3 meses pro site
+   online" mais abaixo pro comando exato).
+2. `data/` aparece inteiro como untracked no `git status` -- o
+   `.gitignore` cobre `data/*.db`/`.xlsx`/`debug_*`, mas tem outros
+   arquivos soltos ali (exports de mapeamento de rating, log) que NÃO
+   deveriam ir pro repositório. **Não dar `git add data/`** -- adicionar
+   só os arquivos/pastas específicos do deploy (ver checklist que mandei
+   no chat).
+
+**Por que eu (Claude) não rodei `git add`/`commit`/`push` sozinho**: essa
+pasta é montada via OneDrive, e o sandbox onde rodo já teve um incidente
+de `disk I/O error` tentando ESCREVER no `.db` real por esse mesmo mount
+(ver seção de negócio a negócio B3 acima) -- o `.git/index.lock` já
+aparece com "Operation not permitted" só de rodar `git status` por aqui,
+sinal de que o mount não sustenta o locking que o git precisa pra
+escrever com segurança. Risco real de deixar o repositório do Allan num
+estado ruim. Além disso, não tenho credencial pra dar push no GitHub dele
+mesmo que quisesse. Preparei todo o código; quem roda `git add`/`commit`/
+`push` é o Allan, do computador dele mesmo (comandos exatos mandados no
+chat).
+
+### Botão "Detalhes" — dado granular (Código+Data) + export CSV — 27/07/2026
+
+Allan pediu um jeito de ver o dado cru por trás dos gráficos da aba
+Visão Geral: "uma aba com o menor nível de dados que o gráfico mostra" --
+colunas Ticker, Taxa, % PU Par, PU, Data Referência, Indexador, Deb
+Incentivada, Spread, Estoque, Duration (o registro cru de
+`DebentureSpread`+`Debenture`, sem agregação nenhuma), com filtro de
+classe (IPCA+/CDI+/**Todos** -- novo, só faz sentido aqui já que é
+listagem e não gráfico) e export CSV/Excel dos dados filtrados.
+
+**Pedido original era um filtro de "data até"** (histórico inteiro até
+uma data, podendo passar de meio milhão de linhas -- o banco tem 569 mil
+`DebentureSpread` acumuladas). Allan simplificou no mesmo dia pra **um
+dia só** ("pode deixar apenas o filtro de data apenas para um dia").
+Isso elimina de vez a preocupação de escala: um dia tem no máximo ~1700
+linhas (total de debêntures cadastradas), então não precisa de
+paginação nem de streaming especial -- a mesma função serve a tela E o
+CSV.
+
+- **`queries.detalhes_rows(db, classe, data)`** -- `classe=""` (Todos,
+  sentinela que NÃO faz parte de `CLASSES`) devolve todas as classes,
+  inclusive "Outros"; `data=None` usa `detalhes_latest_date` (dia mais
+  recente disponível pra essa classe). Devolve `{rows, data}` -- o
+  `data` ecoado de volta é usado pelo front-end pra preencher o campo de
+  data automaticamente no primeiro carregamento (sem isso o Allan veria
+  o campo vazio mesmo com dado na tela).
+- **`/api/spreads/detalhes`** (JSON, pra tela) e **`/api/spreads/detalhes/export`**
+  (CSV via `StreamingResponse`, mesmo filtro) -- rotas separadas só pra
+  o export forçar download de arquivo (`Content-Disposition: attachment`)
+  em vez de JSON. CSV com BOM UTF-8 na frente (senão o Excel BR lê
+  acento errado) e `;` como separador (Excel BR abre certo sem passar
+  por "Dados > Texto em colunas" -- `,` exigiria isso).
+- Botão "Detalhes" na aba Visão Geral (`templates/spreads.html`), abre
+  um painel (`#detalhes-wrap`, mesmo padrão visual do `#drilldown-wrap`
+  já existente) com tabs de classe próprias, um `<input type="date">` e
+  o botão "Exportar CSV" (um `<a href>` direto pra rota de export --
+  download tratado pelo próprio navegador, sem passar dado nenhum por
+  JS/Blob).
+
+Testado contra cópia do banco real: classe=Todos sem data usa o dia mais
+recente (1277 linhas); classe=IPCA+/CDI+ filtra certo (subconjunto,
+indexador bate em 100% das linhas da página); classe inválida e data em
+formato errado devolvem 400; dia sem publicação nenhuma devolve
+`rows=[]` sem quebrar; export CSV bate exatamente com o JSON equivalente
+(mesma contagem), BOM e header corretos.
+
+### Base de spread: excluir papel não precificado + lista manual de exclusão (Administração) — 27/07/2026
+
+Allan notou (testando o botão "Detalhes", seção acima) que papel sem
+`taxa_indicativa` publicada pela Anbima no dia (não precificado)
+continuava aparecendo na base e entrando na conta de spread. Pediu dois
+ajustes:
+
+1. **Papel sem spread calculado nunca deve aparecer em nenhuma conta/base.**
+   A maioria das funções agregadas de `queries.py` já filtrava
+   `DebentureSpread.spread.isnot(None)` (`kpi_summary`,
+   `movement_distribution`, `emissor_series`, `emissor_taxas`) -- mas
+   `detalhes_rows`/`detalhes_latest_date` (o botão "Detalhes", literalmente
+   "sem agregação nenhuma" por design) NÃO filtravam, e `movers` só
+   descartava DEPOIS de já ter buscado (mesmo resultado final, mas
+   inconsistente). Agora todo mundo filtra `spread.isnot(None)` de forma
+   consistente, incluindo `_weighted_avg_duration` (duration média do KPI
+   também não deve contar papel sem spread).
+2. **"Na base quero apenas IPCA + Incentivadas, CDI+ Tradicionais e
+   todos (os dois)"** -- `classe=""` ("Todos", só existe no botão
+   "Detalhes") antes devolvia TODAS as classes cadastradas, inclusive
+   "Outros" (indexador fora do padrão IPCA+/CDI+, ex. PREFIXADO, DI
+   PERCENTUAL). Agora `classe=""` filtra explicitamente
+   `Debenture.classe.in_(CLASSES)` -- nunca inclui "Outros". "Outros"
+   nunca apareceu em gráfico nenhum do resto do dashboard (sempre exigiu
+   uma classe específica das duas válidas), só vazava no "Todos" do
+   Detalhes.
+
+**Lista de tickers excluídos manualmente** (segundo pedido, mesma
+mensagem): aba Administração ganhou um campo de texto (separado por
+`;`, ex. `AAAA11;BBBB22`) pra Allan tirar tickers específicos da conta de
+spread à mão -- útil pra papel com dado errático/ruim conhecido, sem
+precisar esperar a Anbima corrigir ou remover o cadastro inteiro.
+
+- Guardado em `AppSetting` (chave-valor genérico já usado pra outras
+  configs simples do admin, ex. `session_ttl_minutes`) sob a chave
+  `queries.TICKERS_EXCLUIDOS_SETTING_KEY = "spread_tickers_excluidos"`
+  -- não criou tabela nova, reaproveitou o padrão existente
+  (`auth.set_setting`/`db.get(AppSetting, key)`).
+- `queries.tickers_excluidos_spread(db)` lê e normaliza cada ticker com a
+  MESMA função que cruza código de ativo em `fetch.py`
+  (`_normalize_codigo` -- maiúscula, sem espaço/caractere invisível) pra
+  não depender do Allan digitar com a pontuação exata do cadastro.
+  Salvo cru no banco (só `.strip()` nas pontas), normalizado só na
+  leitura -- assim o campo do formulário sempre mostra de volta
+  exatamente o que o Allan digitou da última vez.
+- Aplicado em TODAS as funções que entram na "conta de spread":
+  `kpi_summary` (+ `_weighted_avg_duration`), `time_series` (modo
+  agregado), `movers`, `movement_distribution`, `emissor_series`,
+  `emissor_taxas` (afeta os dois lados, Anbima E B3, já que ambos
+  derivam da mesma lista `codigos`), `detalhes_rows`. NÃO aplicado em
+  `emissor_tickers`/`emissor_trades` (tabela de tickers/negociações da
+  aba Emissores -- listagem informativa/cadastro, não é "conta de
+  spread").
+- Rota nova `POST /admin/configuracoes/spread-tickers-excluidos`
+  (separada do form de `session_ttl_minutes` -- propósito diferente,
+  validação diferente).
+
+Testado contra cópia do banco real: papel sem spread (22 IPCA+ e 23
+CDI+ num mesmo dia) confirmado ausente de `detalhes_rows` E de
+`kpi_summary.n_ativos` (bate com contagem manual filtrada); classe=Todos
+nunca inclui as 96 debêntures cadastradas como "Outros"; excluir um
+ticker via `AppSetting` faz ele sumir de `detalhes_rows`, `kpi_summary`
+e `emissor_series` ao mesmo tempo, e limpar a exclusão restaura o total
+original; a rota POST grava o valor cru e `tickers_excluidos_spread`
+normaliza certo na leitura.
+
+### Bug real: CSV do Detalhes com número ilegível no Excel/Sheets BR — 27/07/2026
+
+Allan reportou números tipo "8.567.994.822,9" ao abrir o export CSV no
+Google Sheets. Causa: o CSV escrevia os floats no formato cru do Python
+(`str(8567.9948229...)`, ponto como decimal) -- mas Excel/Sheets
+configurado em pt-BR espera vírgula decimal e ponto como separador de
+milhar; ao importar um campo tipo "8567.99", a planilha tenta reencaixar
+no padrão BR e cola os dígitos como se o ponto fosse milhar, virando um
+número gigante sem sentido.
+
+**Correção**: `_fmt_num_br(v, casas)` em `app/spreads_routes.py` --
+arredonda pro número de casas fixo por coluna (Taxa/%PUPar: 2, PU: 4,
+Spread/Duration: 1/2, Estoque: 1) e formata no padrão BR (`f"{v:,.Nf}"`
+gera padrão US "1,234.5"; `.translate(str.maketrans(",.", ".,"))` troca
+vírgula↔ponto num mapeamento simultâneo -- NÃO dois `.replace()`
+sequenciais, que se pisariam). Aplicado nas 6 colunas numéricas do
+export (Ticker/Data/Indexador/Incentivada continuam texto puro).
+
+Testado contra cópia do banco real: 612 linhas do export, todas batendo
+com regex de formato BR válido (`-?\d{1,3}(\.\d{3})*,\d+`) -- inclusive
+número com milhar (`1.075,6808`) e negativo (`-38,4`).
+
+### Bug real: card "SPREAD MÉDIO" não era ponderado por Estoque — 27/07/2026
+
+Allan reparou que o card "SPREAD MÉDIO" da Visão Geral mostrava 46,3 bps
+pra "IPCA + Incentivadas" em 24/07/2026, e perguntou explicitamente se o
+cálculo seguia a metodologia certa: spread de cada ativo na data ×
+Estoque do ativo, soma tudo (`Σ spread·estoque`), soma todo o Estoque
+(`Σ estoque`), divide o primeiro pelo segundo. Conferindo o código,
+`kpi_summary` (`app/spreads/queries.py`) usava `AVG(spread)` -- média
+simples, cada ticker com peso igual -- enquanto o resto do dashboard
+inteiro (`_weighted_avg_duration`, `emissor_series`, `emissor_taxas`)
+já usava média ponderada por Estoque desde antes. Esse card era o único
+lugar que tinha ficado pra trás nessa convenção.
+
+**Correção**: nova função `_weighted_avg_spread(db, classe, data,
+excluidos)` em `app/spreads/queries.py`, estrutura idêntica a
+`_weighted_avg_duration` (mesmo fallback: se NENHUM ticker da
+classe/data tiver Estoque cruzado, cai pra média simples e sinaliza via
+flag). `kpi_summary` agora chama essa função tanto pra `media_hoje`
+quanto pra `media_anterior` (a variação também fica ponderada-vs-ponderada,
+não só o valor do dia). Resposta da API ganhou o campo
+`spread_medio_fallback` (mesmo padrão de `duration_ponderada_fallback`),
+e o card na Visão Geral (`templates/spreads.html` / `static/spreads.js`)
+ganhou uma tag "pond. estoque"/"sem estoque" ao lado do rótulo, igual à
+que já existia no card de Duration.
+
+Testado contra cópia do banco real: "IPCA + Incentivadas" em 24/07/2026
+(612 papéis, 610 com Estoque cruzado) -- média simples (bug) dava 46,3
+bps, batendo exatamente com o valor que o Allan reportou; média
+ponderada por Estoque (correta) dá **36,4 bps**. "CDI + Tradicionais" no
+mesmo dia rodou limpo (133,4 bps, sem fallback).
+
+### Campo de "data analisada" na Visão Geral — 27/07/2026
+
+Allan pediu um campo de data na Visão Geral pra escolher a data
+analisada (por padrão continua sempre olhando a última data disponível,
+como sempre foi). Ficou no espaço vazio da `filters-bar`, ao lado das
+abas de base de comparação.
+
+**Implementação**: `kpi_summary`, `movers` e `movement_distribution`
+(`app/spreads/queries.py`) ganharam parâmetro opcional
+`data_referencia: date | None`. Sem ele, "hoje" continua sendo
+`dates_desc[0]` (mais recente) -- comportamento de sempre, zero mudança
+pra quem não mexe no campo. Com ele, nova função `_resolve_hoje` acha a
+data disponível mais próxima **pra trás** da escolhida (ex.: Allan
+escolhe um sábado sem boletim -- cai no último dia útil anterior com
+dado, sem devolver vazio à toa); nova `_index_from` re-acha a posição de
+"hoje" na lista de datas com dado pra andar N posições a partir dali
+(antes disso, "hoje" era sempre índice 0 e dava pra usar
+`_date_n_back` direto). `movement_distribution` ganhou a mesma lógica
+pra ancorar os `n_snapshots` a partir da data escolhida em vez de sempre
+da mais recente.
+
+Rotas (`app/spreads_routes.py`) ganharam parâmetro `data` (AAAA-MM-DD,
+reaproveitando `_parse_data` que já existia pro botão Detalhes) em
+`/api/spreads/summary`, `/movers` e `/movement-distribution`. O gráfico
+"Evolução do Spread Médio" (linha de tendência) NÃO usa esse campo --
+continua mostrando o histórico inteiro de qualquer forma, não faz
+sentido "recortar" uma linha de tendência numa data.
+
+Front-end: `<input type="date" id="visao-data">` em `templates/spreads.html`,
+plugado em `static/spreads.js` (recarrega KPI/movers/distribuição no
+`change`, `max` travado na última data disponível quando o campo está
+vazio).
+
+Testado contra cópia do banco real: sem data (comportamento de sempre),
+com uma data exata que tem boletim, com uma data sem boletim (cai pro
+dia útil anterior), e com uma data anterior a todo o histórico (devolve
+vazio sem erro) -- todos batendo com o esperado, incluindo `movers` e
+`movement_distribution` ancorados na mesma data resolvida do KPI.
+
+**Dois bugs de borda pegos em revisão de código, corrigidos no mesmo
+dia**: (1) `movers()` -- quando `hoje` resolve pra data MAIS ANTIGA do
+histórico (ex. Allan escolhe justamente o primeiro dia capturado), o
+fallback `dates_desc[-1]` (usado quando não há histórico suficiente pra
+completar a base de comparação inteira) virava a PRÓPRIA `hoje` --
+comparando a data contra ela mesma, dando 0 bps de variação pra todo
+ativo silenciosamente errado em vez de "sem dado suficiente". Corrigido
+com um `!= hoje` antes de usar esse fallback. (2)
+`movement_distribution()` -- quando `data_referencia` é anterior a TODO
+o histórico, `_resolve_hoje` devolve `None` (igual em `kpi_summary`/
+`movers`), mas aqui caía silenciosamente pro índice 0 (mostrava a data
+mais RECENTE em vez de vazio) -- inconsistente com os outros dois
+cards/gráficos da mesma tela, que ficariam vazios enquanto esse mostrava
+"hoje". Corrigido pra devolver `[]` nesse caso, igual aos outros.
+Testado com a data mais antiga real do histórico (2024-07-23, 504 datas
+no banco) e com uma data 30 dias antes dela.
+
+### Backfill de 3 meses pro site online (em vez dos ~2 anos do local) — 27/07/2026
+
+Retomando a "decisão pendente" da seção de deploy acima (o Postgres do
+Supabase ainda não recebeu nenhum backfill de spreads): Allan decidiu
+que o site online **não** precisa do histórico completo de ~2 anos que
+ele já rodou localmente -- só os últimos 3 meses, pra começar mais leve.
+Isso não exigiu mudança de código -- `scripts/fetch_debenture_spreads.py`
+já aceita `--start`/`--end`, e todo o resto do dashboard (KPIs,
+comparações WoW/MoM/etc.) já lida bem com histórico curto (comparações
+que pedirem mais posições atrás do que existe, tipo SoS/YoY logo no
+início, simplesmente devolvem "sem dado suficiente pra comparar" em vez
+de erro).
+
+**Comando pro Allan rodar** (uma vez, apontando `DATABASE_URL` pro
+Postgres do Supabase em vez do SQLite local -- ver variável de ambiente
+no `.env`/configuração do Vercel):
+
+```
+python -m scripts.fetch_debenture_spreads --start 2026-04-27
+```
+
+(3 meses antes de 27/07/2026. Se rodar depois dessa data, ajustar
+`--start` pra 3 meses antes do dia em que rodar de verdade.) Sem
+`--end`, vai até o último dia útil já publicado na Anbima. Dali em
+diante, a captura diária de produção (`spreads_daily.yml`, 21h BRT)
+mantém a base sempre atualizada sozinha -- só esse backfill inicial
+precisa ser rodado à mão.
+
+### Login virou opcional: Notícias e Spreads públicas, aprovação manual — 27/07/2026
+
+Até aqui **todo** o dashboard exigia login -- `require_user` era
+dependência padrão de virtualmente toda rota, e sem sessão válida
+`app.py` redirecionava pra `/login` antes de mostrar qualquer coisa
+(inclusive a Visão Geral de notícias e a aba Spreads). Allan pediu pra
+inverter isso: "retire a página de login. Quero que ele fique como
+opção num menu superior direito pra fazer login apenas quem quiser.
+Esse login precisa ser aprovado por mim, não precisa de e-mail de
+confirmação. Esse login dá acesso a aba fontes e empresas e a aba
+administração."
+
+**Modelo novo**:
+- **Público, sem login**: `/` (Notícias) e `/spreads` (+ todas as APIs
+  que essas páginas usam: `/api/articles`, `/api/refresh-status`,
+  `/api/status`, e TODAS as rotas em `app/spreads_routes.py`).
+- **Continua exigindo login**: `/fontes` (Fontes & Empresas),
+  `/minha-conta`, e `/api/force-refresh` (ação que dispara o robô de
+  varredura no GitHub Actions -- deixada atrás de login de propósito,
+  pra não virar superfície de abuso público).
+- **Continua exigindo `role=admin`**: `/admin` e todas as ações dele
+  (inalterado).
+
+**Implementação**:
+- `app/app.py`: `dashboard`, `api_articles`, `api_refresh_status`,
+  `api_status` trocaram `user: User = Depends(require_user)` por
+  `user: User | None = Depends(current_user)` (não redireciona mais --
+  só devolve `user=None` quando não há sessão). O router de Spreads
+  (`register_spreads_routes`) agora é registrado com `current_user` em
+  vez de `require_user` -- os handlers de `spreads_routes.py` nunca
+  liam `user.alguma_coisa` (só usavam como gate), então aceitar `None`
+  ali é seguro (conferido antes de trocar).
+- `templates/base.html`: o `<header>` inteiro era condicionado a
+  `{% if user %}` (por isso login parecia "obrigatório" -- sem sessão,
+  nem o header aparecia). Agora o header sempre renderiza; só os links
+  de "Fontes & Empresas" (`{% if user %}`) e "Administração"
+  (`{% if user and user.role == 'admin' %}`) continuam condicionais.
+  Canto superior direito: usuário logado vê nome + "Sair" (como antes);
+  anônimo vê um link "Entrar" -- essa é a "opção no menu superior
+  direito" que o Allan pediu.
+- **Bug real pego no teste**: `templates/dashboard.html` também escondeu
+  o botão "Forçar atualização" pra anônimo (`{% if user %}`), mas
+  `static/app.js` acessava `refreshBtn.disabled`/`.textContent` direto
+  em ~10 pontos e registrava `refreshBtn.addEventListener(...)` sem
+  checar se o elemento existia -- pra visitante anônimo (`refreshBtn ===
+  null`) isso jogava `TypeError` já na inicialização da IIFE, travando a
+  página inteira (nem `loadArticles()` rodava). Corrigido com um helper
+  `setRefreshBtnState(disabled, text)` que não faz nada se o botão não
+  existe, e `if (refreshBtn)` nos dois pontos que checavam
+  `.disabled`/registravam o listener direto.
+- `app/auth.py::register_user`: sem confirmação por e-mail -- novo
+  cadastro nasce `active=False` (reaproveita o MESMO campo que o admin
+  já usava pra ativar/desativar usuário, ver `admin_toggle_active`) em
+  vez de `email_confirmed=False`. `email_confirmed` passou a ser sempre
+  `True` (campo mantido só por compatibilidade de schema, não bloqueia
+  mais nada). `authenticate()` barra login de conta com `active=False`
+  com mensagem "pendente de aprovação". Rota `/confirmar-email` e a
+  função `confirm_email` foram removidas (fluxo não existe mais);
+  `email_utils.send_confirmation_email` ficou sem uso (não removido,
+  só parou de ser chamado).
+- `admin_create_user` (rota `/admin/usuarios`, POST): como
+  `register_user` agora nasce `active=False` por padrão, um usuário
+  criado PELO PRÓPRIO Allan direto no painel precisa ser marcado
+  `active=True` explicitamente depois de chamar `register_user` -- senão
+  o próprio Allan teria que "aprovar" um usuário que ele acabou de criar
+  com as próprias mãos.
+- `templates/admin.html`: coluna "Status" simplificada (não depende mais
+  de `email_confirmed`) -- mostra "pendente de aprovação / inativo" ou
+  "ativo"; botão que era "Ativar" virou "Aprovar" (mesma ação/rota,
+  `/admin/usuarios/{id}/ativo`, só o rótulo mudou pra deixar claro que é
+  isso que aprova um cadastro novo).
+
+Testado (sem TestClient contra `app.app` direto -- mesmo cuidado de
+sempre com o lifespan/scheduler, ver seção de sandbox safety rules --
+registrando os MESMOS objetos de função de `app.app` num `FastAPI()`
+novo e vazio): `current_user`/`require_user`/`require_admin` isolados;
+`GET /` anônimo → 200 com "Entrar" no header e sem os links/botão
+restritos; `GET /fontes` e `GET /admin` anônimo → 303 pro `/login`
+(inalterado); `GET /spreads` e `GET /api/spreads/summary` anônimo → 200;
+`GET /` logado como admin → 200 com header completo (Fontes,
+Administração, nome, Sair, botão de refresh); cadastro novo nasce
+`active=False`, `authenticate()` barra até aprovar, funciona normal
+depois de `active=True`.
+
+### Bug real: mais lugares calculando spread com média simples em vez de ponderada — 27/07/2026
+
+Depois da correção do card "SPREAD MÉDIO" (mesmo dia, seção acima),
+Allan comparou o card contra o gráfico "Evolução do Spread Médio" e
+achou a MESMA inconsistência lá: "você não está calculando da maneira
+correta (igual o card). Garanta que em todas as visualizações de
+cálculo de spread ele está sendo calculado da maneira correta,
+inclusive nos cálculos de composição da base por nível de
+abertura/fechamento." Achou por comparação visual -- o gráfico e o card
+mostravam números diferentes pro mesmo dia, mesma classe.
+
+**`time_series()` (gráfico "Evolução do Spread Médio", `app/spreads/queries.py`)**
+-- usava `AVG(spread)` (SQL puro) igual ao bug original do card, só que
+pra CADA dia do histórico inteiro, não só o mais recente. Reescrito pra
+agrupar em Python (`itertools.groupby` sobre as linhas cruas ordenadas
+por data) e aplicar a mesma ponderação por Estoque com fallback pra
+média simples (padrão `_weighted_avg_spread`) -- feito em Python (não
+SQL) porque já precisávamos das linhas cruas mesmo assim pra calcular a
+**mediana** (pedido no mesmo request: "Aqui você pode inserir a mediana
+dos spreads também" -- `statistics.median`, sem peso, é o valor "típico"
+por definição, não faz sentido ponderar mediana por Estoque). Novo
+campo `spread_mediano` por data; `static/spreads.js::loadSeriesChart()`
+ganhou uma segunda linha tracejada cinza no mesmo gráfico. Testado: o
+último ponto da série bate exatamente com `kpi_summary` (36,4 bps,
+24/07/2026), contra 46,3 bps da média simples antiga -- e a mediana
+revelou algo notável: **-3,3 bps** no mesmo dia, bem abaixo da média
+ponderada de 36,4 -- ou seja, a maioria dos papéis individuais negocia
+com spread bem menor que a média, que é puxada pra cima por poucos
+papéis de Estoque grande e spread alto. Vale mencionar pro Allan.
+
+**`movement_distribution()`** ("Evolução da Variação de Spreads (% da
+base de ativos)") -- não calculava uma MÉDIA de spread (classifica cada
+ticker num bucket de variação: `< -10bps`, `-10 a 0`, `0 a 10`, `>
+10bps`), mas o jeito de agregar tinha o mesmo problema de fundo: cada
+bucket somava CONTAGEM de tickers (1 ticker = 1 voto), não Estoque --
+ou seja, um papel gigante que abriu 50bps pesava exatamente igual a um
+papel pequeno que fechou 5bps. Reescrito pra pesar cada ticker pelo seu
+Estoque na data "hoje" do snapshot (exclui da ponderação quem não tem
+Estoque cruzado naquele dia, igual ao resto do dashboard; cai pra
+contagem simples só se NENHUM ticker do snapshot tiver Estoque). `%` de
+cada faixa agora representa "% do Estoque da base que abriu/fechou X
+bps", não "% dos tickers". `n_ativos` continua sendo a contagem de
+tickers (não mudou, só a base do `%`). Testado: percentuais de cada
+snapshot somam ~100% e os dois snapshots testados batem com a
+reconstrução manual ponderada.
+
+### Card "SPREAD NEGOCIADO (B3)": janela de 24h trocada por 7 dias — 27/07/2026
+
+Allan pediu: "No spreads negociado você poderia colocar a média da
+última semana, e não apenas 24h." Campo `b3_spread_24h` de
+`emissor_taxas` virou `b3_spread_7d` (`app/spreads/queries.py`) --
+mesma lógica de ponderação por VOLUME dos negócios individuais, só
+trocando a janela móvel de `timedelta(hours=24)` pra
+`timedelta(days=7)`. `static/spreads.js` atualizado pro novo nome de
+campo e rótulo "Média 7d" (era "Média 24h"). Justificativa: numa janela
+de 24h a maioria dos emissores não tem negócio nenhum (mercado
+secundário de debênture não é líquido todo dia pra todo papel), então o
+número saía vazio (`—`) quase sempre; 7 dias dá amostra bem maior sem
+perder o sentido de "recente" (o card principal `b3_spread`, sem
+janela, já cobre "o dia mais recente que teve negócio" pra isso).
+
+### Tabela de negócio a negócio (B3): taxa com 4 casas decimais — 27/07/2026
+
+Pedido direto do Allan. `static/spreads.js::loadEmissorNegociacoes()` --
+coluna "Taxa" da tabela "Últimas negociações (B3)" (aba Emissores)
+mudou de `maximumFractionDigits: 2` pra
+`minimumFractionDigits: 4, maximumFractionDigits: 4` (fixa em 4 casas,
+não só um teto).
+
+### Mediana revertida do gráfico "Evolução do Spread Médio" — 27/07/2026
+
+A mediana foi adicionada no mesmo dia a pedido do próprio Allan (ver
+seção acima) e removida no dia seguinte -- "não gostei". Revertido só a
+parte da mediana: `time_series()` (`app/spreads/queries.py`) voltou a
+devolver só `spread_medio`/`n_ativos` por data (tirado `spread_mediano`
+e o import de `statistics`, agora sem uso), mantendo a correção de
+ponderação por Estoque (essa sim ficou -- era um bug real, não uma
+preferência). `static/spreads.js::loadSeriesChart()` voltou a ter um
+único dataset no gráfico.
+
+### Ranking B3 vs. Anbima por emissor — tela inicial da aba Emissores — 27/07/2026
+
+Allan reparou que a tela da aba Emissores, antes de selecionar algum
+emissor, só mostrava uma mensagem vazia ("Busque e selecione..."). Pediu
+uma tabela ali: "Emissor, Taxa Anbima na data selecionada e Taxa B3
+(média ponderada da última semana, com base na data Anbima) e uma
+coluna de variação. De um lado o top 15 diferenças positivas e do outro
+o top 15 negativas."
+
+**Nova função `emissor_ranking_diferencas(db, classe, top_n=15)`**
+(`app/spreads/queries.py`) -- roda pra TODOS os emissores da classe de
+uma vez (não um por vez como `emissor_taxas`, que existia só pra
+emissor(es) já selecionado(s)):
+- Lado Anbima: última linha com spread de cada ticker (subquery de
+  `MAX(data)` agrupado por código + join), ponderado por Estoque por
+  emissor -- mesma metodologia de sempre.
+- Lado B3: **MUDANÇA DE DESENHO IMPORTANTE** -- a janela de 7 dias não é
+  ancorada em "agora" (como o `b3_spread_7d` de `emissor_taxas`, que faz
+  sentido pra um emissor específico sendo olhado ao vivo), e sim na
+  PRÓPRIA data do boletim Anbima de cada emissor ("com base na data
+  Anbima", pedido explícito do Allan) -- emissores com boletim publicado
+  em dias diferentes (raro, mas acontece) cada um usa sua própria janela
+  `[anbima_data - 7d, anbima_data]`. Busca os negócios em MASSA (uma
+  query só, pra todos os tickers da classe, numa janela ampla de 60 dias
+  antes da data mais recente entre os emissores) e filtra fino por
+  emissor em Python -- evita uma query por emissor (poderia ser
+  centenas).
+- `variacao_bps = b3_spread - anbima_spread` -- mesmo sinal de
+  "aberturas"/"fechamentos" do resto do dashboard (positivo = B3
+  negociando mais largo que a Anbima).
+- Só entram no ranking emissores com AMBOS os lados calculáveis (Anbima
+  E pelo menos 1 negócio B3 na janela) -- a maioria dos emissores não
+  tem negócio B3 recente, então o ranking cobre só uma fração da base
+  (esperado, não bug).
+
+Nova rota `GET /api/spreads/emissor/ranking-diferencas?classe=...&top=15`.
+Front-end: duas tabelas lado a lado (`movers-grid`, mesmo layout de
+Maiores Aberturas/Fechamentos da Visão Geral, cores reaproveitadas
+`cell-abertura`/`cell-fechamento`) em `templates/spreads.html`, dentro
+do bloco que já ficava visível só quando nenhum emissor está
+selecionado (`#emissor-vazio`/`#emissor-ranking-wrap` mostrados juntos,
+escondidos junto com `#emissor-conteudo` quando o Allan seleciona algum
+emissor). Recarrega ao abrir a aba Emissores e ao trocar a classe
+(IPCA+/CDI+) -- só quando não há emissor selecionado.
+
+Testado contra cópia do banco real: ordenação (aberturas decrescente,
+fechamentos crescente), maior abertura ≥ maior fechamento, reconstrução
+manual completa de um emissor do resultado (CSN, +552,7 bps -- Anbima
+1.231,2 bps vs. B3 1.784,0 bps) conferindo os dois lados E a ancoragem
+da janela B3 na data do boletim Anbima (não em "hoje"), e a rota
+end-to-end via TestClient.
+
+### Ranking B3 vs. Anbima: data de referência + renomeação — 27/07/2026 (2ª rodada)
+
+No dia seguinte à entrega do ranking acima, Allan pediu dois ajustes
+finos:
+
+1. **"Faltou a opção de eu poder alterar a data de referência, essa data
+   precisa ficar explícita em algum lugar."** `emissor_ranking_diferencas`
+   ganhou parâmetro opcional `data_referencia: date | None` -- quando
+   informado, o subquery de `MAX(data)` por ticker (lado Anbima) passa a
+   filtrar `data <= data_referencia`, então cada ticker resolve pra
+   última publicação ATÉ aquela data em vez da mais recente de verdade
+   (mesma ideia de "hoje" da Visão Geral, `_resolve_hoje`, só que
+   aplicada por ticker -- esse ranking já tolerava emissores com datas
+   Anbima ligeiramente diferentes entre si mesmo antes desse parâmetro,
+   já que cada um usa o `MAX(data)` da sua PRÓPRIA série). O resultado
+   ganhou um campo `data_referencia` de nível superior (a MAIOR data
+   Anbima entre os emissores do ranking) -- é isso que fica "explícito
+   em algum lugar": `templates/spreads.html` ganhou um campo de data
+   (`#emissor-ranking-data`, mesmo padrão do "Data analisada" da Visão
+   Geral) e um rótulo "Dados até: X" (`#emissor-ranking-dados-ate`) acima
+   das duas tabelas, dentro do mesmo bloco que só aparece quando nenhum
+   emissor está selecionado. Rota `/api/spreads/emissor/ranking-diferencas`
+   ganhou query param `data` (reaproveita `_parse_data`).
+2. **Renomeação**: "Maiores Aberturas — B3 vs. Anbima" virou "Maiores
+   Prêmios sobre a Anbima"; "Maiores Fechamentos — B3 vs. Anbima" virou
+   "Maiores Descontos sobre a Anbima" -- só o texto exibido em
+   `templates/spreads.html` (`<h2>`), os IDs de tabela/campos internos
+   (`aberturas`/`fechamentos`, classes CSS `cell-abertura`/
+   `cell-fechamento`) continuam com o nome antigo por consistência com o
+   resto do dashboard (mesma convenção de sinal em todo lugar).
+
+Testado contra cópia do banco real: sem data (comportamento de sempre),
+com uma data ~1 semana atrás (todo `anbima_data` das linhas devolvidas
+≤ a data escolhida, `data_referencia` do resultado bate com a data
+escolhida), com uma data anterior a todo o histórico (vazio, sem erro),
+e a rota end-to-end (incluindo `data` inválida → 400).
+
+### Bug real: tabela de ranking sumia na aba Emissores antes de filtrar — 27/07/2026
+
+Allan reportou (screenshot): "cadê a tabela daqui enquanto eu ainda não
+filtrei? sumiu". Causa: `#emissor-ranking-wrap` (o bloco com as duas
+tabelas de ranking) tinha `style="display:none;"` como padrão no HTML,
+e o único trecho de JS que já a deixava visível
+(`atualizarPainelEmissor()`) só roda quando um chip de emissor é
+adicionado/removido — nunca no carregamento inicial da aba. Corrigido
+removendo o `display:none` do HTML (fica visível desde o carregamento,
+igual `#emissor-vazio` já era); `atualizarPainelEmissor()` continua
+responsável só por ESCONDER o bloco quando um emissor é selecionado.
+
+### Bug real: tabela de negociações B3 não filtrava por classe — 27/07/2026
+
+Allan reparou olhando a BRK Ambiental: o card "SPREAD NEGOCIADO (B3)"
+mostrava "27/07/2026 · 9 negócio(s)", mas a tabela "Últimas negociações
+(B3)" logo abaixo mostrava bem mais linhas que 9. Causa raiz:
+`emissor_trades` (`app/spreads/queries.py`) buscava os tickers do
+emissor só por `Debenture.nome.in_(nomes_emissor)`, SEM filtrar por
+`classe` -- enquanto `emissor_taxas` (que alimenta o card, e já
+filtrava por classe desde sempre) só contava negócios dos tickers da
+classe selecionada. A BRK Ambiental tem 6 séries: 1 IPCA + Incentivada
+(BRKP28) e 5 CDI + Tradicionais (BRKPA0-4) -- com "IPCA + Incentivadas"
+selecionado, o card contava só BRKP28 (9 negócios), mas a tabela
+misturava negócios dos 6 tickers juntos, de QUALQUER classe.
+
+**Correção**: `emissor_trades` ganhou parâmetro obrigatório `classe`,
+filtrando os tickers do emissor igual a todo o resto da aba. Rota
+`/api/spreads/emissor/negociacoes` ganhou query param `classe`
+(reaproveita `_validar_classe`). `static/spreads.js` passa
+`currentEmissorClasse` na chamada e recarrega a tabela ao trocar de
+classe (antes só o card/gráfico recarregavam).
+
+Testado contra cópia do banco real com a própria BRK Ambiental: com
+"IPCA + Incentivadas", card e tabela agora batem exatamente (9 e 9);
+com "CDI + Tradicionais", card mostra 9 (só do dia mais recente) e a
+tabela mostra 17 (últimos negócios de vários dias, `limit=100`) --
+diferença esperada (escopos diferentes por desenho: card é "só o dia
+mais recente", tabela é "últimos N negócios, vários dias"), o que
+importa é que agora nenhuma linha da tabela pertence a um ticker de
+fora da classe selecionada -- conferido nos dois casos.
+
+### Tabela de negociações B3: coluna Indexador no lugar de Quantidade — 27/07/2026
+
+Pedido direto do Allan. `emissor_trades` passou a devolver `indexador`
+por linha (vem do cadastro `Debenture`, não do negócio em si -- a B3
+não manda indexador negócio a negócio). `templates/spreads.html`
+(cabeçalho da tabela) e `static/spreads.js::loadEmissorNegociacoes()`
+trocaram a coluna "Quantidade" por "Indexador". Campo `quantidade`
+continua sendo devolvido pela API (não removido, só parou de aparecer
+na tabela) -- sem uso conhecido em outro lugar, mas inofensivo manter.
+
+### Intervalo explícito nos rótulos "Média 3M" / "Média 7d" — 27/07/2026
+
+Allan pediu: "sempre que colocar algum indicativo como 'Média 7d:'
+coloque (data-data) explícito." `emissor_taxas` ganhou 4 campos novos:
+`anbima_spread_3m_inicio`/`_fim` (as datas real e mais antiga/mais nova
+das 63 posições usadas -- não é janela de calendário fixa, já que o
+boletim Anbima só publica em dia útil) e `b3_spread_7d_inicio`/`_fim`
+(aqui sim janela de calendário nominal, `hoje - 7 dias` até `hoje`,
+já que negócio B3 não é diário garantido pra nenhum papel).
+`static/spreads.js` ganhou helper `fmtIntervalo(inicio, fim)` (formato
+curto `dd/mm-dd/mm`, sem ano) usado nos dois rótulos, ex.: "Média 3M:
+270,6 bps (27/04-24/07)" e "Média 7d: 268,5 bps (20/07-27/07)".
+
+### Bug real + redesenho: curva NTN-B de referência dos negócios B3 — 27/07/2026 (2ª rodada)
+
+**Bug reportado pelo Allan** (screenshot, BRK AMBIENTAL): o card "SPREAD
+NEGOCIADO (B3)" mostrava "Negócios sem spread calculado" mesmo com a
+tabela de negociações trazendo 9 negócios do BRKP28 com taxa válida.
+Allan chutou "não aparece o IPCA, é porque os negócios são não
+incentivados?" — não era isso (BRKP28 é `incentivada='S'`, confirmado
+direto no banco).
+
+**Causa raiz**: `compute_trade_spreads` usava a curva de NTN-B do
+**próprio dia do negócio** (`_get_ntnb_curve(db, t["data_negocio"])`) pra
+achar a taxa de referência. O boletim da Anbima de hoje só fica
+pronto/cacheado tarde da noite (~18-21h BRT, quando o job diário roda) —
+os 9 negócios do BRKP28 foram capturados entre 13h e 17h, TODOS antes de
+`ntnb_referencia` de 27/07 existir (`captured_at` real: 21:42 UTC ≈
+18:42 BRT). Como o spread só é calculado UMA VEZ, na hora de gravar (não
+recalcula sozinho depois), esses negócios ficavam com `spread=NULL` pra
+sempre — só um backfill manual (`scripts/backfill_b3_trade_spreads.py`)
+resolvia, e só depois da curva ter sido cacheada.
+
+**Pedido do Allan pro fix de verdade** (não só "roda o backfill mais
+vezes"): *"A curva de referência da NTN-B tem que ser a data do dado
+Anbima. O padrão sempre vai ser d-1, mas deixe uma caixa que eu possa
+alterar essa data."*
+
+**Fix implementado** — redesenho arquitetural em `app/spreads/b3_trades.py`:
+- `_resolve_ntnb_referencia_date(db, trade_date)`: a referência de
+  QUALQUER negócio (de hoje ou de backfill histórico) passa a ser o
+  **último boletim Anbima JÁ PUBLICADO antes desse negócio**
+  (`MAX(DebentureSpread.data) < trade_date`), nunca a curva do próprio
+  dia — mesmo que por acaso ela já esteja cacheada (consistência
+  metodológica, não só "usa o que tiver"). Na prática isso é quase
+  sempre `trade_date - 1 dia útil`, mas calculado de verdade contra o
+  histórico (não um "menos 1 dia corrido" fixo, que erraria em fim de
+  semana/feriado).
+- `compute_trade_spreads` reescrito: antes buscava uma curva por DATA DE
+  NEGÓCIO distinta; agora resolve a data de referência de cada data de
+  negócio primeiro, depois busca uma curva por DATA DE REFERÊNCIA
+  distinta (várias datas de negócio podem cair no mesmo boletim de
+  referência, ex. trades de dias seguidos sem boletim novo no meio).
+
+**Caixa de override removida na hora**: a primeira versão veio com uma
+caixa em Administração pra travar a data manualmente (pedido original do
+Allan incluía isso). No mesmo dia, revisando o resultado, ele pediu pra
+tirar — já existe uma data selecionável na aba Emissores e não precisa
+de mais um controle noutro lugar. Revertido: `admin.html` sem o form
+extra, `app.py` sem a rota `/admin/configuracoes/ntnb-referencia-override`,
+`b3_trades.py` sem `AppSetting`/`get_ntnb_referencia_override` — a
+resolução é sempre automática.
+
+**Efeito colateral bom, não só o bug reportado**: como a referência
+agora é sempre de um dia ANTERIOR (que o job diário já cacheou de
+véspera), qualquer negócio capturado ao longo do pregão de hoje já sai
+com spread calculado na hora da gravação — o bug de "curva do próprio
+dia não pronta ainda" desaparece por construção, não fica só mais raro.
+Os valores de spread também mudam de verdade (não é só "deixou de dar
+None"): antes, um backfill tardio calculava contra a curva de HOJE; agora
+sempre contra a curva do ÚLTIMO BOLETIM PUBLICADO — números diferentes
+por desenho, é a mudança que o Allan pediu.
+
+Testado contra cópia do banco real: `_resolve_ntnb_referencia_date`
+resolveu 24/07 pra negócio de 27/07 (último boletim na base naquele
+momento — 27/07 ainda não tinha sido publicado), nunca o próprio dia;
+rodando `scripts/backfill_b3_trade_spreads.py` de ponta a ponta contra a
+cópia, os 9 negócios reais do BRKP28 (caso do Allan) passaram a calcular
+spread pra TODOS (antes: nenhum); CDI+ Tradicionais confirmado
+inalterado (`taxa*100`, não depende de NTN-B).
+
+**Pendência real no banco do Allan**: o código só vale pra negócios
+NOVOS captados a partir de agora. Os já gravados (ex. os 9 do BRKP28 de
+27/07, que ainda aparecem "sem spread calculado" no card, embora a
+tabela mostre os negócios com taxa) continuam com `spread=NULL` até ele
+rodar `python -m scripts.backfill_b3_trade_spreads` no ambiente real
+(local ou nuvem) — sem flag nenhuma, idempotente, só recalcula o que
+ainda estiver `NULL`.
+
+### Deploy do módulo Spreads pro site online + verificação de atualização — 27/07/2026
+
+Todo o módulo Spreads (Visão Geral, Emissores, negócio a negócio B3, e
+todas as correções desta rodada) tinha sido construído rodando só local
+-- nunca tinha ido pro Supabase/Vercel/GitHub Actions de verdade
+(`git status` mostrava o módulo inteiro como untracked, mesmo dias
+depois de "pronto"). Allan pediu pra subir pra valer, com a mesma
+cadência já decidida antes: spreads 1x/dia depois das 20h, negócio a
+negócio B3 a cada 15 min -- **mais um pedido novo**: "podemos programar
+uma verificação pra ver se foi atualizado mesmo" (spreads).
+
+**Checklist completo movido pro `DEPLOY.md`** (Parte 6, nova) -- mesmo
+padrão das Partes 1-5 já existentes (linguagem pro Allan seguir sozinho,
+passo a passo). Cobre: comandos exatos de `git add`/`commit`/`push`
+(lista explícita de arquivo, NUNCA `git add -A`/`git add data/` -- a
+pasta `data/` tem o `.db` local e exports de outro projeto, ratings, que
+não devem subir pro repositório público), os 2 segredos novos no GitHub
+(`ANBIMA_CLIENT_ID`/`ANBIMA_CLIENT_SECRET` -- só no GitHub Actions, o
+Vercel não precisa deles), o segundo cronjob no cron-job.org
+(`?job=b3_trades`, reaproveitando o `CRON_SECRET` que já existe), e o
+comando de backfill de 3 meses (já tinha sido decidido, só não tinha
+sido executado ainda porque o módulo nunca tinha sido commitado).
+
+**Peça nova pro pedido de verificação**: `scripts/verify_spreads_updated.py`
++ `.github/workflows/spreads_verify.yml`. Por que isso não é redundante
+com o próprio `fetch_debenture_spreads.py` "rodar sem erro": o script
+pode terminar com sucesso (exit 0) mesmo sem capturar nada de novo -- ex.
+se a Anbima ainda não tinha publicado o boletim no momento exato em que
+o cron rodou (histórico já documentado de publicar tarde, ~18-21h BRT --
+mesmo motivo do bug da curva NTN-B desta rodada) -- isso passaria batido
+sem ninguém notar. `verify_spreads_updated.py` pergunta pra própria
+Anbima (`detect_latest_published_date`, MESMA chamada que o fetch já usa)
+qual é o dia mais recente publicado e compara com `MAX(DebentureSpread.data)`
+no banco; se o banco ficou pra trás (ou está vazio), sai com código 1 --
+o workflow então FALHA de propósito, e o GitHub manda e-mail de
+notificação de falha automaticamente (comportamento padrão dele, não
+precisou de nenhuma integração nova tipo Slack/SMTP).
+
+Agendado **1h depois** da captura (22h BRT / 01h UTC, não junto com o
+`spreads_daily` de 21h) de propósito -- dá uma folga pro caso da Anbima
+publicar um pouco atrasada, evitando alarme falso todo dia em que a
+publicação atrasar só alguns minutos.
+
+Testado localmente (mock da chamada pra Anbima, já que o sandbox não
+alcança o domínio dela) contra cópia do banco real, cobrindo os 3
+cenários: banco atualizado (exit 0), banco desatualizado (exit 1, com
+mensagem indicando as duas datas), banco vazio (exit 1). **Nunca rodou
+de ponta a ponta contra a Anbima de verdade nem dentro do GitHub Actions**
+-- mesma ressalva de sempre pra código novo que bate em fonte externa
+bloqueada pro sandbox; Allan deve rodar "Run workflow" manualmente uma
+vez depois do deploy pra confirmar.
 
 ## Regras a manter
 
@@ -694,3 +1770,531 @@ de sempre, é preciso rodar `python -m scripts.seed` (ou deixar o próprio
 `sync_known_sources` roda a cada execução) pra essas 3 fontes novas
 aparecerem em "Fontes & Empresas" — elas entram **habilitadas** por
 padrão, então vão rodar já na primeira varredura depois do deploy.
+
+## Spreads de debêntures — "Hub Credit Research" (23/07/2026)
+
+Segundo módulo do app, além do monitoramento de notícias — pedido do Allan
+pra acompanhar o **spread de mercado secundário de debêntures locais Brasil**
+(Anbima + debentures.com.br), com **histórico** (diferente do script Excel
+original dele, que sobrescrevia um arquivo a cada rodada) e um dashboard
+próprio em `/spreads`. É o começo do app virar um "Hub Credit Research" de
+verdade (por isso a marca no topo virou "Hub Credit Research" — ver
+`templates/base.html` — com "Notícias" e "Spreads" como as duas primeiras
+abas; mais módulos devem vir depois).
+
+### Origem e adaptação
+
+Allan forneceu um script Python que ele já usa/roda localmente (colado no
+chat em 23/07/2026, depois substituído por uma versão mais nova que ele
+subiu como `spreads.docx` no mesmo dia — essa segunda versão foi a usada
+como referência final). O script busca 4 fontes pra uma data (ou range de
+datas):
+
+1. **Boletim de indicativos da Anbima** (`anbima.com.br/informacoes/
+   merc-sec-debentures/arqs/d{aamesdd}.xls`) — abas `DI_SPREAD` e
+   `IPCA_SPREAD`, uma linha por Código com Taxa Indicativa, PU, Duration,
+   % Pu Par, Referência NTN-B.
+2. **Curva de NTN-B da Anbima** (`anbima.com.br/informacoes/merc-sec/arqs/
+   m{aamesdd}.xls`, aba `NTN-B`) — usada como referência pro cálculo do
+   spread de papéis IPCA+.
+3. **Estoque por ativo** (`debentures.com.br/exploreosnd/consultaadados/
+   estoque/estoqueporativo_r1.asp`) — tabela HTML antiga (ASP), estoque em
+   R$ mil por Código.
+4. **Características das emissões** (`debentures.com.br/exploreosnd/
+   consultaadados/emissoesdedebentures/caracteristicas_e.asp`) — TSV com
+   CNPJ e se a debênture é incentivada (Lei 12.431). Não varia por data —
+   buscado uma vez por rodada, não uma vez por dia do backfill.
+
+Fórmula do Spread (bps), preservada fielmente do script original:
+- Papel com "Referência NTN-B" preenchida (qualquer indexador): `(1+taxa/100)/(1+taxa_da_ntnb_referenciada/100) - 1`, ×10000.
+- CDI+ sem referência: o próprio valor da Taxa Indicativa (já é spread sobre o DI).
+- IPCA+ sem referência: `(1+taxa/100)/(1+taxa_ntnb_de_vertice_mais_curto/100) - 1`, ×10000.
+
+Estoque é dividido por 1000 (R$ mil → R$ milhões) e Duration por 252 (dias
+úteis → anos) — mesmo ajuste do script original.
+
+### Pivô pra API oficial da Anbima (24/07/2026)
+
+Allan rodou o backfill de 2 anos localmente e descobriu que o boletim
+`.xls` público da Anbima (fonte 1 e 2 acima) **só fica disponível pros
+últimos ~5 dias úteis** — inviável pro histórico de 2 anos pedido. Ele já
+tinha (ou já tinha se cadastrado pra ter) acesso à **API oficial da Anbima**
+(`developers.anbima.com.br`, OAuth2 client_credentials — credenciais em
+`ANBIMA_CLIENT_ID`/`ANBIMA_CLIENT_SECRET` no `.env`, cadastro em
+`admin-developers.anbima.com.br/api-portal/user`).
+
+Como o sandbox onde o Claude escreve código não alcança domínios da Anbima
+(proxy allowlist bloqueia até `google.com`), a resposta real da API foi
+validada por fora, com o Allan rodando `scripts/anbima_api_probe.py`
+(script de diagnóstico, não faz parte do pipeline) e colando o JSON de
+volta no chat — só depois disso o `fetch.py` foi reescrito, pra não
+escrever um parser "no escuro" contra um formato só documentado em texto.
+Confirmado: `data=2024-07-23` devolveu dado no mesmo formato da data mais
+recente, tanto pra debêntures (940 linhas) quanto pra NTN-B (49 títulos,
+incluindo NTN-B) — ~2 anos de profundidade histórica confirmados.
+
+Dois endpoints substituem as fontes 1 e 2 (fontes 3 e 4 — estoque e
+características, ambas debentures.com.br — continuam iguais, ver
+`app/spreads/fetch.py`):
+- `GET /feed/precos-indices/v1/debentures/mercado-secundario?data=AAAA-MM-DD`
+  — substitui o boletim `.xls`. Uma linha por debênture, já com `grupo`
+  ("DI SPREAD"/"IPCA SPREAD"), `taxa_indicativa`, `pu`, `percent_pu_par`,
+  `duration` (d.u.), `referencia_ntnb` (quando aplicável) e `emissor`.
+- `GET /feed/precos-indices/v1/titulos-publicos/mercado-secundario-TPF?data=AAAA-MM-DD`
+  — substitui a aba "NTN-B" do `.xls` de curva. Traz **taxa discreta por
+  vencimento** pra vários tipos de título (`tipo_titulo`: `"NTN-B"`, `"LTN"`,
+  `"LFT"`, `"NTN-F"` — filtramos só `"NTN-B"`, confirmado via probe). Existe
+  também um endpoint `/titulos-publicos/curvas-juros` que devolve parâmetros
+  de curva paramétrica (Nelson-Siegel-Svensson, `b1..b4`/`l1`/`l2`) — **não
+  usado**, porque o endpoint acima já dá a taxa pronta por vencimento (igual
+  à aba antiga), evitando reimplementar a fórmula da curva à toa.
+
+Cliente da API isolado em `app/spreads/anbima_api.py` (OAuth2 com cache de
+token em memória de processo, renovação automática em 401). `fetch.py`
+chama esse módulo em vez de baixar/parsear `.xls`.
+
+**Correção de unidade encontrada nessa reescrita**: o script original do
+Allan deixava o Spread de papéis CDI+ em pontos percentuais (ex.: `1.6`),
+sem multiplicar por 100 — mas a coluna `DebentureSpread.spread` já é
+documentada como "em bps" e o Allan pediu explicitamente que o spread
+sempre apareça em bps. Sem a correção, CDI+ e IPCA+ ficariam em unidades
+diferentes na mesma coluna (~160 vs ~16000) — corrigido em
+`fetch_spreads()` (`spread = taxa_indicativa * 100` pro caso CDI+).
+
+Efeito colateral: o campo `nome` da debênture agora vem do `emissor` da API
+(nome do emissor, com marcadores de rodapé tipo `(*)`/`(**)`/`(#)` removidos
+via regex) em vez de um "Nome" de papel mais curto que vinha do `.xls`
+antigo — é o único dado equivalente disponível na API oficial.
+
+`fetch_ntnb_rates()` foi removida (fundida em `fetch_spreads()`, já que os
+dois endpoints novos são buscados juntos). `detect_latest_published_date()`
+ficou mais simples: a API devolve a data mais recente direto quando chamada
+sem o parâmetro `data`, então não precisa mais tentar dia por dia até achar
+publicação.
+
+**Ainda não confirmado**: se `fetch_estoque()`/`fetch_caracs()`
+(debentures.com.br, fontes 3 e 4) têm a mesma limitação de retenção do
+boletim antigo da Anbima pra datas históricas — Allan só confirmou o
+problema no boletim `.xls`, não testou essas duas. Já degrada
+graciosamente (dia sem estoque cruzado não é descartado, só fica com
+`Estoque=None` — ver `fetch_spreads()`), então não bloqueia o backfill
+mesmo se also tiverem retenção curta.
+
+### Arquitetura no projeto
+
+- `app/spreads/anbima_api.py` — cliente da API oficial da Anbima (OAuth2
+  client_credentials, cache de token em memória de processo). Ver "Pivô pra
+  API oficial da Anbima" acima.
+- `app/spreads/fetch.py` — rede + parsing (`fetch_estoque`, `fetch_spreads`,
+  `fetch_caracs`), devolvendo dataclasses Python (`SpreadRow`,
+  `Caracteristicas`) em vez de escrever Excel direto — é isso que permite
+  manter histórico. Também tem `compute_classe()` (ver abaixo) e
+  `detect_latest_published_date()` (acha a data mais recente já publicada
+  chamando a API sem o parâmetro `data`).
+- `app/spreads/persist.py` — upsert no banco (`persist_day`,
+  `persist_caracteristicas`). Idempotente: rodar de novo pro mesmo dia só
+  atualiza aquele dia (chave única `codigo+data`), nunca duplica nem apaga
+  dias já gravados.
+- `app/spreads/queries.py` — todas as agregações que o dashboard consome
+  (série histórica, KPIs, maiores variações/scatter, distribuição de
+  variação %). **Testado com dados sintéticos** (não reais — ver nota de
+  rede abaixo) via `SessionLocal` direto, incluindo um bug real encontrado
+  e corrigido nessa etapa (seleção de snapshots de `movement_distribution`
+  pegava as datas mais ANTIGAS em vez das mais RECENTES do histórico
+  disponível — corrigido antes de entregar).
+- `app/spreads_routes.py` — `APIRouter` com a página (`GET /spreads`) e a
+  API (`GET /api/spreads/summary|series|movers|movement-distribution|
+  search|debenture/{codigo}`). Registrado em `app/app.py` via
+  `app.include_router(register_spreads_routes(require_user))` logo depois
+  de `require_user` ser definido (evita import circular — o router recebe a
+  dependência de autenticação por parâmetro em vez de importar de
+  `app.py`).
+- `app/models.py` — duas tabelas novas: `Debenture` (cadastro por Código,
+  sempre sobrescrito com a versão mais recente — nome, indexador, CNPJ,
+  incentivada, `classe`) e `DebentureSpread` (histórico de verdade, uma
+  linha por Código+Data, `UniqueConstraint("codigo","data")`). Tabelas
+  novas não precisam de `run_migrations()` — `Base.metadata.create_all`
+  já cria sozinho.
+- `scripts/fetch_debenture_spreads.py` — CLI (`python -m
+  scripts.fetch_debenture_spreads [--start AAAA-MM-DD [--end AAAA-MM-DD]]`).
+  Sem argumentos, detecta e captura só o último dia publicado (uso diário).
+  Com `--start`, faz backfill dia útil por dia útil até `--end` (ou hoje).
+  **Ainda não tem agendamento automático** (nem no `scheduler.py` local nem
+  no GitHub Actions) — por ora é rodado manualmente; se o Allan quiser
+  automatizar depois (ex.: 1x por dia, fora do horário de pregão), dá pra
+  imitar o padrão de `scripts/run_once.py` + `.github/workflows/scrape.yml`.
+- `templates/spreads.html` + `static/spreads.js` + trecho novo em
+  `static/style.css` — dashboard: toggle de classe (pílulas, igual ao
+  `.win-btn` do dashboard de notícias), toggle de período de comparação
+  (1/5/21 dias úteis), cards de KPI, gráfico de linha (spread médio no
+  tempo), scatter (variação × duration, com aberturas em laranja/
+  fechamentos em preto/resto em cinza — réplica do gráfico do relatório
+  semanal do Allan), gráfico de barras empilhadas (% da base que abriu/
+  fechou spread), tabelas de maiores aberturas/fechamentos, busca +
+  drill-down de um ativo específico (série própria dele). Usa Chart.js via
+  CDN (`cdnjs.cloudflare.com`, único lugar do projeto que carrega uma lib
+  de gráfico — o dashboard de notícias não tem gráfico nenhum).
+
+### "Classe" — o filtro que nunca se mistura
+
+Pedido explícito do Allan (23/07/2026): **"IPCA + Incentivadas" e "CDI +
+Tradicionais" não são comparáveis entre si** (referências diferentes — NTN-B
+vs DI) — todo gráfico/KPI do dashboard filtra por uma dessas duas classes,
+nunca mostra as duas juntas. `compute_classe(indexador, incentivada)` em
+`app/spreads/fetch.py`:
+- `indexador == "IPCA +"` e incentivada = "Sim" → **"IPCA + Incentivadas"**
+- `indexador == "CDI +"` e não incentivada → **"CDI + Tradicionais"**
+- qualquer outra combinação (ex.: CDI+ incentivada, IPCA+ não incentivada —
+  raras mas existem) → **"Outros"** (não aparece no toggle do dashboard,
+  fica de fora das duas classes principais de propósito).
+
+`classe` é recalculado em `persist_day` (quando `indexador` muda) e em
+`persist_caracteristicas` (quando `incentivada`/CNPJ chegam, geralmente
+depois, já que características são buscadas uma vez por rodada) — então
+numa base nova, `classe` só fica correto depois que **as duas** rodam pelo
+menos uma vez pro mesmo Código (a ordem no script já garante isso: spreads
+de todos os dias primeiro, características por último).
+
+### Ampliação 24/07/2026 — bases de comparação nomeadas + aba "Marcação Emissores"
+
+Depois do primeiro backfill real (940 debêntures capturadas com sucesso),
+Allan pediu uma leva de ajustes:
+
+**Bases de comparação nomeadas.** As pílulas "1/5/21 dias" viraram
+`d-1 / WoW / MoM / QoQ / SoS / YoY` (`queries.COMPARACAO_BASES`, em posições
+no histórico: 1/5/21/63/126/252 — aproximação de 252 dias úteis/ano,
+mesma convenção já usada em `Duration`). O front-end manda só o rótulo
+(`base=WoW`); `_validar_base()` em `app/spreads_routes.py` traduz pra
+posição — o front-end nunca sabe o número por trás. Uma notinha discreta
+(`#nota-base-comparacao`) mostra a data real resolvida pra cada base (ex.:
+"Base de comparação: WoW (16/07/2026)").
+
+**Duration média ponderada por Estoque** substituiu o card "DATA DE
+COMPARAÇÃO" (`_weighted_avg_duration` em `queries.py`) — cai pra média
+simples (sem peso) se nenhuma linha da data tiver Estoque cruzado, e o
+dashboard sinaliza esse fallback (`kpi-duration-tag`: "pond. estoque" vs.
+"sem estoque") pra Allan não confundir com ponderada de verdade.
+
+**Header "Dados até".** `#dados-ate` no topo da página, populado a partir
+de `data_referencia` do próprio `/api/spreads/summary` (sem endpoint novo).
+
+**Distribuição de variação (gráfico de barras empilhadas) reescrita.**
+Antes: espalhava snapshots por igual ao longo de TODO o histórico
+disponível. Agora (pedido explícito): o STEP entre snapshots é a própria
+base de comparação selecionada — d-1 mostra os últimos 5 DIAS, MoM mostra
+os últimos 5 MESES, etc. (`movement_distribution`, snapshot `i` = 
+`dates_desc[i*dias_comparacao]` vs. `dates_desc[(i+1)*dias_comparacao]`).
+Muito mais simples que a versão anterior.
+
+**Aba "Marcação Emissores"** (segunda aba dentro de `/spreads`, troca de
+painel via JS, sem rota nova) — visão por empresa em vez de por classe
+inteira:
+- Filtro de emissor (`Debenture.nome`, dropdown populado por
+  `/api/spreads/emissores`) + filtro de classe próprio dessa aba (não
+  compartilha estado com a Visão Geral) + toggle "nível emissor" (spread
+  médio ponderado por Estoque entre os tickers do emissor naquela classe)
+  vs. "nível ticker" (uma linha por ticker).
+- Tabela acima do gráfico: tickers do emissor, indexador, classe,
+  incentivada, Estoque mais recente (`emissor_tickers`).
+- Gráfico de spread no tempo com uma linha extra, discreta e pontilhada,
+  do spread médio de MERCADO da classe (sem filtrar por emissor) —
+  reaproveita `time_series(classe)`, já existia.
+- Sidebar de últimas notícias da empresa (`company_news`, junção com
+  `Article.companies` — infraestrutura que já existia pro dashboard de
+  notícias, `article_company`).
+
+**Ligação emissor → empresa da cobertura** (`Debenture.company_id`, FK
+solta pra `companies.id`, migração simples `ADD COLUMN` em `db.py`) — sem
+isso a sidebar de notícias não tem o que buscar. `app/spreads/
+company_match.py` faz a heurística (normaliza nome — remove acento,
+pontuação, sufixos societários tipo S/A, LTDA, PARTICIPAÇÕES — e casa por
+igualdade ou contenção de token; token único precisa ter 6+ caracteres pra
+evitar falso positivo) e `scripts/match_debenture_issuers.py` é o CLI
+(`--apply` grava; sem `--apply` só mostra o relatório). Roda DEPOIS do
+backfill, não faz parte do pipeline diário — é revisão manual, imprecisa
+de propósito conservador (prefere "sem match" a match errado). Quando
+casa, também grava o nome do emissor como `CompanyAlias` novo (mesma
+tabela que já alimenta o matching de notícias em `app/taxonomy.py`), então
+passa a contar pra notícias também, não só pra essa aba. Allan revisa/
+corrige em `/fontes` (CRUD de aliases já existia, não precisou UI nova).
+
+**Cuidado de rota**: os 3 endpoints de emissor (`/api/spreads/emissor`,
+`/series`, `/noticias`) recebem `nome` por QUERY STRING, não path param —
+nomes de emissor reais têm "/" de verdade (ex. "... S/A"), e o Starlette
+não casa "%2F" codificado dentro de um segmento de path por padrão (dava
+404 — pego em teste com `TestClient` antes de entregar).
+
+Tudo testado com dados sintéticos (`TestClient` + SQLite em memória,
+incluindo um emissor com "/" no nome de propósito) — sem acesso de rede
+pra validar contra o `/fontes` real do Allan (matching de empresa
+existente), então o relatório do `match_debenture_issuers.py` deve ser
+conferido por ele antes de rodar com `--apply`.
+
+**Bug real encontrado e corrigido (24/07/2026): Estoque cruzando errado.**
+Allan reportou muita debênture sem Estoque no backfill, o que não era
+esperado. `scripts/estoque_probe.py` confirmou que `fetch_estoque()`
+sozinho funciona perfeitamente (0 linhas vazias em 4 datas testadas,
+inclusive 2 anos atrás) — o problema não era a fonte, era o CRUZAMENTO
+com o código da Anbima. Allan avisou que bases scrapeadas do
+debentures.com.br costumam vir com espaço sobrando (ex.: `"RISP14   "`).
+`.strip()` (já usado antes) não cobre todo tipo de espaço "invisível" —
+`​` (zero-width space) não é reconhecido como whitespace pelo Python
+e passa reto pelo `strip()`, testado e confirmado. Trocado por
+`_normalize_codigo()` (mantém só `[A-Za-z0-9]`, maiusculiza) aplicado nos
+3 pontos onde um código de ativo é extraído (Anbima em `fetch_spreads`,
+"Código" em `fetch_estoque` e em `fetch_caracs`) — muito mais robusto que
+tentar enumerar toda variação de espaço possível. Reproduzido com teste
+sintético (código sujo com espaço + zero-width space) antes de confirmar
+a correção.
+
+### O que o relatório semanal do Allan tem que este dashboard NÃO cobre
+
+Allan é analista do time de Renda Fixa do Itaú BBA e anexou o relatório
+semanal do time (`RENDA FIXA — 20/07/2026`) como referência visual. Vários
+gráficos de lá **não são cobertos** por este módulo porque dependem de
+fontes de dado completamente diferentes das 4 que o script original usa:
+- **Spread médio por RATING** (AAA / Total ex-AAA / Total) — precisaria de
+  rating por debênture/emissor cruzado; não existe isso hoje no projeto
+  (o mapeamento mais próximo, `scripts/mapear_ratings_2026.py`, produz
+  AÇÕES de rating por emissor pro mercado inteiro, não um rating atual por
+  Código de debênture — cruzar os dois é trabalho futuro, não feito aqui).
+- **Abertura de spread por SETOR** — precisaria de setor por debênture;
+  hoje só temos setor pras ~96 empresas da cobertura (via `Company.sector`)
+  e nenhum link automático entre `Debenture.codigo`/`nome` e `Company` foi
+  construído nesta entrega (ficou de fora de propósito — ligar por
+  keyword/nome é frágil sem dado real pra calibrar contra, ver nota de
+  rede abaixo). Se quiser essa visão, o próximo passo é construir esse
+  cruzamento e testar contra uma base real.
+- **Volume negociado (B3)** e **Mercado primário (CVM — ofertas registradas/
+  aguardando bookbuilding)** — fontes de dado inteiramente diferentes
+  (B3 e CVM, não Anbima/debentures.com.br), não implementadas.
+- **Ações de rating** — já existe em outro lugar do app (scrapers de S&P/
+  Moody's/Fitch, ver seção de fontes acima), não faz parte deste módulo.
+
+O que FOI replicado do relatório: gráfico de spread médio no tempo (sem
+quebra por rating — só "Total" da classe), gráfico de distribuição de
+variação % da base, scatter de variação × duration com aberturas/
+fechamentos destacados, e as tabelas de maiores aberturas/fechamentos.
+
+### NOTA DE REDE — nada disto rodou de ponta a ponta ainda
+
+As 4 URLs (Anbima ×2, debentures.com.br ×2) **não estão na allowlist do
+sandbox** onde todo este código foi escrito — até `google.com` volta
+`403 Forbidden` com `X-Proxy-Error: blocked-by-allowlist` de dentro do
+sandbox. Validações feitas sem essa rede:
+- Confirmei (via ferramenta de busca externa, fora do sandbox de código)
+  que a URL de estoque responde e devolve uma tabela real com "Emissor"/
+  códigos reais (VALE, PETR) pro dia 22/07/2026.
+- Testei toda a camada de banco/consultas/rotas/template com **dados
+  sintéticos** inseridos direto no banco (não vieram da rede real) — isso
+  pegou e corrigiu um bug real de lógica em `movement_distribution`, então
+  valeu a pena, mas **não substitui rodar contra dado de verdade**.
+- **Nunca rodei `fetch_estoque`/`fetch_ntnb_rates`/`fetch_spreads`/
+  `fetch_caracs` contra a rede real** — a lógica foi preservada o mais
+  fiel possível ao script do Allan (que ele já usa/roda), mas parsing de
+  Excel/HTML de terceiro é sempre um risco (colunas podem estar em posição
+  ligeiramente diferente do esperado, etc.).
+
+**Antes do backfill de 2 anos, rode primeiro pra 1 dia só**:
+```
+python -m scripts.fetch_debenture_spreads
+```
+Confira o log — se dessem erro de parsing (`KeyError`, `IndexError`,
+coluna não encontrada), me manda a mensagem completa que eu ajusto. Só
+depois disso rode o backfill de verdade:
+```
+python -m scripts.fetch_debenture_spreads --start 2024-07-23
+```
+(Allan pediu histórico de ~2 anos, 23/07/2026 → 23/07/2024). **É lento**:
+cada dia útil processado faz 3-4 requisições HTTP + parsing de planilhas de
+milhares de linhas — ~500 dias úteis não é questão de minutos. Seguro de
+interromper (Ctrl+C) e rodar de novo com o mesmo `--start`: dias já
+gravados não são reprocessados desnecessariamente (mas também não há
+"resume automático" — ele tenta todos os dias do range de novo; se isso
+for um problema real na prática, dá pra adicionar um "pula dia que já
+tem dado" depois).
+
+### Pendências conhecidas (falar com o Allan antes de assumir)
+
+- `requirements.txt` ganhou `xlrd>=2.0` (necessário pra ler `.xls`, formato
+  antigo que a Anbima usa) — rodar `pip install -r requirements.txt` de
+  novo antes do backfill.
+- Sem agendamento automático ainda (rodar manualmente por enquanto, como
+  combinado — "podemos trabalhar localmente e subir depois").
+- Sem link Debênture ↔ Company/Setor (rating e setor-por-papel ficaram de
+  fora, ver seção acima).
+- Vercel/GitHub Actions: nada foi mexido no deploy pra este módulo ainda
+  (nem novo cron, nem novo passo no workflow) — combinado que a fase 1 é
+  local.
+
+> As duas seções acima ("NOTA DE REDE" e itens de rede/xlrd nas
+> "Pendências") são do desenho inicial, pré-pivot pra API oficial da
+> Anbima — hoje já rodou o backfill real de 2 anos (1.663 debêntures,
+> ~568 mil linhas de spread, 2024-07-23 a 2026-07-23) e o dashboard usa
+> dado de verdade. Ficaram registradas por histórico, não representam o
+> estado atual.
+
+### Ampliação 24/07/2026 (3ª rodada) — bug do Chart.js, aba "Emissores", totalizador, busca multi-select
+
+**Bug: nenhum gráfico aparecia.** Allan reportou com screenshot; hipótese
+inicial (bloqueio de rede corporativa) foi descartada por ele mesmo
+("Não estou na rede do banco nesse teste local"). Console do navegador
+mostrou a causa real: `<script src="https://cdnjs.cloudflare.com/ajax/
+libs/Chart.js/4.4.4/chart.umd.min.js">` devolvia **404** — o path do
+cdnjs é *case-sensitive* e o nome certo é `chart.js` minúsculo, não
+`Chart.js`. Como o script nunca carregava, toda chamada a `new Chart(...)`
+falhava com `ReferenceError: Chart is not defined`. Corrigido trocando
+pra URL oficial documentada do jsDelivr:
+`https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js`
+(`templates/spreads.html`). **Lição**: sempre usar a URL exata da doc
+oficial da lib pra CDN, não "adivinhar" capitalização.
+
+**Aba renomeada**: "Marcação Emissores" → **"Emissores"** — Allan avisou
+que essa aba vai ganhar dado de negociações recentes no futuro além de
+spread, então o nome antigo parava de fazer sentido. Nome curto e neutro
+o suficiente pra caber conteúdo futuro; só o rótulo mudou
+(`data-secao="emissores"` já era esse desde a criação, não precisou
+mexer em rota/JS além do texto do botão).
+
+**Totalizador de Estoque** na tabela de tickers do emissor (pedido do
+Allan) — `<tfoot>` no template com uma linha "Total", populada em
+`loadEmissorTabela()` (`static/spreads.js`) somando `t.estoque` de todos
+os tickers retornados (ignora `null`); mostra "—" se nenhum ticker tiver
+estoque.
+
+**Busca por nome + seleção múltipla de emissores** — trocado o
+`<select>` único por um campo de busca (`#emissor-busca`) com dropdown
+de resultados (mesmo padrão visual do `#busca-ativo` da Visão Geral) e
+chips removíveis (`#emissor-chips`) pros emissores selecionados. Exigiu
+mudança em toda a cadeia:
+- `queries.py`: `emissor_tickers`, `emissor_series`,
+  `companies_for_emissores` (renomeada de `company_for_emissor`) e
+  `company_news` agora recebem **listas** de nomes/ids em vez de um só.
+  Em `emissor_series(nivel="emissor")`, cada emissor selecionado vira
+  uma linha própria no gráfico (agregação por `(nome, data)`).
+- `spreads_routes.py`: `/api/spreads/emissor(/series|/noticias)` usam
+  `nome: list[str] = Query(...)` — múltiplos `?nome=A&nome=B` na query
+  string (um só emissor é só uma lista de tamanho 1, não quebra nada
+  que já existia).
+- `spreads.js`: `fetchJSON()` reescrito pra aceitar valores em lista
+  (`Array.isArray(v)` → `usp.append` repetido); estado
+  `currentEmissores` agora é array; resposta de notícias mudou de
+  `data.empresa` (singular) pra `data.empresas` (dict por nome).
+
+Testado com `TestClient` contra uma **cópia** do banco real (ver nota
+abaixo) selecionando 2 emissores ao mesmo tempo — tabela combinada,
+totalizador batendo com a soma manual, gráfico com uma linha por
+emissor, notícias agregadas das duas empresas. Sem regressão nos
+endpoints de Visão Geral (`summary` com base "MoM" testado também).
+
+### Ampliação 24/07/2026 (4ª rodada) — negócio a negócio da B3 (DEB/CRI/CRA) na aba Emissores
+
+Allan pediu pra trazer as **últimas negociações na B3** pra dentro da aba
+Emissores (é inclusive por isso que a aba deixou de se chamar "Marcação
+Emissores" na rodada anterior — ele avisou que isso vinha por aí). Pediu
+"a tabela negócio a negócio" especificamente, com foco em Debêntures, CRI
+e CRA, atualizada a cada 15 min (cadência real da B3 pra essa tabela).
+
+**Fonte**: `https://arquivos.b3.com.br/bdi/tabelas` — é uma SPA (o HTML
+puro não tem nada; sem navegador com JS, `web_fetch` só devolve "You need
+to enable JavaScript"). Descoberta usando o Chrome MCP pra navegar,
+selecionar "Renda fixa" → "Negócio a negócio" no seletor de tabela, e
+inspecionar a rede: o front-end chama
+
+    POST https://arquivos.b3.com.br/bdi/table/Trade/{início}/{fim}/{página}/{tamanho}
+
+sem autenticação, sem corpo — `{início}`/`{fim}` em `AAAA-MM-DD`,
+`{página}` 1-based, `{tamanho}` registros por página (testado até 1000 de
+forma confiável; 2000 devolveu corpo vazio numa chamada manual, não usar
+tamanho maior que 1000). Devolve JSON com `table.values` (lista de listas,
+uma por negócio, campos por ÍNDICE fixo — ver docstring de
+`app/spreads/b3_trades.py` pro layout completo) e `table.pageCount`.
+Testado contra o dia corrente (24/07/2026) e contra histórico de até 2
+anos atrás (2024-07-23) — a fonte tem retenção longa, ao contrário do
+boletim `.xls` da Anbima que motivou o pivot pra API na 1ª rodada.
+
+`InstrumentType` tem BEM mais valores do que o pedido (`CFF`, `CDCA`,
+`COE`, `CPR`, `LF`, `LFSN`...) — filtramos só `DEB`/`CRI`/`CRA`
+(`b3_trades.INSTRUMENT_TYPES`). Cada dia tem ~15 mil negócios no total,
+~700 já filtrando só os 3 tipos pedidos.
+
+**Escopo, decidido com o Allan antes de construir** (tinha ambiguidade
+real o suficiente pra valer perguntar em vez de assumir):
+- **Filtro**: a tabelinha fica restrita aos tickers do(s) emissor(es)
+  selecionado(s) na busca — MESMA lógica que já filtra a tabela de
+  tickers (`Debenture.nome.in_(nomes_emissor)` → lista de códigos →
+  `NegocioB3.codigo.in_(codigos)`). Não é um feed geral do mercado.
+  Consequência direta: hoje só aparece coisa pra **DEB** de verdade — CRI
+  e CRA não têm `Debenture`/emissor ligado no cadastro (não são
+  debêntures), então nunca vão casar com nenhum emissor buscado até
+  ganharem seu próprio cadastro (fora de escopo por ora).
+- **Atualização**: salva no banco a cada 15 min via um segundo job no
+  `app/scheduler.py` (`b3_trades_scan`, ao lado do `news_scan` que já
+  existia) — não busca ao vivo toda vez que a aba abre. Mesma ressalva
+  de sempre: só roda localmente (`CLOUD_MODE` desligado); em produção
+  seria GitHub Actions, não implementado ainda (mesma pendência que o
+  módulo de spreads já tinha).
+
+**Peças novas**:
+- `NegocioB3` (`app/models.py`) — uma linha por negócio, chave de dedupe
+  é `trade_code` (id que a própria B3 dá pro negócio, ex. `"#1009622879"`)
+  porque a fonte reenvia o dia inteiro a cada consulta, não só o que
+  mudou desde a última vez.
+- `app/spreads/b3_trades.py` — `fetch_trades(start, end)`: pagina a API e
+  já filtra DEB/CRI/CRA, normaliza o ticker com o mesmo `_normalize_codigo`
+  do módulo de spreads (reaproveitado, não duplicado — mesma robustez
+  contra espaço/zero-width space da 2ª rodada).
+- `persist.save_negocios_b3()` — grava só negócio novo (dedupe por
+  `trade_code`), idempotente.
+- `queries.emissor_trades(db, nomes_emissor, limit=30)` — junta
+  `Debenture.codigo` dos emissores selecionados com `NegocioB3.codigo`,
+  ordenado do negócio mais recente pro mais antigo.
+- `GET /api/spreads/emissor/negociacoes?nome=...` (lista, mesma seleção
+  múltipla da rodada anterior).
+- `scripts/fetch_b3_trades.py` — CLI pra rodar manualmente/backfill
+  pontual (`--start`/`--end`); sem --start roda só o dia de hoje (é o que
+  o scheduler chama). Ao contrário do backfill de spreads, **não** veio
+  com 2 anos de histórico por padrão — Allan pediu "últimas negociações"
+  (uso corrente), e o volume é grande o suficiente (~700 linhas/dia só
+  dos 3 tipos) pra não valer a pena um backfill longo sem pedido
+  explícito. Se quiser histórico de um período, é só rodar com
+  `--start`/`--end`.
+
+Testado com dado sintético (payload no formato exato capturado da B3, TCP
+mockado — sandbox não alcança `arquivos.b3.com.br`, mesma restrição de
+allowlist da Anbima) cobrindo: filtro de InstrumentType, normalização de
+ticker sujo (espaço + zero-width space), dedupe por `trade_code` rodando
+duas vezes, e o endpoint de verdade via `TestClient` contra uma cópia do
+banco real (join batendo com o emissor certo). **A chamada real
+`fetch_trades` → B3 nunca rodou de ponta a ponta** — só a chamada crua
+(`fetch` no console do navegador) foi validada contra a B3 de verdade; o
+parsing em Python roda contra um payload sintético no mesmo formato.
+Rode `python -m scripts.fetch_b3_trades` (sem argumentos, só hoje) antes
+de confiar no scheduler automático.
+
+**Bug real encontrado no primeiro run do Allan** (mesmo dia, 24/07/2026):
+`UNIQUE constraint failed: negocios_b3.trade_code` capturando o dia
+inteiro (10.780 negócios, 15 páginas). Causa: o mesmo `trade_code` pode
+aparecer mais de uma vez DENTRO da mesma chamada de `fetch_trades` (não só
+entre uma chamada e a próxima, que já era tratado) -- como a captura pagina
+~15 páginas em sequência e a B3 segue recebendo negócios novos durante
+esse tempo (a cada 15 min ela reprocessa o dia inteiro), um negócio pode
+"empurrar" outro de página e aparecer duplicado entre duas páginas da
+mesma consulta. `save_negocios_b3` só deduplicava contra o que já existia
+no banco, não dentro do próprio lote recebido -- corrigido deduplicando
+primeiro por `trade_code` dentro do lote (fica a última ocorrência) antes
+de checar contra o banco. Reproduzido com um lote sintético com
+`trade_code` repetido antes de confirmar a correção.
+
+**Nota operacional — banco real via mount do OneDrive**: uma tentativa
+de abrir sessão de teste direto no `data/credit_monitor.db` real (pelo
+mount do sandbox) deu `disk I/O error` no commit e deixou um
+`credit_monitor.db-journal` órfão. Comparei os dados por uma conexão
+somente-leitura (`mode=ro&immutable=1`) e confirmaram-se intactos (1.663
+debêntures, 2 usuários) — o mount não sustenta o locking que o SQLite
+precisa pra escrever/fazer rollback de journal com segurança, não é
+corrupção de dado. O journal órfão deve ser limpo automaticamente na
+próxima vez que o Windows do Allan abrir o banco normalmente (recovery
+padrão do SQLite). **Lição**: nunca escrever no `.db` real pelo mount do
+sandbox — pra testar com dado de verdade, copiar primeiro
+(`sqlite3.connect(...).backup(...)`) e testar na cópia.

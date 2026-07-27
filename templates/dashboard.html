@@ -31,7 +31,7 @@
     <option value="todos">Cobertura: Todos</option>
   </select>
 
-  <button id="btn-refresh" class="btn-primary">Forçar atualização</button>
+  {% if user %}<button id="btn-refresh" class="btn-primary">Forçar atualização</button>{% endif %}
 </div>
 
 <div id="progress-wrap" class="progress-wrap" style="display:none;">

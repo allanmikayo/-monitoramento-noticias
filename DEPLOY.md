@@ -209,6 +209,145 @@ precisa mexer nele.
 
 ---
 
+## Parte 6 — Módulo Spreads de Debêntures (site + B3 a cada 15 min)
+
+O módulo de Spreads (aba "Spreads" do dashboard: Visão Geral + Emissores)
+foi construído inteiramente rodando só no seu computador — nunca subiu
+pro site hospedado. Esta parte sobe ele: passa a atualizar sozinho, todo
+dia, sem você precisar rodar nada manualmente.
+
+### 1. Subir o código pro GitHub
+
+O módulo inteiro (e mais uma leva de correções recentes) ainda está só no
+seu computador, sem nunca ter sido commitado. Abra o PowerShell na pasta
+`credit_monitor` e rode, um de cada vez:
+
+```
+git add .env.example "Abrir Monitoramento.bat" CLAUDE.md app/app.py app/auth.py app/db.py app/models.py app/scheduler.py requirements.txt static/app.js static/style.css templates/admin.html templates/base.html templates/dashboard.html templates/signup.html
+git add .github/workflows/b3_trades.yml .github/workflows/spreads_daily.yml .github/workflows/spreads_verify.yml app/spreads app/spreads_routes.py scripts/backfill_b3_trade_spreads.py scripts/fetch_b3_trades.py scripts/fetch_debenture_spreads.py scripts/verify_spreads_updated.py static/spreads.js templates/spreads.html
+git status
+```
+
+Confira no `git status` que só apareceram esses arquivos (nada dentro de
+`data/`, nem `Mapear Ratings 2026.bat`, nem os scripts soltos de
+diagnóstico/ratings — esses são de outra finalidade e não devem subir).
+Se estiver tudo certo:
+
+```
+git commit -m "Modulo Spreads de Debentures + negocio a negocio B3 (deploy inicial)"
+git push
+```
+
+O Vercel redeploya sozinho assim que detecta o push (não precisa fazer
+nada lá).
+
+### 2. Segredos novos no GitHub (Settings → Secrets and variables → Actions)
+
+O módulo Spreads bate na API oficial da Anbima, que precisa de
+credenciais próprias (diferentes do `DATABASE_URL`, que já existe desde a
+Parte 3):
+
+| Nome | Valor |
+|---|---|
+| `ANBIMA_CLIENT_ID` | do seu `.env` local |
+| `ANBIMA_CLIENT_SECRET` | do seu `.env` local |
+
+Não precisa adicionar nada no Vercel — quem bate na Anbima é sempre o
+GitHub Actions, nunca o site em si.
+
+### 3. Os três workflows novos (já vêm prontos no código)
+
+- **`spreads_daily.yml`** — captura os spreads de debêntures 1x por dia,
+  às 21h (horário de Brasília). Não precisa de cron-job.org: uma vez por
+  dia não exige a mesma pontualidade do `schedule:` nativo do GitHub.
+- **`spreads_verify.yml`** — roda 1h depois (22h BRT) só pra CONFERIR que
+  a captura de fato trouxe o dado mais recente (pergunta pra própria
+  Anbima qual foi o último dia publicado e compara com o banco). Se a
+  captura ficou pra trás por algum motivo, esse workflow **falha de
+  propósito** — o GitHub manda e-mail de notificação de falha sozinho,
+  sem precisar configurar nada a mais.
+- **`b3_trades.yml`** — negócio a negócio da B3, precisa de verdade dos
+  15 em 15 minutos (só durante o pregão). Igual à varredura de notícias,
+  o `schedule:` nativo do GitHub não é pontual o bastante — precisa do
+  relay externo (próximo passo).
+
+### 4. Segundo cronjob no cron-job.org (pro negócio a negócio de 15 em 15 min)
+
+Você já tem um cronjob lá pra notícias (Parte 5) — duplique ele:
+
+1. Entre em **cron-job.org** → **"Create cronjob"**.
+2. **URL**:
+   ```
+   https://SEU-SITE.vercel.app/api/cron-trigger?job=b3_trades
+   ```
+3. **Execution schedule**: "Every 15 minutes".
+4. Em **Advanced**: **Request method** `POST`, header customizado
+   `X-Cron-Secret` = o MESMO segredo já configurado no Vercel (`CRON_SECRET`,
+   da Parte 5 — não precisa criar outro).
+5. Salve. Pode deixar rodando 24 horas por dia sem se preocupar com
+   horário de mercado — o próprio servidor já checa se o pregão está
+   aberto (9h-18h BRT, dia útil) e só aciona a captura de verdade dentro
+   desse horário; fora disso, o disparo do cron-job.org não faz nada.
+
+`spreads_daily` e `spreads_verify` NÃO precisam de nada no cron-job.org —
+rodam sozinhos pelo `schedule:` nativo do GitHub, já que 1x/dia não exige
+pontualidade.
+
+### 5. Primeira carga de dado (o Supabase começa vazio só de spread)
+
+**Importante — isto NÃO é criar nada do zero.** É o MESMO projeto
+Supabase e a MESMA connection string que você já usa desde que o
+dashboard de notícias foi pro ar (Parte 1) — as tabelas de notícias,
+usuários, fontes etc. continuam exatamente como estão, ninguém mexe
+nelas. A única coisa que falta é que esse banco ainda não tem NENHUMA
+linha de spread/debênture (as tabelas novas desse módulo: `Debenture`,
+`DebentureSpread`, `NegocioB3`, `NtnbReferencia`). Elas são criadas
+sozinhas, automaticamente, na primeira vez que qualquer script do módulo
+Spreads roda contra esse banco — não precisa rodar `scripts.seed` de
+novo, não precisa abrir "Abrir Monitoramento.bat", não precisa mexer no
+Supabase pela interface web nenhuma.
+
+Passo a passo:
+
+1. Ache a connection string do Supabase que você já usa — está salva
+   nas variáveis de ambiente do Vercel (**Settings → Environment
+   Variables → `DATABASE_URL`**), copie de lá.
+2. No seu `.env` local, descomente/cole essa MESMA linha
+   `DATABASE_URL=postgresql+psycopg://...` temporariamente (é o mesmo
+   truque da Parte 2, passo 6, só que ao contrário — lá você comentou
+   essa linha pra voltar a usar o banco local; agora só descomenta de
+   novo).
+3. Rode só este comando (nada mais):
+   ```
+   python -m scripts.fetch_debenture_spreads --start 2026-04-27
+   ```
+   (3 meses antes de hoje — ajuste a data se rodar em outro dia.) Ele
+   cria as tabelas que faltam sozinho e carrega os últimos 3 meses de
+   spread — os últimos 2 anos que você tem localmente ficam de fora de
+   propósito (decisão já tomada, pra começar mais leve).
+4. Comente a linha `DATABASE_URL=` de novo no seu `.env` (mesmo passo
+   de sempre) pra voltar a usar o banco local no seu computador.
+
+Não precisa fazer nada disso pro negócio a negócio da B3 — ele já começa a
+acumular sozinho a partir do primeiro disparo do cron-job.org. Se quiser
+também um pouco de histórico recente ali, é opcional (faça antes do passo
+4 acima, com o `DATABASE_URL` ainda apontando pro Supabase):
+
+```
+python -m scripts.fetch_b3_trades --start 2026-07-20
+```
+
+### 6. Conferir que funcionou
+
+- Aba **Actions** do GitHub: os três workflows (`spreads_daily`,
+  `spreads_verify`, `b3_trades`) devem aparecer na lista — clique em cada
+  um e "Run workflow" pra testar na hora, sem esperar o horário.
+- No site, abra a aba **Spreads** → **Emissores**, escolha um emissor
+  qualquer e confira se os cards de taxa e a tabela de negociações
+  aparecem.
+
+---
+
 ## Coisas pra lembrar depois
 
 - Se adicionar/mudar fonte, empresa ou setor no seu computador local, isso

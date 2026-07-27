@@ -1,0 +1,256 @@
+{% extends "base.html" %}
+{% block title %}Spreads de Debêntures{% endblock %}
+{% block content %}
+<div class="page-head">
+  <h1 style="margin:0;font-size:1.4rem;">Spreads de Debêntures</h1>
+  <span class="kpi-tag" id="dados-ate">Dados até: —</span>
+</div>
+
+<div class="window-tabs" id="secao-tabs" style="margin-bottom:14px;">
+  <button data-secao="visao-geral" class="win-btn active">Visão Geral</button>
+  <button data-secao="emissores" class="win-btn">Emissores</button>
+</div>
+
+<div id="painel-visao-geral">
+<div class="filters-bar">
+  <div class="window-tabs" id="classe-tabs">
+    {% for c in classes %}
+    <button data-classe="{{ c }}" class="win-btn{% if loop.first %} active{% endif %}">{{ c }}</button>
+    {% endfor %}
+  </div>
+
+  <div class="window-tabs" id="base-tabs">
+    {% for b in bases_comparacao %}
+    <button data-base="{{ b }}" class="win-btn{% if b == 'WoW' %} active{% endif %}">{{ b }}</button>
+    {% endfor %}
+  </div>
+
+  <label class="muted small" style="display:flex;align-items:center;gap:6px;" title="Analisa a base como se essa fosse a data de hoje — em branco, usa sempre a última data disponível.">
+    Data analisada
+    <input type="date" id="visao-data">
+  </label>
+
+  <input id="busca-ativo" type="search" placeholder="Buscar código ou nome do ativo (ex.: VALE)…" autocomplete="off">
+  <button class="btn-small" id="btn-abrir-detalhes" title="Ver a tabela com o dado granular (Código+Data) por trás dos gráficos acima">Detalhes</button>
+</div>
+<div id="busca-resultados" class="search-results" style="display:none;"></div>
+
+<p class="muted small" id="classe-aviso">
+  "IPCA + Incentivadas" e "CDI + Tradicionais" usam referências diferentes (NTN-B vs DI) e não são comparáveis entre si — os gráficos abaixo trocam inteiramente ao alternar a classe acima.
+</p>
+<p class="muted small" id="nota-base-comparacao">Base de comparação: —</p>
+
+<div class="kpi-row" id="kpi-row">
+  <div class="kpi-card kpi-highlight">
+    <span class="kpi-label">SPREAD MÉDIO <span id="kpi-data-ref" class="kpi-tag"></span> <span class="kpi-tag" id="kpi-spread-tag"></span></span>
+    <span class="kpi-value" id="kpi-spread">—</span>
+    <span class="kpi-delta" id="kpi-variacao">—</span>
+  </div>
+  <div class="kpi-card">
+    <span class="kpi-label">Nº DE ATIVOS NA BASE</span>
+    <span class="kpi-value" id="kpi-n-ativos">—</span>
+  </div>
+  <div class="kpi-card">
+    <span class="kpi-label">DURATION MÉDIA <span class="kpi-tag" id="kpi-duration-tag"></span></span>
+    <span class="kpi-value" id="kpi-duration" style="font-size:1.5rem;">—</span>
+  </div>
+</div>
+
+<div id="detalhes-wrap" class="chart-card" style="display:none;">
+  <div class="chart-card-head">
+    <div>
+      <h2 style="margin:0;">Detalhes — dado granular (Código+Data)</h2>
+      <p class="muted small">Uma linha por Código+Data, sem agregação — o mesmo nível de dado que alimenta os gráficos acima.</p>
+    </div>
+    <button class="btn-small" id="btn-fechar-detalhes">Fechar ✕</button>
+  </div>
+
+  <div class="filters-bar" style="margin-top:10px;">
+    <div class="window-tabs" id="detalhes-classe-tabs">
+      <button data-classe="" class="win-btn active">Todos</button>
+      {% for c in classes %}
+      <button data-classe="{{ c }}" class="win-btn">{{ c }}</button>
+      {% endfor %}
+    </div>
+    <label class="muted small" style="display:flex;align-items:center;gap:6px;">
+      Data
+      <input type="date" id="detalhes-data">
+    </label>
+    <a class="btn-small" id="btn-exportar-detalhes" href="#" target="_blank" rel="noopener" style="margin-left:auto;text-decoration:none;">Exportar CSV</a>
+  </div>
+
+  <p class="muted small" id="detalhes-contagem">—</p>
+
+  <div style="overflow-x:auto;">
+    <table class="table" id="tabela-detalhes">
+      <thead>
+        <tr>
+          <th>Ticker</th><th>Taxa</th><th>% PU Par</th><th>PU</th><th>Data Referência</th>
+          <th>Indexador</th><th>Deb Incentivada</th><th>Spread</th><th>Estoque (R$ mm)</th><th>Duration</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+  </div>
+</div>
+
+<div id="drilldown-wrap" class="chart-card" style="display:none;">
+  <div class="chart-card-head">
+    <div>
+      <h2 style="margin:0;">Série histórica — <span id="drilldown-titulo"></span></h2>
+      <p class="muted small" id="drilldown-sub">Spread (bps) ao longo do tempo · Fonte: Anbima e Debentures.com</p>
+    </div>
+    <button class="btn-small" id="btn-fechar-drilldown">Fechar ✕</button>
+  </div>
+  <canvas id="chart-drilldown" height="90"></canvas>
+</div>
+
+<div class="chart-grid">
+  <div class="chart-card">
+    <h2 style="margin:0;">Evolução do Spread Médio (bps)</h2>
+    <p class="muted small">Spread médio diário da classe selecionada · Fonte: Anbima e Debentures.com</p>
+    <canvas id="chart-series" height="110"></canvas>
+  </div>
+
+  <div class="chart-card">
+    <h2 style="margin:0;">Variação de Spreads (bps) x Duration</h2>
+    <p class="muted small" id="scatter-sub">Cada ponto é um ativo · variação vs. período selecionado · Fonte: Anbima e Debentures.com</p>
+    <canvas id="chart-scatter" height="110"></canvas>
+  </div>
+</div>
+
+<div class="chart-card">
+  <h2 style="margin:0;">Evolução da Variação de Spreads (% da base de ativos)</h2>
+  <p class="muted small" id="dist-sub">Como a base de ativos se moveu no período selecionado, por faixa de variação · Fonte: Anbima e Debentures.com</p>
+  <canvas id="chart-distribution" height="90"></canvas>
+</div>
+
+<div class="movers-grid">
+  <div class="chart-card">
+    <h2 style="margin:0;">Maiores Aberturas</h2>
+    <p class="muted small" id="aberturas-sub">Fonte: Anbima e Debentures.com</p>
+    <table class="table" id="tabela-aberturas">
+      <thead><tr><th>Código</th><th>Nome</th><th>Spread (bps)</th><th>Variação (bps)</th><th>Duration</th></tr></thead>
+      <tbody></tbody>
+    </table>
+  </div>
+  <div class="chart-card">
+    <h2 style="margin:0;">Maiores Fechamentos</h2>
+    <p class="muted small" id="fechamentos-sub">Fonte: Anbima e Debentures.com</p>
+    <table class="table" id="tabela-fechamentos">
+      <thead><tr><th>Código</th><th>Nome</th><th>Spread (bps)</th><th>Variação (bps)</th><th>Duration</th></tr></thead>
+      <tbody></tbody>
+    </table>
+  </div>
+</div>
+</div>
+
+<div id="painel-emissores" style="display:none;">
+  <div class="filters-bar">
+    <div style="position:relative;min-width:280px;">
+      <input id="emissor-busca" type="search" placeholder="Buscar emissor pelo nome…" autocomplete="off" style="width:100%;">
+      <div id="emissor-busca-resultados" class="search-results" style="display:none;position:absolute;z-index:5;width:100%;"></div>
+    </div>
+
+    <div class="window-tabs" id="emissor-classe-tabs">
+      {% for c in classes %}
+      <button data-classe="{{ c }}" class="win-btn{% if loop.first %} active{% endif %}">{{ c }}</button>
+      {% endfor %}
+    </div>
+
+    <div class="window-tabs" id="emissor-nivel-tabs">
+      <button data-nivel="emissor" class="win-btn active">Nível emissor</button>
+      <button data-nivel="ticker" class="win-btn">Nível ticker</button>
+    </div>
+  </div>
+  <div id="emissor-chips" class="chip-row"></div>
+  <p class="muted small">Nível emissor: spread médio ponderado pelo Estoque de cada ticker, um linha por emissor selecionado. A linha pontilhada é o spread médio de mercado (mesma classe, sem filtrar por emissor) — só como referência.</p>
+
+  <div id="emissor-vazio" class="muted small" style="padding:24px 0 12px 0;">Busque e selecione um ou mais emissores acima pra ver os tickers de dívida e a série de spread.</div>
+
+  <!-- Ranking B3 vs. Anbima, tela inicial (pedido do Allan, 27/07/2026):
+       enquanto nenhum emissor está selecionado, mostra quem mais destoa
+       entre o boletim Anbima e o negociado na B3, pra classe inteira --
+       ver queries.emissor_ranking_diferencas pro desenho (janela B3 de
+       7 dias ancorada na própria data do boletim Anbima de cada
+       emissor). Só entram emissores com negócio B3 recente o bastante
+       pra calcular os dois lados -- a maioria não vai aparecer. -->
+  <div id="emissor-ranking-wrap">
+    <div class="filters-bar" style="margin-bottom:10px;">
+      <label class="muted small" style="display:flex;align-items:center;gap:6px;" title="Analisa a base Anbima como se essa fosse a data de hoje — em branco, usa sempre a última data disponível de cada ticker.">
+        Data analisada
+        <input type="date" id="emissor-ranking-data">
+      </label>
+      <span class="muted small" id="emissor-ranking-dados-ate">Dados até: —</span>
+    </div>
+    <div class="movers-grid">
+      <div class="chart-card">
+        <h2 style="margin:0;">Maiores Prêmios sobre a Anbima</h2>
+        <p class="muted small">B3 negociando com spread MAIOR que o boletim Anbima · Fonte: Anbima e B3</p>
+        <table class="table" id="tabela-ranking-aberturas">
+          <thead><tr><th>Emissor</th><th>Anbima (bps)</th><th>B3 · 7d (bps)</th><th>Diferença</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+      <div class="chart-card">
+        <h2 style="margin:0;">Maiores Descontos sobre a Anbima</h2>
+        <p class="muted small">B3 negociando com spread MENOR que o boletim Anbima · Fonte: Anbima e B3</p>
+        <table class="table" id="tabela-ranking-fechamentos">
+          <thead><tr><th>Emissor</th><th>Anbima (bps)</th><th>B3 · 7d (bps)</th><th>Diferença</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div id="emissor-conteudo" style="display:none;">
+    <div class="kpi-row" id="emissor-taxas-row" style="margin-bottom:16px;">
+      <div class="kpi-card kpi-highlight">
+        <span class="kpi-label">SPREAD ANBIMA <span class="kpi-tag" id="emissor-taxa-anbima-data"></span></span>
+        <span class="kpi-value" id="emissor-taxa-anbima">—</span>
+        <div class="muted small" id="emissor-taxa-anbima-3m">Média 3M: —</div>
+      </div>
+      <div class="kpi-card">
+        <span class="kpi-label">SPREAD NEGOCIADO (B3) <span class="kpi-tag" id="emissor-taxa-b3-data"></span></span>
+        <span class="kpi-value" id="emissor-taxa-b3">—</span>
+        <div class="muted small" id="emissor-taxa-b3-sub">—</div>
+      </div>
+    </div>
+
+    <div class="chart-card" style="margin-bottom:16px;">
+      <h2 style="margin:0;" id="emissor-titulo-tabela">Tickers do emissor</h2>
+      <table class="table" id="tabela-emissor-tickers">
+        <thead><tr><th>Código</th><th>Emissor</th><th>Indexador</th><th>Classe</th><th>Incentivada</th><th>Estoque (R$ mm)</th></tr></thead>
+        <tbody></tbody>
+        <tfoot><tr id="tabela-emissor-total"><td colspan="5" style="text-align:right;font-weight:700;">Total</td><td style="font-weight:700;">—</td></tr></tfoot>
+      </table>
+    </div>
+
+    <div class="emissor-grid">
+      <div class="chart-card">
+        <h2 style="margin:0;" id="emissor-titulo-grafico">Spread ao longo do tempo</h2>
+        <p class="muted small">Fonte: Anbima e Debentures.com</p>
+        <canvas id="chart-emissor" height="110"></canvas>
+      </div>
+      <div class="chart-card" id="emissor-noticias-card">
+        <h2 style="margin:0;">Últimas notícias</h2>
+        <p class="muted small" id="emissor-noticias-sub">—</p>
+        <div id="emissor-noticias-lista"></div>
+      </div>
+    </div>
+
+    <div class="chart-card" style="margin-top:16px;">
+      <h2 style="margin:0;">Últimas negociações (B3)</h2>
+      <p class="muted small">Negócio a negócio — DEB/CRI/CRA, atualizado a cada 15 min durante o pregão · Fonte: B3</p>
+      <table class="table" id="tabela-emissor-negociacoes">
+        <thead><tr><th>Data</th><th>Horário</th><th>Tipo</th><th>Código</th><th>Emissor</th><th>Indexador</th><th>Preço</th><th>Volume (R$)</th><th>Taxa</th></tr></thead>
+        <tbody></tbody>
+      </table>
+      <p class="muted small" id="emissor-negociacoes-vazio" style="display:none;">Nenhuma negociação recente encontrada pra esses tickers.</p>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+<script src="/static/spreads.js"></script>
+{% endblock %}

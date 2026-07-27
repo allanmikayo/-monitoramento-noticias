@@ -1,0 +1,65 @@
+name: Spreads de debêntures (diário)
+
+# Roda scripts/fetch_debenture_spreads.py sem --start -- ele mesmo detecta
+# o último dia útil já publicado na Anbima e captura só esse dia (ver
+# app/spreads/fetch.py detect_latest_published_date). Pedido do Allan
+# (24/07/2026): atualizar todo dia às 21h (horário de Brasília).
+#
+# 21h BRT = 00h UTC (Brasil não tem horário de verão desde 2019, fuso fixo
+# -3 -- não precisa de ajuste sazonal no cron). Diferente do negócio a
+# negócio da B3 (b3_trades.yml), aqui NÃO tem relay via cron-job.org --
+# uma atualização por dia não precisa da mesma precisão que uma a cada 15
+# min, e o `schedule:` nativo do GitHub (mesmo com o atraso documentado em
+# horário de pico) é preciso o suficiente pra rodar "em algum momento
+# perto de 21h" uma vez por dia.
+on:
+  schedule:
+    - cron: "0 0 * * *"
+  # `start`/`end` opcionais -- vazio (uso normal do dia a dia) = só o
+  # último dia útil publicado, igual ao cron. Preenchidos = backfill
+  # pontual disparado manualmente pelo Allan em Actions -> "Run workflow"
+  # (pedido dele, 24/07/2026: catch-up dos últimos 5 dias na primeira vez
+  # que o módulo sobe pro Supabase, já que o histórico de 2 anos só existe
+  # no banco local -- ver CLAUDE.md).
+  workflow_dispatch:
+    inputs:
+      start:
+        description: "Data inicial (AAAA-MM-DD) -- deixe em branco pro uso normal (só hoje)"
+        required: false
+        default: ""
+      end:
+        description: "Data final (AAAA-MM-DD) -- deixe em branco (usa a mesma que start, ou hoje)"
+        required: false
+        default: ""
+
+concurrency:
+  group: spreads_daily
+  cancel-in-progress: false
+
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Baixar o codigo
+        uses: actions/checkout@v4
+
+      - name: Preparar Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Instalar dependencias
+        run: pip install -r requirements.txt
+
+      - name: Capturar spreads
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          ANBIMA_CLIENT_ID: ${{ secrets.ANBIMA_CLIENT_ID }}
+          ANBIMA_CLIENT_SECRET: ${{ secrets.ANBIMA_CLIENT_SECRET }}
+        run: |
+          ARGS=""
+          if [ -n "${{ github.event.inputs.start }}" ]; then ARGS="$ARGS --start ${{ github.event.inputs.start }}"; fi
+          if [ -n "${{ github.event.inputs.end }}" ]; then ARGS="$ARGS --end ${{ github.event.inputs.end }}"; fi
+          python -m scripts.fetch_debenture_spreads $ARGS

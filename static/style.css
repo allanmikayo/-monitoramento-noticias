@@ -217,3 +217,96 @@ h2 { font-size: 1.05rem; margin: 20px 0 8px; color: var(--header); font-weight: 
 }
 .diagnostic-panel summary { cursor: pointer; font-weight: 700; font-size: 0.88rem; padding: 4px 0; color: var(--header); }
 .diagnostic-panel .table { margin-top: 10px; margin-bottom: 0; }
+
+/* --------------------------------------------------------------------- */
+/* Spreads de debêntures (Hub Credit Research, 23/07/2026) -- reaproveita  */
+/* o vocabulário visual do dashboard de notícias (filters-bar, win-btn,   */
+/* table, badge) + os padrões observados nos outros dashboards do time    */
+/* (IBBA Financials Hub etc., ver memória de design): cards de KPI com    */
+/* delta colorido, legenda/fonte sob o título do gráfico, seletor de      */
+/* período em pílulas.                                                    */
+/* --------------------------------------------------------------------- */
+#busca-ativo {
+  padding: 7px 10px; border: 1px solid var(--border); border-radius: 6px; font-size: 0.85rem;
+  font-family: Arial, Helvetica, sans-serif; min-width: 260px; margin-left: auto;
+}
+.search-results {
+  background: var(--card-bg); border: 1px solid var(--border); border-radius: 8px;
+  padding: 8px; margin-bottom: 12px; max-height: 220px; overflow-y: auto;
+}
+.search-results .search-item {
+  padding: 7px 10px; border-radius: 6px; cursor: pointer; font-size: 0.85rem;
+  display: flex; justify-content: space-between; gap: 10px;
+}
+.search-results .search-item:hover { background: var(--accent-tint); }
+.search-results .search-item .nome { color: var(--muted); }
+
+.kpi-row {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 14px; margin-bottom: 16px;
+}
+.kpi-card {
+  background: var(--card-bg); border: 1px solid var(--border); border-radius: 10px;
+  padding: 14px 18px; display: flex; flex-direction: column; gap: 4px;
+}
+.kpi-highlight { border-top: 3px solid var(--accent); }
+.kpi-label {
+  font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.03em;
+  color: var(--muted); font-weight: 700; display: flex; justify-content: space-between; align-items: center;
+}
+.kpi-tag { background: #f0f0f0; color: var(--muted); border-radius: 999px; padding: 1px 8px; font-size: 0.68rem; text-transform: none; }
+.kpi-value { font-size: 1.6rem; font-weight: 700; color: var(--header); }
+.kpi-delta { font-size: 0.82rem; font-weight: 700; }
+.kpi-delta.up { color: var(--off); }
+.kpi-delta.down { color: var(--ok); }
+.kpi-delta.flat { color: var(--muted); }
+
+.chart-grid {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
+  gap: 16px; margin-bottom: 16px; align-items: stretch;
+}
+.chart-card {
+  background: var(--card-bg); border: 1px solid var(--border); border-radius: 10px;
+  padding: 16px 18px; margin-bottom: 16px;
+}
+.chart-card canvas { margin-top: 10px; }
+.chart-card-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
+
+.movers-grid {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
+  gap: 16px;
+}
+.movers-grid .table td.num, .movers-grid .table th.num { text-align: right; }
+.cell-abertura { color: var(--off); font-weight: 700; }
+.cell-fechamento { color: var(--ok); font-weight: 700; }
+
+/* Ampliação 24/07/2026: header com "dados até", abas Visão Geral/         */
+/* Marcação Emissores, e o painel de emissor (tabela + gráfico + notícias) */
+.page-head {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 12px; margin-bottom: 14px;
+}
+#emissor-select {
+  padding: 7px 10px; border: 1px solid var(--border); border-radius: 6px; font-size: 0.85rem;
+  font-family: Arial, Helvetica, sans-serif; background: var(--card-bg); color: var(--header);
+}
+.emissor-grid {
+  display: grid; grid-template-columns: minmax(0, 2fr) minmax(240px, 1fr);
+  gap: 16px; align-items: start;
+}
+#emissor-noticias-lista { display: flex; flex-direction: column; gap: 10px; margin-top: 10px; }
+.news-item-mini { padding-bottom: 10px; border-bottom: 1px solid var(--border); }
+.news-item-mini:last-child { border-bottom: none; padding-bottom: 0; }
+.news-item-mini a { font-size: 0.85rem; font-weight: 700; line-height: 1.3; display: block; }
+
+.chip-row { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0 12px; }
+.chip {
+  display: inline-flex; align-items: center; gap: 6px; background: var(--accent-tint);
+  color: var(--accent-dark); border-radius: 999px; padding: 4px 6px 4px 12px; font-size: 0.8rem; font-weight: 600;
+}
+.chip button {
+  background: none; border: none; color: var(--accent-dark); cursor: pointer; font-size: 0.9rem;
+  line-height: 1; padding: 2px 5px; border-radius: 50%;
+}
+.chip button:hover { background: rgba(0,0,0,0.08); }
+#tabela-emissor-tickers tfoot td { border-top: 2px solid var(--border); padding-top: 6px; }

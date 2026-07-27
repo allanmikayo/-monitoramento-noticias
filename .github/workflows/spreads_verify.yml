@@ -1,0 +1,48 @@
+name: Spreads de debêntures (verificação)
+
+# Confirma que a captura diária (spreads_daily.yml, 21h BRT) realmente
+# trouxe o dado mais recente -- pedido do Allan (27/07/2026): "podemos
+# programar uma verificação pra ver se foi atualizado mesmo". Roda
+# scripts/verify_spreads_updated.py, que pergunta pra própria Anbima qual
+# o dia mais recente publicado e compara com o que está no banco -- se a
+# captura ficou pra trás, esse workflow FALHA de propósito, o que faz o
+# GitHub mandar e-mail de notificação de falha automaticamente (sem
+# precisar de nenhuma integração nova).
+#
+# Agendado 1h DEPOIS da captura (22h BRT, não 21h junto) -- dá uma folga
+# pro caso da Anbima publicar um pouco atrasada, em vez de gerar alarme
+# falso todo dia em que a publicação atrasar só alguns minutos.
+#
+# 22h BRT = 01h UTC (Brasil sem horário de verão desde 2019, fuso fixo -3).
+on:
+  schedule:
+    - cron: "0 1 * * *"
+  workflow_dispatch: {}
+
+concurrency:
+  group: spreads_verify
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Baixar o codigo
+        uses: actions/checkout@v4
+
+      - name: Preparar Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Instalar dependencias
+        run: pip install -r requirements.txt
+
+      - name: Verificar se a base de spreads esta atualizada
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          ANBIMA_CLIENT_ID: ${{ secrets.ANBIMA_CLIENT_ID }}
+          ANBIMA_CLIENT_SECRET: ${{ secrets.ANBIMA_CLIENT_SECRET }}
+        run: python -m scripts.verify_spreads_updated

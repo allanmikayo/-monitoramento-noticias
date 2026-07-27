@@ -3,26 +3,34 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>{% block title %}Monitoramento de Notícias{% endblock %} — Crédito Privado</title>
+  <title>{% block title %}Hub Credit Research{% endblock %} — IBBA</title>
   <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
-  {% if user %}
+  {# Header sempre visível (27/07/2026): Notícias e Spreads viraram
+     públicas -- login deixou de ser porta de entrada obrigatória e virou
+     uma opção aqui no canto superior direito ("Entrar"), só pra quem
+     precisa das abas restritas. Comentário Jinja (não HTML) de propósito
+     -- não deve vazar pro HTML servido pro público. #}
   <header class="topbar">
     <div class="topbar-inner">
-      <a class="brand" href="/">Monitoramento de Notícias</a>
+      <a class="brand" href="/">Hub Credit Research</a>
       <nav>
         <a href="/">Notícias</a>
-        <a href="/fontes">Fontes &amp; Empresas</a>
-        {% if user.role == 'admin' %}<a href="/admin">Administração</a>{% endif %}
+        <a href="/spreads">Spreads</a>
+        {% if user %}<a href="/fontes">Fontes &amp; Empresas</a>{% endif %}
+        {% if user and user.role == 'admin' %}<a href="/admin">Administração</a>{% endif %}
       </nav>
       <div class="user-box">
+        {% if user %}
         <a href="/minha-conta" class="btn-link">{{ user.name }}</a>
         <a href="/logout" class="btn-link">Sair</a>
+        {% else %}
+        <a href="/login" class="btn-link">Entrar</a>
+        {% endif %}
       </div>
     </div>
   </header>
-  {% endif %}
   <main class="container">
     {% block content %}{% endblock %}
   </main>

@@ -16,3 +16,5 @@ openpyxl>=3.1
 apscheduler>=3.10
 python-dotenv>=1.0
 playwright>=1.40
+pdfplumber>=0.11  # extrai texto de PDF -- usado pelo scripts/mapear_ratings_2026.py (S&P e Moody's publicam o detalhe da acao de rating so em PDF)
+pandas>=2.0  # monta a planilha final -- usado pelo scripts/mapear_ratings_2026.py

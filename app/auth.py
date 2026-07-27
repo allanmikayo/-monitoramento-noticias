@@ -1,6 +1,8 @@
-"""Autenticação local: hash de senha, cadastro com confirmação por e-mail,
-sessões com expiração. Schema pensado para migrar depois para o Supabase
-Auth sem mudar a interface usada pelo app.py (ver CLAUDE.md)."""
+"""Autenticação local: hash de senha, cadastro com aprovação manual do
+admin (ver `register_user`, mudou 27/07/2026 -- não é mais confirmação
+por e-mail), sessões com expiração. Schema pensado para migrar depois
+para o Supabase Auth sem mudar a interface usada pelo app.py (ver
+CLAUDE.md)."""
 from __future__ import annotations
 
 import uuid
@@ -10,10 +12,8 @@ import bcrypt
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from . import config, email_utils
-from .models import AppSetting, EmailToken, Session as SessionModel, User
-
-CONFIRM_TOKEN_TTL_HOURS = 48
+from . import config
+from .models import AppSetting, Session as SessionModel, User
 
 
 def hash_password(password: str) -> str:
@@ -54,6 +54,21 @@ class AuthError(Exception):
 
 
 def register_user(db: Session, *, name: str, email: str, password: str) -> User:
+    """Cadastro de auto-atendimento (`/cadastro`).
+
+    MUDOU (27/07/2026, pedido do Allan): Notícias e Spreads viraram
+    públicas -- login passou a ser opcional, só necessário pra Fontes &
+    Empresas e Administração. Junto com isso, ele tirou o fluxo de
+    confirmação por e-mail (nunca dependia de e-mail transacional de
+    verdade rodando em produção) e trocou por APROVAÇÃO MANUAL: quem se
+    cadastra sozinho nasce com `active=False` (mesmo campo que o admin já
+    usava pra desativar usuário -- reaproveitado aqui como "pendente de
+    aprovação"/"aprovado", ver `admin_toggle_active` em app.py, que já
+    tinha o botão pronto no painel Administração) e só consegue entrar
+    depois que o Allan ativa a conta pela aba Administração.
+    `email_confirmed` fica sempre `True` (o campo continua existindo no
+    schema só por compatibilidade com o desenho de migração pro Supabase
+    Auth -- ver docstring do módulo -- mas não bloqueia mais nada aqui)."""
     email = email.strip().lower()
     if not name.strip() or not email or len(password) < 6:
         raise AuthError("Preencha nome, e-mail e uma senha com pelo menos 6 caracteres.")
@@ -67,42 +82,10 @@ def register_user(db: Session, *, name: str, email: str, password: str) -> User:
         email=email,
         password_hash=hash_password(password),
         role="user",
-        email_confirmed=False,
-        active=True,
+        email_confirmed=True,
+        active=False,  # pendente de aprovação -- Allan ativa em /admin
     )
     db.add(user)
-    db.flush()
-
-    token = EmailToken(
-        user_id=user.id,
-        token=uuid.uuid4().hex,
-        purpose="confirm_email",
-        expires_at=datetime.now(timezone.utc) + timedelta(hours=CONFIRM_TOKEN_TTL_HOURS),
-    )
-    db.add(token)
-    db.commit()
-
-    email_utils.send_confirmation_email(user.email, user.name, token.token)
-    return user
-
-
-def confirm_email(db: Session, token_str: str) -> User | None:
-    token = db.scalar(
-        select(EmailToken).where(
-            EmailToken.token == token_str,
-            EmailToken.purpose == "confirm_email",
-        )
-    )
-    if token is None or token.used_at is not None:
-        return None
-    if token.expires_at.replace(tzinfo=timezone.utc) < datetime.now(timezone.utc):
-        return None
-
-    user = db.get(User, token.user_id)
-    if user is None:
-        return None
-    user.email_confirmed = True
-    token.used_at = datetime.now(timezone.utc)
     db.commit()
     return user
 
@@ -113,9 +96,7 @@ def authenticate(db: Session, email: str, password: str) -> User:
     if user is None or not verify_password(password, user.password_hash):
         raise AuthError("E-mail ou senha inválidos.")
     if not user.active:
-        raise AuthError("Sua conta foi desativada. Fale com o administrador.")
-    if not user.email_confirmed:
-        raise AuthError("Confirme seu e-mail antes de entrar (verifique sua caixa de entrada).")
+        raise AuthError("Cadastro pendente de aprovação (ou desativado) — fale com o administrador.")
     return user
 
 

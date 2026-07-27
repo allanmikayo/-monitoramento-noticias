@@ -17,9 +17,11 @@ from sqlalchemy.orm import Session, selectinload
 
 from . import auth, config, refresh_state, store
 from .db import Base, SessionLocal, engine, get_db, run_migrations
-from .models import Company, RunLog, Sector, SectorKeyword, Session as SessionModel, Source, User
+from .models import AppSetting, Company, RunLog, Sector, SectorKeyword, Session as SessionModel, Source, User
 from .pipeline import run_pipeline
 from .scheduler import start_scheduler, trigger_now
+from .spreads import queries as spreads_queries
+from .spreads_routes import register_spreads_routes
 from .taxonomy import build_index
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -124,6 +126,19 @@ def require_admin(user: User = Depends(require_user)) -> User:
     return user
 
 
+# Módulo "Spreads" (Hub Credit Research, 23/07/2026) -- registrado aqui (não
+# via decorator direto) pra reusar a mesma dependência de app.py sem criar
+# import circular entre app.py e spreads_routes.py. MUDOU (27/07/2026):
+# passava `require_user` (toda a aba Spreads exigia login); agora passa
+# `current_user` (opcional) -- Allan pediu que Notícias e Spreads virassem
+# públicas, só Fontes & Empresas e Administração continuam atrás de login
+# (ver `require_user`/`require_admin` nas rotas correspondentes abaixo).
+# Os handlers em spreads_routes.py só usam esse `user` como parâmetro de
+# dependência (nunca leem `user.algumacoisa`), então aceitar `None` aqui é
+# seguro -- conferido antes de trocar.
+app.include_router(register_spreads_routes(current_user))
+
+
 @app.exception_handler(HTTPException)
 async def _redirect_on_303(request: Request, exc: HTTPException):
     if exc.status_code == 303 and "Location" in (exc.headers or {}):
@@ -136,8 +151,11 @@ async def _redirect_on_303(request: Request, exc: HTTPException):
 # ---------------------------------------------------------------------------
 
 @app.get("/login", response_class=HTMLResponse)
-def login_form(request: Request, erro: str | None = None, msg: str | None = None):
-    return templates.TemplateResponse(request, "login.html", {"erro": erro, "msg": msg})
+def login_form(
+    request: Request, erro: str | None = None, msg: str | None = None,
+    user: User | None = Depends(current_user),
+):
+    return templates.TemplateResponse(request, "login.html", {"erro": erro, "msg": msg, "user": user})
 
 
 @app.post("/login")
@@ -175,8 +193,11 @@ def logout(response: RedirectResponse, session_token: str | None = Cookie(defaul
 
 
 @app.get("/cadastro", response_class=HTMLResponse)
-def signup_form(request: Request, erro: str | None = None, msg: str | None = None):
-    return templates.TemplateResponse(request, "signup.html", {"erro": erro, "msg": msg})
+def signup_form(
+    request: Request, erro: str | None = None, msg: str | None = None,
+    user: User | None = Depends(current_user),
+):
+    return templates.TemplateResponse(request, "signup.html", {"erro": erro, "msg": msg, "user": user})
 
 
 @app.post("/cadastro")
@@ -190,16 +211,11 @@ def signup_submit(
         auth.register_user(db, name=name, email=email, password=password)
     except auth.AuthError as e:
         return RedirectResponse(url=f"/cadastro?erro={e}", status_code=303)
-    msg = "Cadastro criado! Confira seu e-mail para confirmar o acesso."
+    # MUDOU (27/07/2026): sem confirmação por e-mail -- cadastro fica
+    # pendente até o Allan aprovar manualmente na aba Administração (ver
+    # docstring de auth.register_user).
+    msg = "Cadastro enviado! Sua conta fica pendente até o administrador aprovar o acesso."
     return RedirectResponse(url=f"/login?msg={msg}", status_code=303)
-
-
-@app.get("/confirmar-email")
-def confirm_email_route(token: str, db: Session = Depends(get_db)):
-    user = auth.confirm_email(db, token)
-    if user is None:
-        return RedirectResponse(url="/login?erro=Link+de+confirmação+inválido+ou+expirado.", status_code=303)
-    return RedirectResponse(url="/login?msg=E-mail+confirmado!+Você+já+pode+entrar.", status_code=303)
 
 
 # ---------------------------------------------------------------------------
@@ -207,7 +223,7 @@ def confirm_email_route(token: str, db: Session = Depends(get_db)):
 # ---------------------------------------------------------------------------
 
 @app.get("/", response_class=HTMLResponse)
-def dashboard(request: Request, user: User = Depends(require_user), db: Session = Depends(get_db)):
+def dashboard(request: Request, user: User | None = Depends(current_user), db: Session = Depends(get_db)):
     import json as _json
     sectors = db.query(Sector).order_by(Sector.name).all()
     companies = db.query(Company).filter(Company.active.is_(True)).order_by(Company.name).all()
@@ -236,7 +252,7 @@ def api_articles(
     source_domain: str | None = None,
     article_type: str | None = None,
     coverage: str = "minha",
-    user: User = Depends(require_user),
+    user: User | None = Depends(current_user),
     db: Session = Depends(get_db),
 ):
     hours = config.WINDOW_PRESETS.get(window, 24)
@@ -284,16 +300,22 @@ def _run_pipeline_in_background():
         refresh_state.fail(f"{type(e).__name__}: {e}")
 
 
-def _dispatch_github_workflow() -> tuple[bool, str | None]:
-    """Aciona o workflow do GitHub Actions (`scrape.yml`) via
-    `workflow_dispatch` -- usado no lugar de rodar o pipeline neste
-    processo quando `config.CLOUD_MODE` está ativo (ver `_on_startup`).
-    Retorna (sucesso, mensagem_de_erro)."""
+def _dispatch_github_workflow(workflow_file: str = None) -> tuple[bool, str | None]:
+    """Aciona um workflow do GitHub Actions via `workflow_dispatch` --
+    usado no lugar de rodar o pipeline neste processo quando
+    `config.CLOUD_MODE` está ativo (ver `_on_startup`). Generalizado
+    (24/07/2026) pra aceitar QUALQUER arquivo de workflow, não só
+    `scrape.yml` -- os módulos de spreads/negócio a negócio da B3 ganharam
+    workflows próprios (`spreads_daily.yml`, `b3_trades.yml`), ver
+    `/api/cron-trigger` e CLAUDE.md. Sem argumento, mantém o comportamento
+    antigo (dispara `config.GITHUB_WORKFLOW_FILE`, usado pelo botão
+    "Forçar atualização" de notícias). Retorna (sucesso, mensagem_de_erro)."""
     import requests
 
+    workflow_file = workflow_file or config.GITHUB_WORKFLOW_FILE
     url = (
         f"https://api.github.com/repos/{config.GITHUB_REPO}/actions/"
-        f"workflows/{config.GITHUB_WORKFLOW_FILE}/dispatches"
+        f"workflows/{workflow_file}/dispatches"
     )
     try:
         resp = requests.post(
@@ -334,31 +356,71 @@ def api_force_refresh(user: User = Depends(require_user), db: Session = Depends(
     return {"already_running": False, **refresh_state.snapshot()}
 
 
+# Workflows que o /api/cron-trigger sabe acionar, por `job` (24/07/2026 --
+# antes só existia a varredura de notícias). `news` mantém o nome do
+# arquivo configurável (`config.GITHUB_WORKFLOW_FILE`, já existia);
+# `b3_trades` é fixo porque é novo e não precisa da mesma flexibilidade.
+_CRON_JOBS = {
+    "news": None,  # None = usa config.GITHUB_WORKFLOW_FILE (default do _dispatch_github_workflow)
+    "b3_trades": "b3_trades.yml",
+}
+
+# Janela de pregão de renda fixa da B3 pra debêntures/CRI/CRA (10h-16h,
+# com folga até 18h pra cobrir negócios de Registro que aparecem um pouco
+# depois do fechamento -- ver app/spreads/b3_trades.py). Usado só pra
+# evitar acionar o workflow de negócio a negócio fora de hora se o cron
+# externo (cron-job.org) disparar 24/7 por engano -- fora da janela o
+# `/api/cron-trigger?job=b3_trades` simplesmente não faz nada (200, sem
+# acionar o GitHub Actions), não é erro. Brasil não tem mais horário de
+# verão desde 2019, então `_BRT` (fuso fixo, já usado no resto do app)
+# cobre isso sem sustos.
+_B3_MARKET_OPEN_HOUR = 9
+_B3_MARKET_CLOSE_HOUR = 18
+
+
+def _b3_market_aberto_agora() -> bool:
+    agora = datetime.now(_BRT)
+    if agora.weekday() >= 5:  # sábado/domingo
+        return False
+    return _B3_MARKET_OPEN_HOUR <= agora.hour < _B3_MARKET_CLOSE_HOUR
+
+
 @app.post("/api/cron-trigger")
-def api_cron_trigger(x_cron_secret: str | None = Header(default=None, alias="X-Cron-Secret")):
+def api_cron_trigger(
+    job: str = "news",
+    x_cron_secret: str | None = Header(default=None, alias="X-Cron-Secret"),
+):
     # Endpoint SEM login -- pensado pra ser chamado por um serviço externo
     # de cron gratuito (cron-job.org), já que o `schedule:` do GitHub
     # Actions não é pontual (17/07/2026: Allan reparou que não batia certo
     # a cada 5 min -- é limitação documentada do próprio GitHub, não bug
     # daqui). Protegido por um segredo simples no header (não por sessão de
-    # usuário, porque quem chama não é um navegador logado).
+    # usuário, porque quem chama não é um navegador logado). Ampliado
+    # (24/07/2026) pra aceitar `?job=b3_trades` além do padrão `news` --
+    # cada `job` aciona um workflow diferente, ver `_CRON_JOBS`.
     if not config.CRON_SECRET or x_cron_secret != config.CRON_SECRET:
         raise HTTPException(status_code=403, detail="Segredo inválido ou não configurado (CRON_SECRET)")
     if not config.CLOUD_MODE:
         raise HTTPException(status_code=400, detail="Só funciona em modo nuvem (GITHUB_TOKEN/GITHUB_REPO)")
-    ok, err = _dispatch_github_workflow()
+    if job not in _CRON_JOBS:
+        raise HTTPException(status_code=400, detail=f"job inválido -- use um de {list(_CRON_JOBS)}")
+
+    if job == "b3_trades" and not _b3_market_aberto_agora():
+        return {"dispatched": False, "reason": "fora do horário de pregão (9h-18h, seg-sex)"}
+
+    ok, err = _dispatch_github_workflow(_CRON_JOBS[job])
     if not ok:
         raise HTTPException(status_code=502, detail=f"Falha ao acionar o GitHub Actions: {err}")
     return {"dispatched": True}
 
 
 @app.get("/api/refresh-status")
-def api_refresh_status(user: User = Depends(require_user)):
+def api_refresh_status(user: User | None = Depends(current_user)):
     return refresh_state.snapshot()
 
 
 @app.get("/api/status")
-def api_status(user: User = Depends(require_user), db: Session = Depends(get_db)):
+def api_status(user: User | None = Depends(current_user), db: Session = Depends(get_db)):
     last_run = db.query(RunLog).order_by(RunLog.id.desc()).first()
     if not last_run:
         return {"last_run": None}
@@ -528,10 +590,20 @@ def admin_page(request: Request, user: User = Depends(require_admin), db: Sessio
         .all()
     )
     ttl = auth.get_setting_int(db, "session_ttl_minutes", config.DEFAULT_SESSION_TTL_MINUTES)
+    # Lista de tickers excluídos da conta de spread (pedido do Allan,
+    # 27/07/2026) -- guardada em AppSetting como texto cru, separado por
+    # ";" (ver app/spreads/queries.py::tickers_excluidos_spread, que
+    # normaliza na leitura -- não precisa normalizar aqui, só mostrar de
+    # volta pro Allan exatamente o que ele digitou da última vez).
+    tickers_excluidos_row = db.get(AppSetting, spreads_queries.TICKERS_EXCLUIDOS_SETTING_KEY)
+    spread_tickers_excluidos = tickers_excluidos_row.value if tickers_excluidos_row else ""
     return templates.TemplateResponse(
         request,
         "admin.html",
-        {"user": user, "users": users, "sessions": sessions, "session_ttl_minutes": ttl, "now": now},
+        {
+            "user": user, "users": users, "sessions": sessions, "session_ttl_minutes": ttl, "now": now,
+            "spread_tickers_excluidos": spread_tickers_excluidos,
+        },
     )
 
 
@@ -542,7 +614,12 @@ def admin_create_user(
 ):
     try:
         new_user = auth.register_user(db, name=name, email=email, password=password)
-        new_user.email_confirmed = True  # criado pelo admin — não precisa confirmar por e-mail
+        # `register_user` agora nasce com active=False por padrão (pendente
+        # de aprovação -- pedido do Allan, 27/07/2026, ver docstring da
+        # função) pensando no cadastro de auto-atendimento em /cadastro.
+        # Criado AQUI pelo próprio admin já é "aprovado" na hora -- não faz
+        # sentido o Allan aprovar uma conta que ele mesmo acabou de criar.
+        new_user.active = True
         new_user.role = role if role in ("admin", "user") else "user"
         db.commit()
     except auth.AuthError:
@@ -591,5 +668,21 @@ def admin_revoke_session(session_id: str, user: User = Depends(require_admin), d
 @app.post("/admin/configuracoes")
 def admin_update_settings(session_ttl_minutes: int = Form(...), user: User = Depends(require_admin), db: Session = Depends(get_db)):
     auth.set_setting(db, "session_ttl_minutes", str(max(5, session_ttl_minutes)))
+    db.commit()
+    return RedirectResponse(url="/admin", status_code=303)
+
+
+# Lista de tickers excluídos manualmente da conta de spread (pedido do
+# Allan, 27/07/2026) -- rota separada da de cima (propósito diferente,
+# formulário próprio em templates/admin.html) pra não misturar validação
+# de um campo numérico com um campo de texto livre. `queries.py` lê essa
+# mesma chave (`tickers_excluidos_spread`) e normaliza cada ticker na
+# leitura -- salva aqui exatamente o texto cru que o Allan digitou.
+@app.post("/admin/configuracoes/spread-tickers-excluidos")
+def admin_update_spread_tickers_excluidos(
+    spread_tickers_excluidos: str = Form(""),
+    user: User = Depends(require_admin), db: Session = Depends(get_db),
+):
+    auth.set_setting(db, spreads_queries.TICKERS_EXCLUIDOS_SETTING_KEY, spread_tickers_excluidos.strip())
     db.commit()
     return RedirectResponse(url="/admin", status_code=303)
