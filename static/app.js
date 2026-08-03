@@ -11,10 +11,7 @@
     console.error("Falha ao carregar lista de empresas (companies-data):", e);
     companiesData = [];
   }
-  const sectorSelect = document.getElementById("filter-sector");
-  const companySelect = document.getElementById("filter-company");
   const typeSelect = document.getElementById("filter-type");
-  const coverageSelect = document.getElementById("filter-coverage");
   const winButtons = document.querySelectorAll(".win-btn");
   const listEl = document.getElementById("article-list");
   const statusEl = document.getElementById("status-text");
@@ -50,19 +47,123 @@
   }
   let pollTimer = null;
 
-  function populateCompanies() {
-    const sectorId = sectorSelect.value;
-    companySelect.innerHTML = '<option value="">Todas as empresas</option>';
-    companiesData
-      .filter((c) => !sectorId || String(c.sector_id) === sectorId)
-      .sort((a, b) => a.name.localeCompare(b.name))
-      .forEach((c) => {
-        const opt = document.createElement("option");
-        opt.value = c.id;
-        opt.textContent = c.name;
-        companySelect.appendChild(opt);
-      });
+  // --------------------------------------------------------------------
+  // Multi-select (setor/empresa/cobertura) -- pedido do Allan (03/08/2026):
+  // poder marcar mais de uma opção em cada um desses 3 filtros. Select
+  // nativo não faz isso de um jeito usável (Ctrl+clique não é óbvio pra
+  // ninguém), então cada filtro virou um botão que abre um painel
+  // flutuante de checkboxes (HTML em templates/dashboard.html, CSS em
+  // static/style.css `.ms*`). `filter-type` continua select comum de
+  // propósito -- não foi pedido multi-seleção nele.
+  // --------------------------------------------------------------------
+  const selectedSectors = new Set();
+  const selectedCompanies = new Set();
+  const selectedCoverage = new Set(["minha"]); // mesmo padrão de sempre
+
+  function closeAllPanels(except) {
+    document.querySelectorAll(".ms-panel").forEach((p) => {
+      if (p !== except) p.hidden = true;
+    });
+    document.querySelectorAll(".ms-btn").forEach((b) => {
+      if (b !== except) b.classList.remove("ms-open");
+    });
   }
+
+  function updateMsButtonLabel(btn, prefix, selectedSet, allLabel, nameLookup) {
+    const n = selectedSet.size;
+    if (n === 0) {
+      btn.textContent = `${prefix}: ${allLabel}`;
+    } else if (n === 1) {
+      const only = [...selectedSet][0];
+      btn.textContent = `${prefix}: ${nameLookup ? nameLookup(only) : only}`;
+    } else {
+      btn.textContent = `${prefix}: ${n} selecionados`;
+    }
+  }
+
+  function populateCompanies() {
+    const container = document.getElementById("ms-company-options");
+    const searchInput = document.getElementById("ms-company-search");
+    const filtro = (searchInput.value || "").trim().toLowerCase();
+
+    // Trocar o setor selecionado invalida empresas que não pertencem mais
+    // a nenhum setor marcado -- mesmo comportamento de antes (o <select>
+    // nativo resetava sozinho ao trocar de sector porque a lista de
+    // <option> era reconstruída do zero).
+    if (selectedSectors.size > 0) {
+      for (const cid of [...selectedCompanies]) {
+        const c = companiesData.find((x) => String(x.id) === cid);
+        if (!c || !selectedSectors.has(String(c.sector_id))) selectedCompanies.delete(cid);
+      }
+    }
+
+    const visiveis = companiesData
+      .filter((c) => selectedSectors.size === 0 || selectedSectors.has(String(c.sector_id)))
+      .filter((c) => !filtro || c.name.toLowerCase().includes(filtro))
+      .sort((a, b) => a.name.localeCompare(b.name));
+
+    container.innerHTML = "";
+    if (visiveis.length === 0) {
+      container.innerHTML = '<div class="ms-empty">Nenhuma empresa encontrada.</div>';
+    } else {
+      visiveis.forEach((c) => {
+        const label = document.createElement("label");
+        label.className = "ms-option";
+        const idStr = String(c.id);
+        label.innerHTML = `<input type="checkbox" class="ms-check" data-ms="company" value="${idStr}" ${selectedCompanies.has(idStr) ? "checked" : ""}> ${c.name}`;
+        container.appendChild(label);
+      });
+    }
+    updateMsButtonLabel(
+      document.getElementById("ms-company-btn"), "Empresa", selectedCompanies, "Todas",
+      (id) => (companiesData.find((c) => String(c.id) === id) || {}).name || id
+    );
+  }
+
+  function initMultiSelect({ msId, btnId, panelId, prefix, allLabel, selectedSet, nameLookup, onChange }) {
+    const wrap = document.getElementById(msId);
+    const btn = document.getElementById(btnId);
+    const panel = document.getElementById(panelId);
+
+    btn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const willOpen = panel.hidden;
+      closeAllPanels(willOpen ? panel : null);
+      panel.hidden = !willOpen;
+      btn.classList.toggle("ms-open", willOpen);
+      if (willOpen) {
+        const search = panel.querySelector('input[type="search"]');
+        if (search) search.focus();
+      }
+    });
+    panel.addEventListener("click", (e) => e.stopPropagation());
+
+    panel.addEventListener("change", (e) => {
+      const cb = e.target;
+      if (!cb.matches('input[type="checkbox"]')) return;
+      if (cb.checked) selectedSet.add(cb.value);
+      else selectedSet.delete(cb.value);
+      updateMsButtonLabel(btn, prefix, selectedSet, allLabel, nameLookup);
+      if (onChange) onChange();
+    });
+
+    const clearBtn = panel.querySelector(`.ms-clear[data-clear-target="${msId}"]`);
+    if (clearBtn) {
+      clearBtn.addEventListener("click", () => {
+        selectedSet.clear();
+        panel.querySelectorAll('input[type="checkbox"]').forEach((cb) => (cb.checked = false));
+        updateMsButtonLabel(btn, prefix, selectedSet, allLabel, nameLookup);
+        if (onChange) onChange();
+      });
+    }
+
+    const search = panel.querySelector('input[type="search"]');
+    if (search) search.addEventListener("input", () => populateCompanies());
+
+    return { wrap, btn, panel };
+  }
+
+  document.addEventListener("click", () => closeAllPanels(null));
 
   function typeLabel(t) {
     return {
@@ -164,9 +265,16 @@
   }
 
   async function loadArticles() {
-    const params = new URLSearchParams({ window: currentWindow, coverage: coverageSelect.value });
-    if (sectorSelect.value) params.set("sector_id", sectorSelect.value);
-    if (companySelect.value) params.set("company_id", companySelect.value);
+    const params = new URLSearchParams({ window: currentWindow });
+    // Setor/empresa/cobertura mandam um par `chave=valor` por item
+    // selecionado (URLSearchParams.append, não .set) -- o backend
+    // (`Query(default=[...])` em app.py) junta parâmetros repetidos numa
+    // lista sozinho. Nenhum selecionado = comportamento de sempre (sem
+    // filtro de setor/empresa; cobertura cai no default "minha" do backend
+    // quando a lista vem vazia).
+    selectedSectors.forEach((id) => params.append("sector_id", id));
+    selectedCompanies.forEach((id) => params.append("company_id", id));
+    selectedCoverage.forEach((v) => params.append("coverage", v));
     if (typeSelect.value) params.set("article_type", typeSelect.value);
 
     statusEl.textContent = "Atualizando…";
@@ -264,13 +372,47 @@
     });
   });
 
-  sectorSelect.addEventListener("change", () => {
-    populateCompanies();
-    loadArticles();
+  initMultiSelect({
+    msId: "ms-sector", btnId: "ms-sector-btn", panelId: "ms-sector-panel",
+    prefix: "Setor", allLabel: "Todos", selectedSet: selectedSectors,
+    nameLookup: (id) => {
+      const cb = document.querySelector(`#ms-sector-panel input[value="${id}"]`);
+      return cb ? cb.parentElement.textContent.trim() : id;
+    },
+    onChange: () => { populateCompanies(); loadArticles(); },
   });
-  companySelect.addEventListener("change", loadArticles);
+
+  initMultiSelect({
+    msId: "ms-company", btnId: "ms-company-btn", panelId: "ms-company-panel",
+    prefix: "Empresa", allLabel: "Todas", selectedSet: selectedCompanies,
+    nameLookup: (id) => (companiesData.find((c) => String(c.id) === id) || {}).name || id,
+    onChange: () => loadArticles(),
+  });
+
+  const coverageNames = { minha: "Minha cobertura", todos: "Todos" };
+  initMultiSelect({
+    msId: "ms-coverage", btnId: "ms-coverage-btn", panelId: "ms-coverage-panel",
+    prefix: "Cobertura", allLabel: "Minha cobertura", selectedSet: selectedCoverage,
+    nameLookup: (v) => coverageNames[v] || v,
+    onChange: () => {
+      // Nunca deixa ficar sem NENHUMA opção de cobertura marcada -- volta
+      // pro padrão "minha" em vez de mandar uma lista vazia (o backend até
+      // trataria vazio como "minha" sozinho, mas o botão ficaria mostrando
+      // rótulo errado se nada estivesse marcado de verdade).
+      if (selectedCoverage.size === 0) {
+        selectedCoverage.add("minha");
+        const cb = document.querySelector('#ms-coverage-panel input[value="minha"]');
+        if (cb) cb.checked = true;
+        updateMsButtonLabel(
+          document.getElementById("ms-coverage-btn"), "Cobertura", selectedCoverage,
+          "Minha cobertura", (v) => coverageNames[v] || v
+        );
+      }
+      loadArticles();
+    },
+  });
+
   typeSelect.addEventListener("change", loadArticles);
-  coverageSelect.addEventListener("change", loadArticles);
   if (refreshBtn) refreshBtn.addEventListener("click", forceRefresh);
 
   setInterval(() => {

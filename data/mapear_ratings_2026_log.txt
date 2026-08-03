@@ -1,0 +1,831 @@
+[2026-07-23 15:58:22] 
+############################################################
+[2026-07-23 15:58:22] # NOVA RODADA -- 2026-07-23 15:58:22 -- args: {'agencia': 'all', 'inicio': '2026-01-01', 'fim': '2026-07-23', 'limite': None, 'so_listagem': False, 'reprocessar': False, 'refazer_sem_texto': False, 'saida': None}
+[2026-07-23 15:58:22] ############################################################
+[2026-07-23 15:58:22] ============================================================
+[2026-07-23 15:58:22] Checagem inicial (preflight) -- rede e navegador
+[2026-07-23 15:58:22] ============================================================
+[2026-07-23 15:58:26]   rede -> S&P Global Ratings Brasil: OK (status 200)
+[2026-07-23 15:58:30]   rede -> Moody's Local Brasil: OK (status 200)
+[2026-07-23 15:58:34]   rede -> Fitch Ratings: OK (status 200)
+[2026-07-23 15:58:37]   navegador -> Chrome real (usado no fallback da S&P): OK
+[2026-07-23 15:58:39]   navegador -> Chromium: OK
+[2026-07-23 15:58:39] ============================================================
+
+[2026-07-23 15:58:42] 
+=== S&P Global Ratings Brasil: coletando listagem (2026-01-01 a 2026-07-23) ===
+[2026-07-23 15:59:14]   140 ações encontradas no período.
+[2026-07-23 15:59:14]   0 já estavam no checkpoint (reaproveitadas) -- 140 vão ser buscadas agora.
+[2026-07-23 15:59:14]   [1/140] Perspectiva do rating de Alagoas alterada para negativa; rating ‘brAA+
+[2026-07-23 15:59:32]   [2/140] | decorrido 18s, falta ~21min01s S&P National Ratings rebaixa rating da SLC Agrícola para ‘brAA-’ e de 
+[2026-07-23 15:59:56]   [3/140] | decorrido 42s, falta ~32min39s Ratings da 1ª série de cotas mezanino A e 1ª série de cotas mezanino B
+[2026-07-23 16:00:17]   [4/140] | decorrido 1min03s, falta ~35min58s Rating ‘brAAA’ atribuído à 11ª emissão de debêntures da AXIA Energia S
+[2026-07-23 16:00:28]   [5/140] | decorrido 1min14s, falta ~33min34s Rating ‘brAA (sf)’ atribuído à 26ª série de cotas seniores do ASA FIC 
+[2026-07-23 16:00:39]   [6/140] | decorrido 1min25s, falta ~31min52s Rating ‘brAA (sf)’ atribuído à 30ª série de cotas seniores do ASA II F
+[2026-07-23 16:00:50]   [7/140] | decorrido 1min36s, falta ~30min35s S&P National Ratings atribui ratings ‘brAA (sf)’ às cotas seniores, ‘b
+[2026-07-23 16:00:58]   [8/140] | decorrido 1min44s, falta ~28min50s Ratings da BRK retirados do CreditWatch negativo e rebaixados para ‘br
+[2026-07-23 16:01:07]   [9/140] | decorrido 1min53s, falta ~27min25s Rating preliminar ‘brAA- (sf)’ atribuído à proposta de emissão da 7ª s
+[2026-07-23 16:01:24]   [10/140] | decorrido 2min10s, falta ~28min14s Ratings ‘brAAA’ atribuídos às debêntures senior unsecured do grupo Ene
+[2026-07-23 16:01:38]   [11/140] | decorrido 2min24s, falta ~28min13s Ratings ‘brAAA’ atribuídos às debêntures senior unsecured do grupo Ene
+[2026-07-23 16:01:46]   [12/140] | decorrido 2min32s, falta ~27min06s Ratings da Rumo removidos do CreditWatch negativo e rebaixados para ‘b
+[2026-07-23 16:01:57]   [13/140] | decorrido 2min43s, falta ~26min38s Perspectiva do rating da Vitru alterada para positiva  por contínuo cr
+[2026-07-23 16:02:08]   [14/140] | decorrido 2min54s, falta ~26min12s Ratings ‘brAAA’ da Eneva reafirmados apesar de métricas de crédito mai
+[2026-07-23 16:02:16]   [15/140] | decorrido 3min02s, falta ~25min22s Rating preliminar ‘brAA- (sf)’ atribuído às 1ª, 2ª e 3ª séries da 453ª
+[2026-07-23 16:02:27]   [16/140] | decorrido 3min13s, falta ~25min01s Rating ‘brAAA’ atribuído à Itapoá e às suas 4ª e 5ª emissões de debênt
+[2026-07-23 16:02:38]   [17/140] | decorrido 3min24s, falta ~24min40s Rating preliminar ‘brAA- (sf)’ atribuído à 4ª série de cotas seniores 
+[2026-07-23 16:02:49]   [18/140] | decorrido 3min35s, falta ~24min23s S&P National Ratings realiza diversas ações de rating nas séries de co
+[2026-07-23 16:02:58]   [19/140] | decorrido 3min44s, falta ~23min48s Rating ‘brAAA’ de Santa Catarina reafirmado; perspectiva permanece est
+[2026-07-23 16:03:06]   [20/140] | decorrido 3min52s, falta ~23min14s Rating ‘brAA’ da Moura Dubeux reafirmado por expectativa de manutenção
+[2026-07-23 16:03:18]   [21/140] | decorrido 4min04s, falta ~23min02s Ratings ‘brA+’ da Agroterenas e ‘brA+ (sf)’ de um CRA risco Agroterena
+[2026-07-23 16:03:26]   [22/140] | decorrido 4min12s, falta ~22min34s Rating ‘brAAA’ atribuído à 9ª emissão de debêntures da AXIA Energia S.
+[2026-07-23 16:03:37]   [23/140] | decorrido 4min23s, falta ~22min22s Rating ‘brAAA’ atribuído à 10ª emissão de debêntures da AXIA Energia S
+[2026-07-23 16:03:52]   [24/140] | decorrido 4min38s, falta ~22min25s Ratings ‘brA+ (sf)’ da 15ª série de cotas seniores e ‘brBBB+ (sf)’ da 
+[2026-07-23 16:04:07]   [25/140] | decorrido 4min53s, falta ~22min27s S&P National Ratings rebaixa ratings da Braskem para ‘D’ e de um CRA r
+[2026-07-23 16:04:24]   [26/140] | decorrido 5min10s, falta ~22min43s Rating ‘brAA- (sf)’ atribuído à 1ª série da 41ª emissão de debêntures 
+[2026-07-23 16:04:33]   [27/140] | decorrido 5min19s, falta ~22min15s Rating ‘brAAA’ atribuído à 10ª emissão de debêntures da Autopista Fern
+[2026-07-23 16:04:47]   [28/140] | decorrido 5min33s, falta ~22min12s Rating ‘brCCC-’ da Chapada do Piauí I removido do CreditWatch e reafir
+[2026-07-23 16:04:55]   [29/140] | decorrido 5min41s, falta ~21min46s Rating da 1ª série de cotas seniores do Medsystems B24 FIDC rebaixado 
+[2026-07-23 16:05:03]   [30/140] | decorrido 5min49s, falta ~21min21s S&P National Ratings atribui ratings preliminares ‘brAA (sf)’ às cotas
+[2026-07-23 16:05:14]   [31/140] | decorrido 6min00s, falta ~21min07s Rating ‘brA- (sf)’ atribuído à 1ª série de cotas seniores do FIDC Erfo
+[2026-07-23 16:05:23]   [32/140] | decorrido 6min09s, falta ~20min46s Ratings ‘brAAA/brA-1+’ da AXIA Energia S.A.  reafirmados; perspectiva 
+[2026-07-23 16:05:32]   [33/140] | decorrido 6min18s, falta ~20min27s Ratings da Equatorial e subsidiárias reafirmados após aquisição de 30%
+[2026-07-23 16:05:40]   [34/140] | decorrido 6min26s, falta ~20min04s Rating ‘brAAA’ atribuído à 17ª emissão de debêntures da Iochpe-Maxion 
+[2026-07-23 16:05:54]   [35/140] | decorrido 6min40s, falta ~20min01s Ratings ‘brAAA’ da Autopista Fernão Dias  reafirmados após troca de co
+[2026-07-23 16:06:08]   [36/140] | decorrido 6min54s, falta ~19min57s Rating ‘brAA+ (sf)’ atribuído às 1ª e 2ª séries da 322ª emissão de CRI
+[2026-07-23 16:06:19]   [37/140] | decorrido 7min05s, falta ~19min44s Perspectiva do rating do Banco Daycoval alterada para positiva por ele
+[2026-07-23 16:06:30]   [38/140] | decorrido 7min16s, falta ~19min31s Ratings de emissor e de emissão da Voke rebaixados para ‘brCCC’ e ‘brC
+[2026-07-23 16:06:42]   [39/140] | decorrido 7min28s, falta ~19min21s Rating ‘brAA-’ atribuído à 8° emissão de debêntures senior unsecured d
+[2026-07-23 16:06:53]   [40/140] | decorrido 7min39s, falta ~19min08s S&P National Ratings rebaixa ratings de emissor e emissão da Tereos Aç
+[2026-07-23 16:07:02]   [41/140] | decorrido 7min48s, falta ~18min50s Ratings da Iguá Rio rebaixados para ‘brAA’ diante de ramp-up mais lent
+[2026-07-23 16:07:10]   [42/140] | decorrido 7min56s, falta ~18min30s Rating ‘brAA- (sf)’ atribuído à 3ª série de cotas seniores do FIDC Vix
+[2026-07-23 16:07:21]   [43/140] | decorrido 8min07s, falta ~18min19s S&P National Ratings atribui ratings preliminares ‘brAAA (sf)’ à 14ª s
+[2026-07-23 16:07:32]   [44/140] | decorrido 8min18s, falta ~18min07s S&P National Ratings rebaixa ratings da Vale do Tijuco para ‘brAA-’ e 
+[2026-07-23 16:07:44]   [45/140] | decorrido 8min30s, falta ~17min56s Rating do Banpará rebaixado para ‘brAA’ por piora na rentabilidade e n
+[2026-07-23 16:07:53]   [46/140] | decorrido 8min39s, falta ~17min41s S&P National Ratings atribui ratings ‘brAA (sf)’ às debêntures seniore
+[2026-07-23 16:08:04]   [47/140] | decorrido 8min50s, falta ~17min29s Ratings do BRB rebaixados para ‘brCCC+/brC’ e colocados em CreditWatch
+[2026-07-23 16:08:12]   [48/140] | decorrido 8min58s, falta ~17min12s Perspectiva do rating da Cocal alterada para estável por maior alavanc
+[2026-07-23 16:08:20]   [49/140] | decorrido 9min06s, falta ~16min55s S&P National Ratings eleva rating da Cereal para ‘brAA’ e de quatro op
+[2026-07-23 16:08:32]   [50/140] | decorrido 9min18s, falta ~16min45s Perspectiva dos ratings da Marfrig e da BRF alterada para negativa por
+[2026-07-23 16:12:32]   aviso: fallback Playwright (blob PDF) falhou (Page.goto: Timeout 45000ms exceeded.
+Call log:
+  - navigating to "https://brazil.ratings.spglobal.com/ratings/pt/regulatory/article/-/view/type/PDF/id/1328", waiting until "domcontentloaded"
+)
+[2026-07-23 16:12:35]   [51/140] | decorrido 13min21s, falta ~23min18s Rating preliminar ‘brAA- (sf)’ atribuído à 1ª série da 41ª emissão de 
+[2026-07-23 16:12:46]   [52/140] | decorrido 13min32s, falta ~22min55s Rating ‘brAAA’ atribuído à proposta da 3ª emissão de debêntures da Eco
+[2026-07-23 16:12:55]   [53/140] | decorrido 13min41s, falta ~22min28s S&P National Ratings rebaixa ratings da Usina Batatais para ‘brAA-’ e 
+[2026-07-23 16:13:12]   [54/140] | decorrido 13min58s, falta ~22min15s Rating ‘brAA- (sf)’ atribuído às cotas seniores do FIDC Ártico
+[2026-07-23 16:13:21]   [55/140] | decorrido 14min07s, falta ~21min49s Rating ‘brAAA’ atribuído à 15ª emissão de debêntures da Rodovias Integ
+[2026-07-23 16:13:35]   [56/140] | decorrido 14min21s, falta ~21min32s Rating preliminar ‘brAA-’ atribuído à 4ª emissão de debêntures propost
+[2026-07-23 16:13:44]   [57/140] | decorrido 14min30s, falta ~21min07s Ratings da Via Appia reafirmados e removidos do CreditWatch negativo; 
+[2026-07-23 16:13:59]   [58/140] | decorrido 14min45s, falta ~20min51s S&P National Ratings eleva ratings da Tenda para ‘brAA-’ e de duas ope
+[2026-07-23 16:14:07]   [59/140] | decorrido 14min53s, falta ~20min26s Rating de emissor ‘brAAA’ da Intesa reafirmado; perspectiva continua e
+[2026-07-23 16:14:25]   [60/140] | decorrido 15min11s, falta ~20min14s Ratings do Banco Paulista elevados para ‘brBBB-/brA-3’ após redirecion
+[2026-07-23 16:14:33]   [61/140] | decorrido 15min19s, falta ~19min50s S&P National Ratings atribui ratings preliminares ‘brAA (sf)’ às debên
+[2026-07-23 16:14:48]   [62/140] | decorrido 15min34s, falta ~19min35s Rating da Nexa Recursos Minerais S.A. retirado a pedido do emissor
+[2026-07-23 16:14:59]   [63/140] | decorrido 15min45s, falta ~19min15s Ratings ‘brA (sf)’ das cotas seniores e ‘brBBB (sf)’ das cotas mezanin
+[2026-07-23 16:15:16]   [64/140] | decorrido 16min02s, falta ~19min03s Ratings ‘brA+’ da MRV reafirmados por melhora operacional e expectativ
+[2026-07-23 16:15:25]   [65/140] | decorrido 16min11s, falta ~18min41s Rating ‘brBBB’ atribuído à DM SCFI; perspectiva estável
+[2026-07-23 16:15:42]   [66/140] | decorrido 16min28s, falta ~18min28s Ratings de emissor e emissão da Equipav rebaixados e removidos do Cred
+[2026-07-23 16:15:54]   [67/140] | decorrido 16min40s, falta ~18min09s Rating ‘brAA+’ atribuído à 2ª emissão de debêntures da SP Serra; ratin
+[2026-07-23 16:16:08]   [68/140] | decorrido 16min54s, falta ~17min54s Ratings de emissor e emissão da Aegea e de suas subsidiárias rebaixado
+[2026-07-23 16:16:25]   [69/140] | decorrido 17min11s, falta ~17min41s S&P National Ratings rebaixa rating da BRZ para ‘brBBB+’ e de uma oper
+[2026-07-23 16:16:34]   [70/140] | decorrido 17min20s, falta ~17min20s Rating ‘brAA (sf)’ atribuído à 29ª série de cotas seniores do ASA II F
+[2026-07-23 16:16:45]   [71/140] | decorrido 17min31s, falta ~17min01s Ratings da Via Appia e subsidiárias reafirmados e colocados em CreditW
+[2026-07-23 16:16:53]   [72/140] | decorrido 17min39s, falta ~16min40s Ratings da V.tal rebaixados para ‘brAA’ por desafios na operação de ba
+[2026-07-23 16:17:05]   [73/140] | decorrido 17min51s, falta ~16min23s Rating ‘brAAA (sf)’ atribuído à série única da 37ª emissão de debêntur
+[2026-07-23 16:17:17]   [74/140] | decorrido 18min03s, falta ~16min06s S&P National Ratings atribui ratings ‘brAAA (sf)’ à 3ª série de cotas 
+[2026-07-23 16:17:25]   [75/140] | decorrido 18min11s, falta ~15min45s Rating ‘brA+’ da 3ª emissão de debêntures da Manaus Transmissora de En
+[2026-07-23 16:17:36]   [76/140] | decorrido 18min22s, falta ~15min28s Ratings ‘brAA+’ atribuídos a emissões de debêntures senior unsecured d
+[2026-07-23 16:17:48]   [77/140] | decorrido 18min34s, falta ~15min11s S&P National Ratings rebaixa ratings de emissor e emissão da Equipav e
+[2026-07-23 16:17:56]   [78/140] | decorrido 18min42s, falta ~14min52s S&P National Ratings rebaixa ratings de emissor e emissão da Aegea e s
+[2026-07-23 16:18:07]   [79/140] | decorrido 18min53s, falta ~14min35s Rating ‘brAAA’ atribuído à 3ª emissão de debêntures da Concessionária 
+[2026-07-23 16:18:16]   [80/140] | decorrido 19min02s, falta ~14min16s Rating ‘brAA+’ atribuído à 1ª emissão de debêntures da Reuso Itaboraí 
+[2026-07-23 16:18:27]   [81/140] | decorrido 19min13s, falta ~14min00s S&P National Ratings rebaixa ratings da Agroterenas para ‘brA+’ e de o
+[2026-07-23 16:18:36]   [82/140] | decorrido 19min22s, falta ~13min41s Ratings da Brasil Tecpar colocados em CreditWatch  negativo após anúnc
+[2026-07-23 16:18:48]   [83/140] | decorrido 19min34s, falta ~13min26s S&P National Ratings rebaixa ratings da Kallas para ‘brBB+’ e de duas 
+[2026-07-23 16:19:02]   [84/140] | decorrido 19min48s, falta ~13min12s Ratings ‘brAAA’ atribuídos à ViaQuatro e à sua  proposta de 7ª emissão
+[2026-07-23 16:19:19]   [85/140] | decorrido 20min05s, falta ~13min00s Rating ‘brA+’ da Desktop colocado em CreditWatch positivo após anúncio
+[2026-07-23 16:19:31]   [86/140] | decorrido 20min17s, falta ~12min44s Rating da Ligga rebaixado para ‘SD’ por não pagamento de juros
+[2026-07-23 16:19:39]   [87/140] | decorrido 20min25s, falta ~12min26s S&P National Ratings atribui ratings ‘brAA+ (sf)’ à 13ª série de cotas
+[2026-07-23 16:19:53]   [88/140] | decorrido 20min39s, falta ~12min12s Rating da Delta Sucroenergia elevado para ‘brAAA’; perspectiva alterad
+[2026-07-23 16:20:08]   [89/140] | decorrido 20min54s, falta ~11min58s Rating da Tupy rebaixado para ‘brAA’ de ‘brAA+’ por continuidade de de
+[2026-07-23 16:20:19]   [90/140] | decorrido 21min05s, falta ~11min43s Rating do BRB rebaixado para ‘brB-’ e mantido em CreditWatch negativo 
+[2026-07-23 16:20:34]   [91/140] | decorrido 21min20s, falta ~11min29s Ratings da CSN e CSN Mineração removidos do CreditWatch negativo e reb
+[2026-07-23 16:20:42]   [92/140] | decorrido 21min28s, falta ~11min12s Rating ‘brAAA (sf)’ atribuído à 2ª série de cotas seniores do FIDC Asa
+[2026-07-23 16:20:56]   [93/140] | decorrido 21min42s, falta ~10min58s Rating ‘brAA’ atribuído à 4ª emissão de debêntures senior unsecured da
+[2026-07-23 16:21:11]   [94/140] | decorrido 21min57s, falta ~10min44s Ratings ‘brAAA’ atribuídos às novas emissões de debêntures senior unse
+[2026-07-23 16:21:33]   [95/140] | decorrido 22min19s, falta ~10min34s Rating da Oi S.A. descontinuado
+[2026-07-23 16:21:41]   [96/140] | decorrido 22min27s, falta ~10min17s Ratings da Qualicorp rebaixados para ‘brAA’ por menor escala, diversif
+[2026-07-23 16:21:50]   [97/140] | decorrido 22min36s, falta ~10min01s Rating da Raízen rebaixado para ‘SD’ após anúncio de recuperação extra
+[2026-07-23 16:22:08]   [98/140] | decorrido 22min54s, falta ~9min49s Rating ‘brAA (sf)’ atribuído à 20ª série de cotas seniores do ASA FIC 
+[2026-07-23 16:22:17]   [99/140] | decorrido 23min03s, falta ~9min32s Ratings de emissor de longo prazo e de emissão da Rumo rebaixados para
+[2026-07-23 16:22:28]   [100/140] | decorrido 23min14s, falta ~9min17s Rating ‘brAAA (sf)’ atribuído à 14ª série de cotas seniores do FIDC Ve
+[2026-07-23 16:22:39]   [101/140] | decorrido 23min25s, falta ~9min02s Rating da Raízen rebaixado para ‘brCCC-’ por iminência de reestruturaç
+[2026-07-23 16:23:19]   [102/140] | decorrido 24min05s, falta ~8min58s Rating da 1ª série de cotas seniores do Medsystems B24 FIDC rebaixado 
+[2026-07-23 16:23:38]   [103/140] | decorrido 24min24s, falta ~8min46s Rating ‘brAAA (sf)’ atribuído às 1ª, 2ª e 3ª séries da 305ª emissão de
+[2026-07-23 16:23:47]   [104/140] | decorrido 24min33s, falta ~8min30s Ratings de emissor e de emissão da Aura Minerals elevados para ‘brAA+’
+[2026-07-23 16:23:59]   [105/140] | decorrido 24min45s, falta ~8min15s Rating da Azul na Escala Nacional Brasil elevado de ‘D’ para ‘brBBB-’ 
+[2026-07-23 16:24:08]   [106/140] | decorrido 24min53s, falta ~7min59s Rating ‘brAAA’ atribuído à 9ª emissão de debêntures  senior unsecured 
+[2026-07-23 16:24:24]   [107/140] | decorrido 25min09s, falta ~7min45s Rating ‘brAAA’ atribuído à 8ª emissão de debêntures da Eletrobras (AXI
+[2026-07-23 16:24:33]   [108/140] | decorrido 25min19s, falta ~7min30s Rating preliminar ‘brAAA (sf)’ atribuído à 2ª série de  cotas seniores
+[2026-07-23 16:24:45]   [109/140] | decorrido 25min31s, falta ~7min15s Ratings ‘brAA-’ da CSN e da CSN Mineração reafirmados e colocados em C
+[2026-07-23 16:25:04]   [110/140] | decorrido 25min50s, falta ~7min02s Perspectiva do rating da Rumo alterada para negativa refletindo riscos
+[2026-07-23 16:25:19]   [111/140] | decorrido 26min05s, falta ~6min48s Rating ‘brAAA’ atribuído à 38ª emissão de debêntures da Sabesp
+[2026-07-23 16:25:31]   [112/140] | decorrido 26min17s, falta ~6min34s Rating ‘brBBB-’ da Geradora Eólica Bons Ventos da Serra I reafirmado; 
+[2026-07-23 16:25:43]   [113/140] | decorrido 26min29s, falta ~6min19s Rating ‘brAAA (sf)’ atribuído à série única da 422ª emissão de CRAs da
+[2026-07-23 16:25:54]   [114/140] | decorrido 26min40s, falta ~6min04s Rating ‘brA’ atribuído à Unicred União; perspectiva estável
+[2026-07-23 16:26:12]   [115/140] | decorrido 26min58s, falta ~5min51s Rating ‘brAA+’ atribuído à 1ª emissão de debêntures da Padova Particip
+[2026-07-23 16:27:26]   [116/140] | decorrido 28min12s, falta ~5min50s Ratings ‘brAAA’ atribuídos às novas emissões de debêntures senior unse
+[2026-07-23 16:27:45]   [117/140] | decorrido 28min31s, falta ~5min36s Rating da Raízen rebaixado para ‘brCCC+’ e colocado em CreditWatch neg
+[2026-07-23 16:27:54]   [118/140] | decorrido 28min39s, falta ~5min20s Rating ‘brAAA’ atribuído à 1ª emissão de debêntures da Rumo Malha Cent
+[2026-07-23 16:28:06]   [119/140] | decorrido 28min52s, falta ~5min05s Perspectiva do rating da Tigre alterada para estável por liquidez mais
+[2026-07-23 16:28:18]   [120/140] | decorrido 29min04s, falta ~4min50s Rating ‘brA-’ atribuído ao Stark Bank S.A. – Instituição de Pagamento;
+[2026-07-23 16:28:33]   [121/140] | decorrido 29min19s, falta ~4min36s Ratings da Belém Transmissora, INTESA e Equatorial Transmissora 1, 2, 
+[2026-07-23 16:28:41]   [122/140] | decorrido 29min27s, falta ~4min20s Rating ‘brAAA (sf)’ atribuído às 1ª e 2ª séries da 59ª emissão de CRIs
+[2026-07-23 16:28:57]   [123/140] | decorrido 29min43s, falta ~4min06s Ratings da Unifique elevados para ‘brAA’ por baixa alavancagem e sólid
+[2026-07-23 16:29:09]   [124/140] | decorrido 29min55s, falta ~3min51s Rating da Oi S.A. rebaixado para ‘D’ de ‘SD’ por não pagamento de juro
+[2026-07-23 16:29:18]   [125/140] | decorrido 30min04s, falta ~3min36s Ratings ‘brAAA (sf)’ da 1ª série de cotas seniores, ‘brAA- (sf)’ da 1ª
+[2026-07-23 16:29:30]   [126/140] | decorrido 30min16s, falta ~3min21s Rating da Ultrafértil S.A. elevado de ‘brAA’ para ‘brAAA’ por relevânc
+[2026-07-23 16:29:42]   [127/140] | decorrido 30min28s, falta ~3min07s Ratings ‘brBBB’ de emissor e de emissão da International Meal Company 
+[2026-07-23 16:29:51]   [128/140] | decorrido 30min37s, falta ~2min52s Ratings do BRB rebaixados para ‘brBB/brB’ e mantidos em CreditWatch ne
+[2026-07-23 16:30:04]   [129/140] | decorrido 30min50s, falta ~2min37s Rating da Tecnisa retirado a pedido do emissor
+[2026-07-23 16:30:14]   [130/140] | decorrido 31min00s, falta ~2min23s Rating ‘brAAA’ atribuído à Autopista Fluminense e à sua 8ª emissão de 
+[2026-07-23 16:30:26]   [131/140] | decorrido 31min11s, falta ~2min08s Rating preliminar ‘brAAA (sf)’ atribuído às 1ª, 2ª, 3ª e 4ª séries da 
+[2026-07-23 16:30:35]   [132/140] | decorrido 31min21s, falta ~1min54s Ratings da 1ª, 2ª e 3ª séries da 299ª emissão de CRAs da EcoAgro eleva
+[2026-07-23 16:31:14]   [133/140] | decorrido 32min00s, falta ~1min41s Ratings da Ferrari elevados para ‘brAA-’ por expectativa de maiores si
+[2026-07-23 16:31:34]   [134/140] | decorrido 32min19s, falta ~1min26s Perspectiva do rating da Brava alterada para estável  por atraso na de
+[2026-07-23 16:31:43]   [135/140] | decorrido 32min29s, falta ~1min12s Rating ‘brAAA’ atribuído à 1ª emissão de debêntures da Concessionária 
+[2026-07-23 16:31:55]   [136/140] | decorrido 32min41s, falta ~57s Rating da CSN removido do CreditWatch negativo e rebaixado para ‘brAA-
+[2026-07-23 16:32:06]   [137/140] | decorrido 32min52s, falta ~43s Rating ‘brAA-’ atribuído à Copacol; perspectiva  estável
+[2026-07-23 16:32:18]   [138/140] | decorrido 33min04s, falta ~28s Rating ‘brAA- (sf)’ atribuído à 19ª série de cotas seniores do FIDC Go
+[2026-07-23 16:32:27]   [139/140] | decorrido 33min13s, falta ~14s Rating ‘brAA+’ atribuído à 3ª emissão de debêntures senior unsecured d
+[2026-07-23 16:32:43]   [140/140] | decorrido 33min29s, falta ~0s Rating preliminar ‘brAAA (sf)’ atribuído à série única da 422ª emissão
+[2026-07-23 16:33:02]   S&P Global Ratings Brasil: 140 ações buscadas em 33min48s.
+[2026-07-23 16:33:02] 
+=== Moody's Local Brasil: coletando listagem (2026-01-01 a 2026-07-23) ===
+[2026-07-23 16:33:21]   266 ações encontradas no período.
+[2026-07-23 16:33:21]   0 já estavam no checkpoint (reaproveitadas) -- 266 vão ser buscadas agora.
+[2026-07-23 16:33:21]   [1/266] Moody’s Local Brasil rebaixa rating da Platão Capital S.A. para CCC+.b
+[2026-07-23 16:33:28]   [2/266] | decorrido 6s, falta ~14min31s Moody’s Local Brasil afirma Rating de Emissor A.br da Olfar e A+.br de
+[2026-07-23 16:33:31]   [3/266] | decorrido 9s, falta ~14min10s Moody’s Local Brasil afirma rating A+.br da Castrolanda; perspectiva e
+[2026-07-23 16:33:34]   [4/266] | decorrido 13s, falta ~14min23s Moody’s Local Brasil afirma ratings AAA.br (sf) dos CRIs emitidos pela
+[2026-07-23 16:33:37]   [5/266] | decorrido 16s, falta ~14min19s Moody’s Local Brasil atribui rating definitivo AAA.br (sf) à 597ª Emis
+[2026-07-23 16:33:40]   [6/266] | decorrido 19s, falta ~13min55s Moody’s Local Brasil rebaixa rating da Águas do Sertão para B-.br; per
+[2026-07-23 16:33:43]   [7/266] | decorrido 22s, falta ~13min38s Moody’s Local Brasil afirma ratings AAA.br do Einstein; perspectiva es
+[2026-07-23 16:33:46]   [8/266] | decorrido 25s, falta ~13min32s Moody’s Local Brasil afirma rating A.br da Santa Maria; perspectiva es
+[2026-07-23 16:33:49]   [9/266] | decorrido 28s, falta ~13min27s Moody’s Local Brasil afirma rating AAA.br da Itaú Seguros S.A.; perspe
+[2026-07-23 16:33:53]   [10/266] | decorrido 31s, falta ~13min30s Moody’s Local Brasil afirma os ratings AA-.br da Rio Casca; perspectiv
+[2026-07-23 16:33:56]   [11/266] | decorrido 35s, falta ~13min34s Moody’s Local Brasil atribui o Rating provisório (P) AAA.br (sf) às 1ª
+[2026-07-23 16:34:00]   [12/266] | decorrido 38s, falta ~13min37s Moody’s Local Brasil afirma os ratings AAA.br do Banco BOCOM BBM; pers
+[2026-07-23 16:34:03]   [13/266] | decorrido 42s, falta ~13min44s Moody’s Local Brasil afirma a Avaliação de Qualidade de Gestor de Inve
+[2026-07-23 16:34:06]   [14/266] | decorrido 45s, falta ~13min39s Moody’s Local Brasil atribui o rating provisório (P) AAA.br (sf) às Co
+[2026-07-23 16:34:10]   [15/266] | decorrido 48s, falta ~13min33s Moody’s Local Brasil atribui o rating definitivo AAA.br (sf) às Cotas 
+[2026-07-23 16:34:13]   [16/266] | decorrido 52s, falta ~13min33s Moody’s Local Brasil afirma ratings AA.br (sf) das 153ª e 173ª Emissõe
+[2026-07-23 16:34:16]   [17/266] | decorrido 55s, falta ~13min31s Moody’s Local Brasil afirma o rating AA+.br da 3ª Emissão de Debênture
+[2026-07-23 16:34:19]   [18/266] | decorrido 58s, falta ~13min26s Moody’s Local Brasil confirma ratings das Cotas Seniores e Mezanino do
+[2026-07-23 16:34:23]   [19/266] | decorrido 1min01s, falta ~13min23s Moody’s Local Brasil confirma ratings das Cotas Seniores e Mezanino do
+[2026-07-23 16:34:29]   [20/266] | decorrido 1min08s, falta ~13min57s Moody’s Local Brasil rebaixa rating da General Shopping para C.br; per
+[2026-07-23 16:34:32]   [21/266] | decorrido 1min11s, falta ~13min50s Moody’s Local Brasil afirma os ratings AA.br da Melnick; perspectiva r
+[2026-07-23 16:34:35]   [22/266] | decorrido 1min13s, falta ~13min40s Moody’s Local Brasil atribui o rating AAA.br à proposta da 2ª Emissão 
+[2026-07-23 16:34:38]   [23/266] | decorrido 1min17s, falta ~13min33s Moody’s Local Brasil afirma ratings das 174ª, 196ª, 197ª e 198ª Emissõ
+[2026-07-23 16:34:41]   [24/266] | decorrido 1min20s, falta ~13min26s Moody’s Local Brasil afirma ratings do ICBC Brasil em AA.br; perspecti
+[2026-07-23 16:34:44]   [25/266] | decorrido 1min23s, falta ~13min21s Moody’s Local Brasil retira os ratings do Banco Modal S.A.
+[2026-07-23 16:34:47]   [26/266] | decorrido 1min26s, falta ~13min15s Moody’s Local Brasil afirma o rating AAA.br da State Grid Brazil Holdi
+[2026-07-23 16:34:50]   [27/266] | decorrido 1min29s, falta ~13min09s Moody’s Local Brasil afirma o rating AAA.br da 7ª Emissão de Debênture
+[2026-07-23 16:34:53]   [28/266] | decorrido 1min32s, falta ~13min02s Correção de Texto de Comunicado de 01 outubro de 2025: Moody’s Local B
+[2026-07-23 16:34:56]   [29/266] | decorrido 1min35s, falta ~12min57s Moody’s Local Brasil afirma ratings AAA.br da Solar Bebidas e da Norsa
+[2026-07-23 16:34:59]   [30/266] | decorrido 1min38s, falta ~12min51s Moody’s Local Brasil afirma o rating da Corpóreos Serviços Terapêutico
+[2026-07-23 16:35:02]   [31/266] | decorrido 1min41s, falta ~12min46s Moody’s Local Brasil eleva rating do Banco Senff para BBB.br; perspect
+[2026-07-23 16:35:05]   [32/266] | decorrido 1min44s, falta ~12min42s Moody’s Local Brasil afirma ratings AAA.br do Fleury; perspectiva está
+[2026-07-23 16:35:08]   [33/266] | decorrido 1min47s, falta ~12min37s Moody’s Local Brasil afirma ratings AA.br da Irani; perspectiva estáve
+[2026-07-23 16:35:11]   [34/266] | decorrido 1min50s, falta ~12min32s Moody’s Local Brasil atribui a Avaliação de Qualidade de Gestor de Inv
+[2026-07-23 16:35:14]   [35/266] | decorrido 1min53s, falta ~12min29s Moody’s Local Brasil atribui o Rating AAA.br (sf) às Cotas Seniores do
+[2026-07-23 16:35:17]   [36/266] | decorrido 1min56s, falta ~12min24s Moody’s Local Brasil atribui Rating AAA.br(sf) às Cotas Seniores do FI
+[2026-07-23 16:35:21]   [37/266] | decorrido 1min59s, falta ~12min21s Moody’s Local Brasil atribui o Rating Definitivo 'AAA.br (sf)' às Cota
+[2026-07-23 16:35:24]   [38/266] | decorrido 2min02s, falta ~12min16s Moody’s Local Brasil afirma rating AA+.br da Quantum; perspectiva está
+[2026-07-23 16:35:27]   [39/266] | decorrido 2min05s, falta ~12min11s Moody’s Local Brasil afirma os ratings da COPASA em AAA.br com perspec
+[2026-07-23 16:35:33]   [40/266] | decorrido 2min12s, falta ~12min26s Moody’s Local Brasil atribui rating AA.br à  proposta da 23ª Emissão d
+[2026-07-23 16:35:36]   [41/266] | decorrido 2min15s, falta ~12min21s Moody’s Local Brasil afirma ratings AAA.br da Saneago; perspectiva est
+[2026-07-23 16:35:39]   [42/266] | decorrido 2min17s, falta ~12min15s Moody’s Local Brasil atribui o rating AAA.br (sf) às Cotas Seniores do
+[2026-07-23 16:35:42]   [43/266] | decorrido 2min20s, falta ~12min10s Moody’s Local Brasil rebaixa ratings das 34ª, 171ª e 226ª Emissões de 
+[2026-07-23 16:35:45]   [44/266] | decorrido 2min23s, falta ~12min05s Moody’s Local Brasil rebaixa rating da 18ª Emissão de Debêntures da Ve
+[2026-07-23 16:35:48]   [45/266] | decorrido 2min26s, falta ~12min00s Moody’s Local Brasil afirma ratings AAA.br da Top Service; perspectiva
+[2026-07-23 16:35:51]   [46/266] | decorrido 2min29s, falta ~11min55s Moody’s Local Brasil afirma e subsequentemente retirará a Avaliação de
+[2026-07-23 16:35:53]   [47/266] | decorrido 2min32s, falta ~11min50s Moody’s Local Brasil atribui o Rating AAA.br (sf) às Cotas Seniores do
+[2026-07-23 16:35:56]   [48/266] | decorrido 2min35s, falta ~11min45s Moody’s Local Brasil rebaixa ratings da GJA para BBB+.br; em revisão p
+[2026-07-23 16:35:59]   [49/266] | decorrido 2min38s, falta ~11min41s Moody’s Local Brasil atribui o rating AA-.br (sf) à 38ª Emissão de Deb
+[2026-07-23 16:36:02]   [50/266] | decorrido 2min41s, falta ~11min36s Moody’s Local Brasil atribui rating AA-.br à  1ª Emissão de Debêntures
+[2026-07-23 16:36:05]   [51/266] | decorrido 2min44s, falta ~11min31s Moody’s Local Brasil afirma o rating A+.br da ViaSul; perspectiva revi
+[2026-07-23 16:36:08]   [52/266] | decorrido 2min47s, falta ~11min27s Moody’s Local Brasil atribui AAA.br à proposta da 7ª Emissão de Debênt
+[2026-07-23 16:36:11]   [53/266] | decorrido 2min50s, falta ~11min23s Moody’s Local Brasil afirma os ratings AAA.br da Rio Paranapanema; per
+[2026-07-23 16:36:14]   [54/266] | decorrido 2min52s, falta ~11min18s Moody’s Local Brasil atribui (P) AAA.br (sf) à 597ª Emissão de CRIs da
+[2026-07-23 16:36:17]   [55/266] | decorrido 2min55s, falta ~11min15s Moody’s Local Brasil atribui o Rating Definitivo 'A+.br (sf)' às Cotas
+[2026-07-23 16:36:20]   [56/266] | decorrido 2min58s, falta ~11min10s Moody’s Local Brasil eleva ratings do Agibank para AA.br; perspectiva 
+[2026-07-23 16:36:23]   [57/266] | decorrido 3min01s, falta ~11min06s Moody’s Local Brasil atribuiu rating definitivo A.br à 1ª Emissão de L
+[2026-07-23 16:36:26]   [58/266] | decorrido 3min04s, falta ~11min03s Moody’s Local Brasil atribui o Rating AA-.br (sf) às Cotas Seniores da
+[2026-07-23 16:36:29]   [59/266] | decorrido 3min08s, falta ~10min59s Moody’s Local Brasil afirma ratings AA+.br do Banco BV; perspectiva es
+[2026-07-23 16:36:32]   [60/266] | decorrido 3min11s, falta ~10min55s Moody’s Local Brasil afirma rating AAA.br da Chubb; perspectiva estáve
+[2026-07-23 16:36:38]   [61/266] | decorrido 3min17s, falta ~11min02s Moody’s Local Brasil atribui rating AAA.br à SEFAC e à Proposta da 1ª 
+[2026-07-23 16:36:41]   [62/266] | decorrido 3min20s, falta ~10min58s Moody’s Local Brasil afirma rating AAA.br da Pacaembu; perspectiva est
+[2026-07-23 16:36:44]   [63/266] | decorrido 3min23s, falta ~10min54s Moody’s Local Brasil afirma o rating AAA.br (sf) da Série Única da 166
+[2026-07-23 16:36:47]   [64/266] | decorrido 3min26s, falta ~10min50s Moody’s Local Brasil afirma o rating AAA.br (sf) da Série Única da 287
+[2026-07-23 16:36:50]   [65/266] | decorrido 3min28s, falta ~10min46s Moody’s Local Brasil rebaixa o rating da CSN para BBB.br; rating perma
+[2026-07-23 16:36:53]   [66/266] | decorrido 3min31s, falta ~10min42s Moody’s Local Brasil rebaixa o rating de Qista S.A. - Crédito, Financi
+[2026-07-23 16:36:56]   [67/266] | decorrido 3min34s, falta ~10min38s Moody’s Local Brasil coloca ratings BBB+.br da IMC em revisão para reb
+[2026-07-23 16:36:59]   [68/266] | decorrido 3min37s, falta ~10min34s Moody’s Local Brasil afirma os ratings AAA.br da Rio Paraná; perspecti
+[2026-07-23 16:37:02]   [69/266] | decorrido 3min41s, falta ~10min31s Moody’s Local Brasil afirma os ratings da TAG em AAA.br; perspectiva e
+[2026-07-23 16:37:05]   [70/266] | decorrido 3min44s, falta ~10min27s Moody’s Local Brasil afirma ratings A.br da PCH BV II; perspectiva rev
+[2026-07-23 16:37:08]   [71/266] | decorrido 3min47s, falta ~10min23s Moody’s Local Brasil atribui o Rating AAA.br (sf) às 1ª, 2ª, 3ª e 4ª S
+[2026-07-23 16:37:11]   [72/266] | decorrido 3min49s, falta ~10min19s Moody’s Local Brasil afirma o rating de emissor de AA-.br da POUPEX; p
+[2026-07-23 16:37:14]   [73/266] | decorrido 3min52s, falta ~10min15s Moody’s Local Brasil afirma o rating A+.br da ALGÁS; perspectiva estáv
+[2026-07-23 16:37:17]   [74/266] | decorrido 3min55s, falta ~10min11s Moody’s Local Brasil atribui o rating BBB.br à Oxy Companhia Hipotecár
+[2026-07-23 16:37:20]   [75/266] | decorrido 3min58s, falta ~10min07s Moody’s Local Brasil afirma o rating de  Transenergia Renovável em AAA
+[2026-07-23 16:37:23]   [76/266] | decorrido 4min01s, falta ~10min03s Moody’s Local Brasil afirma o rating de  Transenergia São Paulo em AAA
+[2026-07-23 16:37:25]   [77/266] | decorrido 4min04s, falta ~10min00s Moody’s Local Brasil afirma o rating de Goiás Transmissão em AAA.br; p
+[2026-07-23 16:37:28]   [78/266] | decorrido 4min07s, falta ~9min56s Correção de Texto de Comunicado de 21 de maio de 2026: Moody’s Local B
+[2026-07-23 16:37:32]   [79/266] | decorrido 4min10s, falta ~9min53s Moody’s Local Brasil afirma rating AA.br da Amarante; perspectiva está
+[2026-07-23 16:37:34]   [80/266] | decorrido 4min13s, falta ~9min49s Correção de Texto de Comunicado de 20 de janeiro de 2026: Moody’s Loca
+[2026-07-23 16:37:37]   [81/266] | decorrido 4min16s, falta ~9min45s Moody’s Local Brasil eleva ratings da Sicoob Credicom para A+.br; pers
+[2026-07-23 16:37:44]   [82/266] | decorrido 4min22s, falta ~9min50s Moody’s Local atribui o rating definitivo  AAA.br (sf) às Cotas Senior
+[2026-07-23 16:37:47]   [83/266] | decorrido 4min25s, falta ~9min46s Moody’s Local Brasil atribui o rating AAA.br (sf) à 5a Série de Cotas 
+[2026-07-23 16:37:50]   [84/266] | decorrido 4min29s, falta ~9min43s Moody’s Local Brasil atribui rating AA.br à 22ª Emissão de Debêntures 
+[2026-07-23 16:37:53]   [85/266] | decorrido 4min32s, falta ~9min39s Moody’s Local Brasil rebaixa e subsequentemente retirará os ratings do
+[2026-07-23 16:37:57]   [86/266] | decorrido 4min35s, falta ~9min36s Moody’s Local Brasil afirma ratings AA+.br (sf) da 447ª Emissão de CRI
+[2026-07-23 16:38:00]   [87/266] | decorrido 4min38s, falta ~9min33s Moody’s Local Brasil atribui o Rating (P)AAA.br (sf) às 1ª, 2ª, 3ª e 4
+[2026-07-23 16:38:03]   [88/266] | decorrido 4min41s, falta ~9min29s Moody’s Local Brasil atribui os Ratings AAA.br (sf) às 1ª e 2ª Séries 
+[2026-07-23 16:38:06]   [89/266] | decorrido 4min44s, falta ~9min26s Moody’s Local Brasil afirma ratings AA+.br da Prati; perspectiva estáv
+[2026-07-23 16:38:12]   [90/266] | decorrido 4min51s, falta ~9min29s Moody’s Local Brasil afirma os ratings AAA.br (sf) da 4ª Emissão de CR
+[2026-07-23 16:38:15]   [91/266] | decorrido 4min54s, falta ~9min25s Moody’s Local Brasil afirma os ratings AA+.br da Alto Sertão I; perspe
+[2026-07-23 16:38:18]   [92/266] | decorrido 4min57s, falta ~9min22s Moody’s Local Brasil afirma ratings AAA.br da B3; perspectiva estável
+[2026-07-23 16:38:22]   [93/266] | decorrido 5min00s, falta ~9min19s Moody’s Local Brasil atribui o rating AA+.br  ao Metrô BH; perspectiva
+[2026-07-23 16:38:24]   [94/266] | decorrido 5min03s, falta ~9min15s Moody’s Local Brasil afirma o rating AA+.br (sf) das 292ª, 329ª e 389ª
+[2026-07-23 16:38:28]   [95/266] | decorrido 5min06s, falta ~9min12s Moody’s Local Brasil afirma rating AA+.br da Camil; perspectiva estáve
+[2026-07-23 16:38:31]   [96/266] | decorrido 5min09s, falta ~9min08s Moody’s Local Brasil atribui o rating AAA.br (sf) à 1a Série de Cotas 
+[2026-07-23 16:38:34]   [97/266] | decorrido 5min12s, falta ~9min05s Moody’s Local Brasil atribui o Rating AAA.br (sf) às 1ª, 2ª, 3ª e 4ª S
+[2026-07-23 16:38:52]   [98/266] | decorrido 5min31s, falta ~9min27s Moody’s Local Brasil afirma e subsequentemente retirará os ratings do 
+[2026-07-23 16:38:55]   [99/266] | decorrido 5min34s, falta ~9min24s Moody’s Local Brasil rebaixa ratings das 162ª e 189ª Emissões de CRAs 
+[2026-07-23 16:38:58]   [100/266] | decorrido 5min37s, falta ~9min19s Moody’s Local Brasil afirma a Avaliação de Qualidade de Gestor de Inve
+[2026-07-23 16:39:01]   [101/266] | decorrido 5min40s, falta ~9min16s Moody’s Local Brasil afirma a Avaliação de Qualidade de Gestor de Inve
+[2026-07-23 16:39:05]   [102/266] | decorrido 5min44s, falta ~9min13s Moody’s Local Brasil eleva ratings do  PicPay para AA-.br; perspectiva
+[2026-07-23 16:39:08]   [103/266] | decorrido 5min47s, falta ~9min09s Moody’s Local Brasil afirma a avaliação de Qualidade de Gestor de Inve
+[2026-07-23 16:39:12]   [104/266] | decorrido 5min50s, falta ~9min06s Moody’s Local Brasil afirma o rating A+.br da 1ª Emissão de Debêntures
+[2026-07-23 16:39:18]   [105/266] | decorrido 5min56s, falta ~9min07s Moody’s Local Brasil rebaixa o rating das Cédulas de Produto Rural Fin
+[2026-07-23 16:39:21]   [106/266] | decorrido 6min00s, falta ~9min03s Moody’s Local Brasil atribui rating provisório ‘(P) AAA.br (sf )’ às C
+[2026-07-23 16:39:24]   [107/266] | decorrido 6min03s, falta ~8min59s Moody’s Local Brasil eleva rating da Usiminas para AAA.br; perspectiva
+[2026-07-23 16:39:27]   [108/266] | decorrido 6min06s, falta ~8min56s Moody’s Local Brasil atribui o rating (P) AAA.br (sf) às Cotas Seniore
+[2026-07-23 16:39:30]   [109/266] | decorrido 6min09s, falta ~8min52s Moody’s Local Brasil afirma ratings AAA.br do Banco BTG Pactual S.A.; 
+[2026-07-23 16:39:33]   [110/266] | decorrido 6min12s, falta ~8min48s Moody’s Local Brasil afirma ratings AAA.br  (sf) das 1ª, 2ª e 3ª Série
+[2026-07-23 16:39:36]   [111/266] | decorrido 6min15s, falta ~8min44s Moody’s Local Brasil atribui o rating AA+.br (sf) à 1ª Série de Cotas 
+[2026-07-23 16:39:40]   [112/266] | decorrido 6min18s, falta ~8min40s Moody’s Local Brasil afirma o rating de Fator Seguradora S.A. em A-.br
+[2026-07-23 16:39:43]   [113/266] | decorrido 6min22s, falta ~8min37s Moody’s Local Brasil atribui o Rating definitivo AAA.br (sf) às 1ª, 2ª
+[2026-07-23 16:39:47]   [114/266] | decorrido 6min25s, falta ~8min34s Moody’s Local Brasil atribui o rating (P) AA- .br à Proposta da 4ª Emi
+[2026-07-23 16:39:50]   [115/266] | decorrido 6min28s, falta ~8min30s Moody’s Local Brasil afirma o rating AAA.br (sf) às 1ª e 2ª Séries da 
+[2026-07-23 16:39:53]   [116/266] | decorrido 6min31s, falta ~8min26s Moody’s Local Brasil rebaixa ratings da Enel Distribuição São Paulo pa
+[2026-07-23 16:39:56]   [117/266] | decorrido 6min35s, falta ~8min23s Moody’s Local Brasil afirma o rating A-.br da 1ª Emissão de Debêntures
+[2026-07-23 16:39:59]   [118/266] | decorrido 6min38s, falta ~8min19s Moody’s Local Brasil atribui o rating (P) AAA.br (sf) à 1a Série de Co
+[2026-07-23 16:40:02]   [119/266] | decorrido 6min41s, falta ~8min15s Moody’s Local Brasil rebaixa ratings da Kora para CC.br; perspectiva m
+[2026-07-23 16:40:05]   [120/266] | decorrido 6min44s, falta ~8min12s Moody’s Local Brasil afirma o rating AAA.br de Afya; perspectiva estáv
+[2026-07-23 16:40:08]   [121/266] | decorrido 6min47s, falta ~8min08s Moody’s Local Brasil afirma o rating AAA.br (sf) da 419ª Emissão de CR
+[2026-07-23 16:40:11]   [122/266] | decorrido 6min50s, falta ~8min04s Moody’s Local Brasil atribui o Rating AA-.br (sf) à 4ª Série de Cotas 
+[2026-07-23 16:40:15]   [123/266] | decorrido 6min53s, falta ~8min01s Moody’s Local Brasil atribui rating provisório (P) A.br à proposta da 
+[2026-07-23 16:40:21]   [124/266] | decorrido 6min59s, falta ~8min00s Moody’s Local Brasil atribui os Ratings (P)AAA.br(sf) às 1ª e 2ª Série
+[2026-07-23 16:40:24]   [125/266] | decorrido 7min03s, falta ~7min57s Moody’s Local Brasil afirma os ratings AAA.br (sf) dos CRAs emitidos p
+[2026-07-23 16:40:27]   [126/266] | decorrido 7min06s, falta ~7min53s Moody’s Local Brasil afirma ratings AA-.br do Banrisul; perspectiva re
+[2026-07-23 16:40:30]   [127/266] | decorrido 7min09s, falta ~7min49s Moody’s Local Brasil afirma ratings AAA.br da JBS; perspectiva estável
+[2026-07-23 16:40:34]   [128/266] | decorrido 7min12s, falta ~7min46s Moody’s Local Brasil afirma ratings AAA.br da Telefônica Brasil; persp
+[2026-07-23 16:40:37]   [129/266] | decorrido 7min16s, falta ~7min43s Moody’s Local Brasil coloca o rating A+.br da 2ª Emissão de Debêntures
+[2026-07-23 16:40:40]   [130/266] | decorrido 7min19s, falta ~7min39s Moody’s Local Brasil atribui o rating  definitivo AA.br (sf) à 173ª Em
+[2026-07-23 16:40:43]   [131/266] | decorrido 7min22s, falta ~7min35s Moody’s Local Brasil atribui o rating AAA.br (sf) às Cotas Seniores da
+[2026-07-23 16:40:47]   [132/266] | decorrido 7min25s, falta ~7min32s Moody’s Local Brasil afirma ratings AA-.br da Inpasa; perspectiva revi
+[2026-07-23 16:40:50]   [133/266] | decorrido 7min28s, falta ~7min28s Moody’s Local Brasil retira Avaliação de Qualidade de Gestor de Invest
+[2026-07-23 16:40:53]   [134/266] | decorrido 7min31s, falta ~7min24s Moody’s Local Brasil afirma rating A-.br da  2ª Emissão de Debêntures 
+[2026-07-23 16:40:57]   [135/266] | decorrido 7min35s, falta ~7min22s Moody’s Local Brasil afirma ratings AA-.br da Adami; perspectiva estáv
+[2026-07-23 16:41:00]   [136/266] | decorrido 7min38s, falta ~7min18s Moody’s Local Brasil afirma ratings AAA.br do Banco Safra; perspectiva
+[2026-07-23 16:41:02]   [137/266] | decorrido 7min41s, falta ~7min14s Moody’s Local Brasil atribui o Rating (P) AAA.br (sf) às Cotas Seniore
+[2026-07-23 16:41:05]   [138/266] | decorrido 7min44s, falta ~7min10s Moody’s Local Brasil afirma a Avaliação de Qualidade de Gestor de Inve
+[2026-07-23 16:41:16]   [139/266] | decorrido 7min54s, falta ~7min13s Moody’s Local Brasil eleva os ratings das Cotas  Seniores e Subordinad
+[2026-07-23 16:41:23]   [140/266] | decorrido 8min01s, falta ~7min13s Moody’s Local Brasil eleva os ratings das Cotas Seniores e Subordinada
+[2026-07-23 16:41:26]   [141/266] | decorrido 8min04s, falta ~7min09s Moody’s Local Brasil eleva o rating das Cotas  Seniores do Sol Agora I
+[2026-07-23 16:41:29]   [142/266] | decorrido 8min08s, falta ~7min06s Moody’s Local Brasil atribui o rating AAA.br (sf) à 2ª Série de Cotas 
+[2026-07-23 16:41:33]   [143/266] | decorrido 8min11s, falta ~7min02s Moody’s Local Brasil eleva rating da BRK Mauá para AA.br; perspectiva 
+[2026-07-23 16:41:36]   [144/266] | decorrido 8min14s, falta ~6min59s Moody’s Local Brasil afirma ratings A+.br do Banco de Ribeirão Preto; 
+[2026-07-23 16:41:39]   [145/266] | decorrido 8min17s, falta ~6min55s Moody’s Local Brasil atribui o rating AAA.br à proposta da 2ª Emissão 
+[2026-07-23 16:41:42]   [146/266] | decorrido 8min21s, falta ~6min52s Moody’s Local Brasil afirma ratings AAA.br (sf) da 57ª, 102ª e 127ª Em
+[2026-07-23 16:41:45]   [147/266] | decorrido 8min24s, falta ~6min48s Moody’s Local Brasil afirma rating AAA.br (sf) da 1ª Emissão de CRIs d
+[2026-07-23 16:41:49]   [148/266] | decorrido 8min27s, falta ~6min44s Moody’s Local Brasil atribui rating AA.br à Hidrovias; perspectiva est
+[2026-07-23 16:41:52]   [149/266] | decorrido 8min31s, falta ~6min41s Moody’s Local Brasil coloca o rating A-.br da Via Brasil BR 163 em rev
+[2026-07-23 16:41:55]   [150/266] | decorrido 8min34s, falta ~6min37s Moody’s Local Brasil afirma ratings AAA.br da Cyrela; perspectiva está
+[2026-07-23 16:41:59]   [151/266] | decorrido 8min37s, falta ~6min34s Moody’s Local Brasil afirma a Avaliação de Qualidade de Gestor de Inve
+[2026-07-23 16:42:02]   [152/266] | decorrido 8min40s, falta ~6min30s Moody’s Local Brasil rebaixa para AA-.br o rating da CSN; rating perma
+[2026-07-23 16:42:05]   [153/266] | decorrido 8min43s, falta ~6min26s Moody’s Local Brasil rebaixa o rating do Digimais para B+.br; perspect
+[2026-07-23 16:42:07]   [154/266] | decorrido 8min46s, falta ~6min22s Moody’s Local Brasil rebaixa ratings do BRB para CCC+.br; em revisão p
+[2026-07-23 16:42:09]   [155/266] | decorrido 8min48s, falta ~6min18s Moody’s Local Brasil afirma ratings AAA.br (sf) das 22ª e 89ª emissão 
+[2026-07-23 16:42:13]   [156/266] | decorrido 8min51s, falta ~6min14s Moody’s Local Brasil atribui o rating o Rating AA-.br (sf) à 1ª Série 
+[2026-07-23 16:42:16]   [157/266] | decorrido 8min54s, falta ~6min11s Moody’s Local Brasil atribui o Rating (P) AAA.br (sf) às Cotas Seniore
+[2026-07-23 16:42:19]   [158/266] | decorrido 8min57s, falta ~6min07s Moody’s Local Brasil eleva ratings do Pine para A+.br; perspectiva pos
+[2026-07-23 16:42:22]   [159/266] | decorrido 9min00s, falta ~6min03s Moody’s Local Brasil afirma o rating AAA.br da Cury; perspectiva estáv
+[2026-07-23 16:42:28]   [160/266] | decorrido 9min07s, falta ~6min02s Moody’s Local Brasil afirma os ratings AA-.br do Metrô de São Paulo; p
+[2026-07-23 16:42:31]   [161/266] | decorrido 9min09s, falta ~5min58s Moody’s Local Brasil afirma ratings AAA.br da Vale; perspectiva estáve
+[2026-07-23 16:42:34]   [162/266] | decorrido 9min13s, falta ~5min55s Moody’s Local Brasil atribui AAA.br à proposta da 2ª Emissão de CPR-Fi
+[2026-07-23 16:42:37]   [163/266] | decorrido 9min16s, falta ~5min51s Moody’s Local Brasil afirma os ratings AA-.br da Rota do Oeste; perspe
+[2026-07-23 16:42:41]   [164/266] | decorrido 9min20s, falta ~5min48s Moody’s Local Brasil afirma rating A.br da Thopen Energy e atribui A.b
+[2026-07-23 16:42:44]   [165/266] | decorrido 9min23s, falta ~5min44s Moody’s Local Brasil afirma rating A+.br (sf) da Série Única da 19ª Em
+[2026-07-23 16:42:47]   [166/266] | decorrido 9min26s, falta ~5min41s Moody’s Local Brasil atribui o rating (P) AA+.br  (sf ) à 1ª Série de 
+[2026-07-23 16:42:51]   [167/266] | decorrido 9min29s, falta ~5min37s Moody’s Local Brasil afirma ratings AAA.br da Localiza; perspectiva es
+[2026-07-23 16:42:54]   [168/266] | decorrido 9min32s, falta ~5min34s Moody’s Local Brasil eleva os ratings da Oleoplan para AA.br; perspect
+[2026-07-23 16:42:57]   [169/266] | decorrido 9min36s, falta ~5min30s Moody’s Local Brasil atribui AA.br à proposta da 2ª Emissão de Notas C
+[2026-07-23 16:43:01]   [170/266] | decorrido 9min40s, falta ~5min27s Moody’s Local Brasil atribui (P) AA.br (sf) à 173ª Emissão de CRIs da 
+[2026-07-23 16:43:04]   [171/266] | decorrido 9min43s, falta ~5min24s Moody’s Local Brasil rebaixa ratings da Viveo para CCC+.br; perspectiv
+[2026-07-23 16:43:08]   [172/266] | decorrido 9min46s, falta ~5min20s Moody’s Local Brasil atribui o rating definitivo AAA.br (sf) à Série Ú
+[2026-07-23 16:43:11]   [173/266] | decorrido 9min50s, falta ~5min17s Moody’s Local Brasil atribui o Rating AAA.br (sf) à 3ª Série de Cotas 
+[2026-07-23 16:43:14]   [174/266] | decorrido 9min53s, falta ~5min13s Moody’s Local Brasil atribui o rating AAA.br (sf) à 1ª Série de Cotas 
+[2026-07-23 16:43:18]   [175/266] | decorrido 9min56s, falta ~5min10s Moody’s Local Brasil atribui AA-.br à Multilog e à proposta da 3ª Emis
+[2026-07-23 16:43:21]   [176/266] | decorrido 9min59s, falta ~5min06s Moody’s Local Brasil atribui o Rating provisório (P) AAA.br (sf) às 1ª
+[2026-07-23 16:43:24]   [177/266] | decorrido 10min03s, falta ~5min03s Moody’s Local Brasil atribui AA+.br à proposta da 15ª Emissão de Debên
+[2026-07-23 16:43:30]   [178/266] | decorrido 10min09s, falta ~5min01s Moody’s Local Brasil afirma os ratings AAA.br da Auren e de suas subsi
+[2026-07-23 16:43:34]   [179/266] | decorrido 10min12s, falta ~4min57s Moody’s Local Brasil atribui AA -.br à 4ª Emissão de Debêntures da Hid
+[2026-07-23 16:43:37]   [180/266] | decorrido 10min15s, falta ~4min54s Moody’s Local Brasil afirma rating AAA.br (sf) da 1ª Emissão de CRIs d
+[2026-07-23 16:43:40]   [181/266] | decorrido 10min19s, falta ~4min50s Moody’s Local Brasil afirma o rating AA.br da PRS Aeroportos; perspect
+[2026-07-23 16:43:44]   [182/266] | decorrido 10min22s, falta ~4min47s Moody’s Local Brasil afirma o rating AA-.br da PAX Aeroportos; perspec
+[2026-07-23 16:43:47]   [183/266] | decorrido 10min25s, falta ~4min43s Moody’s Local Brasil afirma ratings AA-.br do Banco Industrial do Bras
+[2026-07-23 16:43:50]   [184/266] | decorrido 10min29s, falta ~4min40s Moody’s Local Brasil rebaixa ratings da 34ª Emissão de CRIs da True (R
+[2026-07-23 16:43:53]   [185/266] | decorrido 10min32s, falta ~4min36s Moody’s Local Brasil afirma rating AAA.br (sf) da 77ª Emissão de CRAs 
+[2026-07-23 16:43:56]   [186/266] | decorrido 10min35s, falta ~4min33s Moody’s Local Brasil atribui ratings AAA.br ao Banco Mercedes-Benz; pe
+[2026-07-23 16:43:59]   [187/266] | decorrido 10min38s, falta ~4min29s Moody’s Local Brasil atribui rating AAA.br à Compass; perspectiva está
+[2026-07-23 16:44:02]   [188/266] | decorrido 10min41s, falta ~4min26s Moody’s Local Brasil afirma e subsequentemente retirará o rating AAA.b
+[2026-07-23 16:44:05]   [189/266] | decorrido 10min44s, falta ~4min22s Moody’s Local Brasil afirma ratings AAA.br da Klabin; perspectiva está
+[2026-07-23 16:44:08]   [190/266] | decorrido 10min47s, falta ~4min19s Moody’s Local Brasil rebaixa ratings do Hospital Care para CC.br; pers
+[2026-07-23 16:44:12]   [191/266] | decorrido 10min50s, falta ~4min15s Moody’s Local Brasil rebaixa ratings da Ligga para CCC-.br; mantida pe
+[2026-07-23 16:44:15]   [192/266] | decorrido 10min53s, falta ~4min11s Moody’s Local Brasil afirma rating AAA.br da Ambev; perspectiva estáve
+[2026-07-23 16:44:18]   [193/266] | decorrido 10min56s, falta ~4min08s Moody’s Local Brasil atribui o rating AAA.br à proposta da 15ª Emissão
+[2026-07-23 16:44:21]   [194/266] | decorrido 10min59s, falta ~4min04s Moody’s Local Brasil atribui rating AAA.br à proposta da 1ª Emissão de
+[2026-07-23 16:44:24]   [195/266] | decorrido 11min02s, falta ~4min01s Moody’s Local Brasil afirma o rating da Elekeiroz e atribui A.br à 1ª 
+[2026-07-23 16:44:27]   [196/266] | decorrido 11min06s, falta ~3min57s Moody’s Local Brasil rebaixa ratings da Raízen para CC.br; perspectiva
+[2026-07-23 16:44:30]   [197/266] | decorrido 11min08s, falta ~3min54s Moody’s Local Brasil rebaixa ratings da Kora para CCC-.br; perspectiva
+[2026-07-23 16:44:36]   [198/266] | decorrido 11min15s, falta ~3min51s Moody’s Local Brasil atribui rating definitivo AAA.br (sf) às 1ª e 2ª 
+[2026-07-23 16:44:39]   [199/266] | decorrido 11min18s, falta ~3min48s Moody’s Local Brasil atribui o rating AA-.br à  Armac; perspectiva est
+[2026-07-23 16:44:43]   [200/266] | decorrido 11min21s, falta ~3min44s Moody’s Local Brasil atribui AAA.br à proposta da 10ª Emissão de Debên
+[2026-07-23 16:44:46]   [201/266] | decorrido 11min24s, falta ~3min41s Moody’s Local Brasil atribui o rating definitivo AAA.br(sf) à 2ª Série
+[2026-07-23 16:44:49]   [202/266] | decorrido 11min27s, falta ~3min37s Moody’s Local Brasil atribui o rating AAA.br (sf) à 1ª Série de Cotas 
+[2026-07-23 16:44:52]   [203/266] | decorrido 11min30s, falta ~3min34s Moody’s Local Brasil coloca os ratings AAA.br da Enel SP em revisão pa
+[2026-07-23 16:44:55]   [204/266] | decorrido 11min34s, falta ~3min30s Moody’s Local Brasil coloca ratings A.br da  OceanPact em revisão para
+[2026-07-23 16:44:58]   [205/266] | decorrido 11min37s, falta ~3min27s Moody’s Local Brasil atribui o rating AAA.br (sf) à 2a Série de Cotas 
+[2026-07-23 16:45:02]   [206/266] | decorrido 11min41s, falta ~3min24s Moody’s Local Brasil afirma a Avaliação de Qualidade de Gestor de Inve
+[2026-07-23 16:45:05]   [207/266] | decorrido 11min44s, falta ~3min20s Moody’s Local Brasil afirma ratings do Banco do Brasil; perspectiva es
+[2026-07-23 16:45:09]   [208/266] | decorrido 11min47s, falta ~3min17s Moody’s Local Brasil atribui o Rating definitivo  A+.br (sf) à 4ª Séri
+[2026-07-23 16:45:12]   [209/266] | decorrido 11min51s, falta ~3min13s Moody’s Local Brasil atribui o rating (P) AAA.br (sf) à 2a Série de Co
+[2026-07-23 16:45:15]   [210/266] | decorrido 11min54s, falta ~3min10s Moody’s Local Brasil afirma o rating A+.br da Rota dos Grãos; perspect
+[2026-07-23 16:45:19]   [211/266] | decorrido 11min57s, falta ~3min07s Moody’s Local Brasil afirma os ratings da CrediSIS Central em BBB.br; 
+[2026-07-23 16:45:22]   [212/266] | decorrido 12min01s, falta ~3min03s Moody’s Local Brasil atribui rating definitivo A.br (sf) às 1ª, 2ª e 3
+[2026-07-23 16:45:25]   [213/266] | decorrido 12min04s, falta ~3min00s Moody’s Local Brasil afirma o CFR AA.br da Valid; perspectiva estável
+[2026-07-23 16:45:29]   [214/266] | decorrido 12min08s, falta ~2min56s Moody’s Local Brasil coloca os ratings A+.br da CASAN em revisão para 
+[2026-07-23 16:45:32]   [215/266] | decorrido 12min11s, falta ~2min53s Moody’s Local Brasil eleva os ratings do BNB para AA+.br; perspectiva 
+[2026-07-23 16:45:39]   [216/266] | decorrido 12min17s, falta ~2min50s Moody’s Local Brasil retira os ratings da Sabesp
+[2026-07-23 16:45:42]   [217/266] | decorrido 12min21s, falta ~2min47s Moody’s Local Brasil rebaixa o rating da CSN para AA.br; Em revisão pa
+[2026-07-23 16:45:45]   [218/266] | decorrido 12min24s, falta ~2min43s Moody’s Local Brasil atribui o rating provisório (P) AAA.br(sf) à 2ª S
+[2026-07-23 16:45:48]   [219/266] | decorrido 12min27s, falta ~2min40s Moody’s Local Brasil afirma a Avaliação de Qualidade de Gestor de Inve
+[2026-07-23 16:45:51]   [220/266] | decorrido 12min30s, falta ~2min36s Moody’s Local Brasil rebaixa o rating da Cosan para AA.br; Em revisão 
+[2026-07-23 16:45:54]   [221/266] | decorrido 12min33s, falta ~2min33s Moody’s Local Brasil afirma rating AA.br da Inspirali; perspectiva est
+[2026-07-23 16:45:57]   [222/266] | decorrido 12min36s, falta ~2min29s Moody’s Local Brasil retira CFR da Petz e atribui Rating de Emissor de
+[2026-07-23 16:46:00]   [223/266] | decorrido 12min39s, falta ~2min26s Moody’s Local Brasil atribui AA+.br à proposta da 26ª Emissão de Debên
+[2026-07-23 16:46:04]   [224/266] | decorrido 12min42s, falta ~2min23s Moody’s Local Brasil retira os ratings da 163ª Emissão de CRIs da True
+[2026-07-23 16:46:07]   [225/266] | decorrido 12min46s, falta ~2min19s Moody’s Local Brasil rebaixa ratings da Raízen para CCC+.br; Em revisã
+[2026-07-23 16:46:09]   [226/266] | decorrido 12min48s, falta ~2min16s Moody’s Local Brasil afirma a Avaliação de  Qualidade de Gestor de Inv
+[2026-07-23 16:46:12]   [227/266] | decorrido 12min51s, falta ~2min12s Moody’s Local Brasil atribui o rating definitivo AA+.br(sf) à1ª Série 
+[2026-07-23 16:46:15]   [228/266] | decorrido 12min54s, falta ~2min09s Moody’s Local Brasil atribui o Rating (P) AA-.br (sf) à 1ª Série de Co
+[2026-07-23 16:46:19]   [229/266] | decorrido 12min57s, falta ~2min05s Moody’s Local Brasil eleva ratings da OceanPact para A.br; perspectiva
+[2026-07-23 16:46:22]   [230/266] | decorrido 13min00s, falta ~2min02s Moody’s Local Brasil eleva o rating da 295ª Emissão de CRAs da Eco Sec
+[2026-07-23 16:46:25]   [231/266] | decorrido 13min03s, falta ~1min58s Moody’s Local Brasil eleva os ratings da 3ª Emissão de Debêntures e da
+[2026-07-23 16:46:28]   [232/266] | decorrido 13min07s, falta ~1min55s Moody’s Local Brasil afirma rating AA+.br da COMPAGAS e atribui AA+.br
+[2026-07-23 16:46:31]   [233/266] | decorrido 13min10s, falta ~1min51s Moody’s Local Brasil atribui o rating AAA.br (sf ) à 1ª Série de Cotas
+[2026-07-23 16:46:34]   [234/266] | decorrido 13min13s, falta ~1min48s Moody’s Local Brasil retira ratings da Zema Financeira
+[2026-07-23 16:46:36]   [235/266] | decorrido 13min15s, falta ~1min44s Moody’s Local Brasil afirma o rating AA+.br da Rodovias do Brasil; per
+[2026-07-23 16:46:42]   [236/266] | decorrido 13min21s, falta ~1min41s Moody’s Local Brasil afirma os ratings AAA.br da Rota das Bandeiras; p
+[2026-07-23 16:46:46]   [237/266] | decorrido 13min25s, falta ~1min38s Moody’s Local Brasil afirma o rating AAA.br da Suzano; perspectiva est
+[2026-07-23 16:46:49]   [238/266] | decorrido 13min28s, falta ~1min35s Moody’s Local Brasil atribui o rating A.br (sf ) à 6a Série de Cotas S
+[2026-07-23 16:46:52]   [239/266] | decorrido 13min31s, falta ~1min31s Moody’s Local Brasil retira ratings dos projetos da Oxe Energia
+[2026-07-23 16:46:55]   [240/266] | decorrido 13min34s, falta ~1min28s Moody’s Local Brasil afirma rating AAA.br da Nu Financeira S.A.; persp
+[2026-07-23 16:46:58]   [241/266] | decorrido 13min37s, falta ~1min24s Moody’s Local Brasil eleva ratings do Banco da Amazônia para AA+.br; p
+[2026-07-23 16:47:02]   [242/266] | decorrido 13min40s, falta ~1min21s Moody’s Local Brasil atribui rating BBB+.br à IMC e à sua 4ª Emissão d
+[2026-07-23 16:47:05]   [243/266] | decorrido 13min43s, falta ~1min17s Moody’s Local Brasil atribui AA+.br à proposta da 25ª Emissão de Debên
+[2026-07-23 16:47:08]   [244/266] | decorrido 13min46s, falta ~1min14s Moody’s Local Brasil atribui o rating definitivo A+.br(sf ) à 1ª Série
+[2026-07-23 16:47:11]   [245/266] | decorrido 13min49s, falta ~1min11s Moody’s Local Brasil afirma ratings AAA.br da Sabesp; perspectiva está
+[2026-07-23 16:47:14]   [246/266] | decorrido 13min53s, falta ~1min07s Moody’s Local Brasil atribui AA+.br às 10ª, 11ª,  12ª, 15ª, 17ª e 18ª 
+[2026-07-23 16:47:18]   [247/266] | decorrido 13min56s, falta ~1min04s Moody’s Local Brasil afirma ratings AAA.br da Comerc e de suas subsidi
+[2026-07-23 16:47:21]   [248/266] | decorrido 13min59s, falta ~1min00s Moody’s Local Brasil afirma rating AAA.br (sf) da 4ª Emissão de CRIs d
+[2026-07-23 16:47:24]   [249/266] | decorrido 14min02s, falta ~57s Moody’s Local Brasil afirma ratings AAA.br (sf) da 1ª, 31ª e 208ª Emis
+[2026-07-23 16:47:27]   [250/266] | decorrido 14min05s, falta ~54s Moody’s Local Brasil eleva rating do Estado do Maranhão para AA+.br; p
+[2026-07-23 16:47:30]   [251/266] | decorrido 14min08s, falta ~50s Moody’s Local Brasil afirma Avaliação de Qualidade de Gestor de Invest
+[2026-07-23 16:47:33]   [252/266] | decorrido 14min11s, falta ~47s Moody’s Local Brasil afirma ratings AAA.br da Sanepar; perspectiva est
+[2026-07-23 16:47:36]   [253/266] | decorrido 14min14s, falta ~43s Moody’s Local Brasil afirma ratings AAA.br da Raia Drogasil; perspecti
+[2026-07-23 16:47:39]   [254/266] | decorrido 14min17s, falta ~40s Moody’s Local Brasil afirma ratings AA+.br do Daycoval; perspectiva es
+[2026-07-23 16:47:42]   [255/266] | decorrido 14min20s, falta ~37s Moody’s Local Brasil afirma e subsequentemente retirará a Avaliação de
+[2026-07-23 16:47:48]   [256/266] | decorrido 14min27s, falta ~33s Moody’s Local Brasil atribui Avaliação de Qualidade de Gestor de Inves
+[2026-07-23 16:47:51]   [257/266] | decorrido 14min30s, falta ~30s Moody’s Local Brasil atribui (P) A.br (sf) às 1ª, 2ª e 3ª Séries da 21
+[2026-07-23 16:47:54]   [258/266] | decorrido 14min33s, falta ~27s Moody’s Local Brasil atribui A.br à proposta da 4ª Emissão de Debêntur
+[2026-07-23 16:47:57]   [259/266] | decorrido 14min36s, falta ~23s Moody’s Local Brasil afirma ratings A.br da BRVias Holding; perspectiv
+[2026-07-23 16:48:00]   [260/266] | decorrido 14min39s, falta ~20s Moody’s Local Brasil eleva o rating da 3ª Emissão de Debêntures da FiB
+[2026-07-23 16:48:03]   [261/266] | decorrido 14min42s, falta ~16s Moody’s Local Brasil retira o rating da Jalles Machado
+[2026-07-23 16:48:07]   [262/266] | decorrido 14min45s, falta ~13s Moody’s Local Brasil afirma ratings AA+.br do Mater Dei; perspectiva e
+[2026-07-23 16:48:10]   [263/266] | decorrido 14min48s, falta ~10s Moody’s Local Brasil atribui o rating provisório (P) AA+.br(sf) à 1ª S
+[2026-07-23 16:48:16]   [264/266] | decorrido 14min55s, falta ~6s Moody’s Local Brasil afirma ratings A.br do Banco Topázio; perspectiva
+[2026-07-23 16:48:19]   [265/266] | decorrido 14min58s, falta ~3s Moody’s Local Brasil atribui A.br à proposta da 1ª Emissão de Debêntur
+[2026-07-23 16:48:22]   [266/266] | decorrido 15min01s, falta ~0s Moody’s Local Brasil afirma os ratings do Banese em AA-.br; perspectiv
+[2026-07-23 16:48:26]   Moody's Local Brasil: 266 ações buscadas em 15min04s.
+[2026-07-23 16:48:26] 
+=== Fitch Ratings: coletando listagem (2026-01-01 a 2026-07-23) ===
+[2026-07-23 16:50:10]   379 ações encontradas no período.
+[2026-07-23 16:50:10]   0 já estavam no checkpoint (reaproveitadas) -- 379 vão ser buscadas agora.
+[2026-07-23 16:50:10]   [1/379] Fitch Afirma Rating de Qualidade de Gestão de Investimentos ‘Excelente
+[2026-07-23 16:50:27]   [2/379] | decorrido 16s, falta ~51min27s Fitch Eleva Rating do Sabin para ‘AA(bra)’; Perspectiva Estável
+[2026-07-23 16:50:43]   [3/379] | decorrido 32s, falta ~1h07min Fitch Remove Observação Negativa e Afirma Ratings do FIDC Sumitomo
+[2026-07-23 16:50:52]   [4/379] | decorrido 41s, falta ~1h04min Fitch Eleva Ratings das 301ª e 539ª Emissões de CRIs da Opea para ‘AAs
+[2026-07-23 16:50:58]   [5/379] | decorrido 47s, falta ~59min33s Fitch Afirma Rating ‘AAAsf(bra)’ da 249ª Emissão de CRIs da Opea; Risc
+[2026-07-23 16:51:04]   [6/379] | decorrido 53s, falta ~55min36s Fitch Rebaixa Ratings de Emissões com Risco FS Ltda. para ‘Asf(bra)’; 
+[2026-07-23 16:51:10]   [7/379] | decorrido 59s, falta ~52min37s Fitch Afirma Rating ‘AAA(bra)’ da 2ª Emissão de Debêntures da Vineyard
+[2026-07-23 16:51:20]   [8/379] | decorrido 1min09s, falta ~53min28s Fitch Afirma Rating ‘AAAsf(bra)’ da 62ª Série da 1ª Emissão de CRIs da
+[2026-07-23 16:51:33]   [9/379] | decorrido 1min22s, falta ~56min49s Fitch Afirma Rating ‘AA(bra)’ de Debêntures da Way 112; Perspectiva Ne
+[2026-07-23 16:51:49]   [10/379] | decorrido 1min38s, falta ~1h00min Fitch Rebaixa Rating da 349ª Emissão de CRAs da Eco Para ‘Asf(bra)’; R
+[2026-07-23 16:51:59]   [11/379] | decorrido 1min48s, falta ~1h00min Fitch Atribui Rating ‘AAA(bra)’ à Proposta de 24ª Emissão de Debênture
+[2026-07-23 16:52:05]   [12/379] | decorrido 1min54s, falta ~58min17s Fitch Retira Rating ‘AA+(bra)’ da 11ª Emissão de Debêntures da Enel Ri
+[2026-07-23 16:52:11]   [13/379] | decorrido 2min00s, falta ~56min37s Fitch Afirma Rating ‘AAA(bra)’ do BofA Brasil; Perspectiva Estável
+[2026-07-23 16:52:21]   [14/379] | decorrido 2min10s, falta ~56min39s Fitch Afirma Ratings ‘AA+(bra)’ do TVV e de Sua 1ª Emissão de Debêntur
+[2026-07-23 16:52:38]   [15/379] | decorrido 2min27s, falta ~59min33s Fitch Afirma Ratings ‘AAA(bra)’/'F1+(bra)’ do Inbursa Brasil
+[2026-07-23 16:52:57]   [16/379] | decorrido 2min46s, falta ~1h02min Fitch Afirma Rating ‘AAA(bra)’ do Banco Sumitomo; Perspectiva Estável
+[2026-07-23 16:53:19]   [17/379] | decorrido 3min08s, falta ~1h06min Fitch Afirma Rating Nacional ‘AAA(bra)’ do Novo Banco Continental; Per
+[2026-07-23 16:53:35]   [18/379] | decorrido 3min24s, falta ~1h08min Fitch Afirma Rating ‘AAA(bra)’ do Goldman Sachs do Brasil; Perspectiva
+[2026-07-23 16:53:48]   [19/379] | decorrido 3min37s, falta ~1h08min Fitch Afirma Rating ‘AAA(bra)’ do Banco Citibank; Perspectiva Estável
+[2026-07-23 16:53:54]   [20/379] | decorrido 3min43s, falta ~1h06min Fitch Atribui Rating ‘AA(bra)’ à 2ª Emissão de Debêntures da Marlim Az
+[2026-07-23 16:54:00]   [21/379] | decorrido 3min49s, falta ~1h05min Fitch Afirma Ratings ‘BB+’/‘AAA(bra)’ da Globo; Perspectiva Estável
+[2026-07-23 16:54:07]   [22/379] | decorrido 3min56s, falta ~1h03min Fitch Afirma Rating ‘Dsf(bra)’ da 69ª Série de CRIs da Opea; Risco Vib
+[2026-07-23 16:54:16]   [23/379] | decorrido 4min05s, falta ~1h03min Fitch Afirma Ratings ‘BB’/‘AA+(bra)’ da Usiminas; Perspectiva Estável
+[2026-07-23 16:54:26]   [24/379] | decorrido 4min15s, falta ~1h03min Fitch Afirma Rating ‘AA-(bra)’ da Intelbras; Perspectiva Estável
+[2026-07-23 16:54:43]   [25/379] | decorrido 4min32s, falta ~1h04min Fitch Afirma Rating ‘A(bra)’ da Alares; Perspectiva Estável
+[2026-07-23 16:55:05]   [26/379] | decorrido 4min54s, falta ~1h06min Fitch Afirma Rating ‘AA+(bra)’ da Gasmig; Perspectiva Estável
+[2026-07-23 16:55:15]   [27/379] | decorrido 5min04s, falta ~1h06min Fitch Revisa Perspectiva Para Negativa e Afirma Ratings da Auren
+[2026-07-23 16:55:28]   [28/379] | decorrido 5min17s, falta ~1h06min Fitch Atribui Rating ‘AAA(bra)’ à Proposta de 12ª Emissão de Debênture
+[2026-07-23 16:55:37]   [29/379] | decorrido 5min26s, falta ~1h05min Fitch Rebaixa Ratings da Amaggi para ‘B+’/‘A(bra)’; Perspectiva Estáve
+[2026-07-23 16:55:43]   [30/379] | decorrido 5min32s, falta ~1h04min Fitch Rebaixa Ratings da FS para ‘B+’/ ‘A(bra)’; Perspectiva Estável
+[2026-07-23 16:55:49]   [31/379] | decorrido 5min38s, falta ~1h03min Fitch Afirma e Retira Rating ‘AA+(bra)’ da Somos Sistemas
+[2026-07-23 16:55:55]   [32/379] | decorrido 5min44s, falta ~1h02min Fitch Afirma Rating ‘AA+(bra)’ da Mantiqueira; Perspectiva Estável
+[2026-07-23 16:56:02]   [33/379] | decorrido 5min51s, falta ~1h01min Fitch Coloca Rating da 3ª Emissão de Debêntures do Tesc em Observação 
+[2026-07-23 16:56:10]   [34/379] | decorrido 5min59s, falta ~1h00min Fitch Eleva Ratings da QMC Telecom Para ‘AA-(bra)’; Perspectiva Estáve
+[2026-07-23 16:56:16]   [35/379] | decorrido 6min05s, falta ~59min53s Fitch Atribui Rating ‘AAA(bra)’ à Proposta de 23ª Emissão de Debênture
+[2026-07-23 16:56:26]   [36/379] | decorrido 6min15s, falta ~59min38s Fitch Afirma Rating ‘AA+(bra)’ da 2ª Emissão de Debêntures da Winity; 
+[2026-07-23 16:56:54]   [37/379] | decorrido 6min43s, falta ~1h02min Fitch Atribui Rating ‘AA(bra)’ à Proposta de 23ª Emissão de Debêntures
+[2026-07-23 16:57:13]   [38/379] | decorrido 7min02s, falta ~1h03min Fitch Revisa Perspectiva da Gerdau Para Positiva e Afirma IDR de Longo
+[2026-07-23 16:57:31]   [39/379] | decorrido 7min20s, falta ~1h03min Fitch Afirma Ratings ‘BB+’/’AAA(bra)’ da Natura; Perspectiva Estável
+[2026-07-23 16:57:47]   [40/379] | decorrido 7min36s, falta ~1h04min Fitch Rebaixa Rating da 1ª Emissão de Debêntures da Borborema para ‘AA
+[2026-07-23 16:57:56]   [41/379] | decorrido 7min45s, falta ~1h03min Fitch Afirma Ratings ‘BB’/‘AAA(bra)’ do Mato Grosso do Sul; Perspectiv
+[2026-07-23 16:58:02]   [42/379] | decorrido 7min51s, falta ~1h03min Fitch Afirma e Retira Rating ‘AAA(bra)’ do Einstein; Perspectiva Estáv
+[2026-07-23 16:58:09]   [43/379] | decorrido 7min58s, falta ~1h02min Fitch Afirma Rating ‘AAAsf(bra)’ da 1ª Emissão de CRIs da Opea; Risco 
+[2026-07-23 16:58:19]   [44/379] | decorrido 8min08s, falta ~1h02min Fitch Afirma Rating ‘AAA(bra)’ da 1ª Emissão de Debêntures da Athon VI
+[2026-07-23 16:58:29]   [45/379] | decorrido 8min18s, falta ~1h01min Fitch Afirma Ratings ‘AAAsf(bra)’ das Cotas Seniores do iCred FGTS FID
+[2026-07-23 16:58:45]   [46/379] | decorrido 8min34s, falta ~1h02min Fitch Atribui Ratings a Cotas do FIDC Consig Premium I (BMG)
+[2026-07-23 16:59:01]   [47/379] | decorrido 8min50s, falta ~1h02min Fitch Remove Observação Negativa e Afirma Rating de Debêntures da Sola
+[2026-07-23 16:59:11]   [48/379] | decorrido 9min00s, falta ~1h02min Fitch Rebaixa Para ‘AA-(bra)’ Rating da 1ª Emissão de Debêntures da Me
+[2026-07-23 16:59:21]   [49/379] | decorrido 9min10s, falta ~1h01min Fitch Atribui Rating ‘AAAsf(bra)’ à 454ª Emissão de CRAs da Eco; Risco
+[2026-07-23 16:59:33]   [50/379] | decorrido 9min22s, falta ~1h01min Fitch Afirma Rating ‘AA(bra)’ de Debêntures da Ventos de São João XXII
+[2026-07-23 16:59:39]   [51/379] | decorrido 9min28s, falta ~1h00min Fitch Rebaixa Ratings da Braskem para 'C'/'C(bra)'
+[2026-07-23 16:59:54]   [52/379] | decorrido 9min43s, falta ~1h01min Fitch Afirma Rating ‘AAA(bra)’ da Isa Brasil; Perspectiva Estável
+[2026-07-23 17:00:11]   [53/379] | decorrido 10min00s, falta ~1h01min Fitch Afirma Rating 'AA(bra)' da 2ª Emissão de Debêntures da MSG; Pers
+[2026-07-23 17:00:27]   [54/379] | decorrido 10min16s, falta ~1h01min Fitch Realiza Ações de Rating em Cotas do Crédito Universitário FIDC
+[2026-07-23 17:00:44]   [55/379] | decorrido 10min33s, falta ~1h02min Fitch Atribui Ratings ‘AAA(bra)’ a Propostas de Debêntures da Localiza
+[2026-07-23 17:01:00]   [56/379] | decorrido 10min49s, falta ~1h02min Fitch Realiza Ações de Rating em 191 Séries com Risco Vinculado
+[2026-07-23 17:01:17]   [57/379] | decorrido 11min06s, falta ~1h02min Fitch Atribui Rating ‘AAA(bra)’ à Proposta de 47ª Emissão de Debênture
+[2026-07-23 17:01:48]   [58/379] | decorrido 11min37s, falta ~1h04min Fitch Afirma Rating Nacional ‘A-(bra)’ da Cresol Sicoper e Revisa Pers
+[2026-07-23 17:02:05]   [59/379] | decorrido 11min54s, falta ~1h04min Fitch Afirma Ratings ‘BB+’/‘AAA(bra)’ da Hidrovias; Perspectiva Estáve
+[2026-07-23 17:02:21]   [60/379] | decorrido 12min10s, falta ~1h04min Fitch Eleva Rating da Central Ailos para 'AA-(bra)'; Perspectiva Estáv
+[2026-07-23 17:02:39]   [61/379] | decorrido 12min28s, falta ~1h05min Fitch Afirma Rating de Longo Prazo da Central Cresol Baser em ‘AA-(bra
+[2026-07-23 17:02:55]   [62/379] | decorrido 12min44s, falta ~1h05min Fitch Afirma Rating Nacional ‘AA-(bra)’ da Sicoob Central São Paulo; P
+[2026-07-23 17:03:01]   [63/379] | decorrido 12min50s, falta ~1h04min Fitch Eleva Rating da 4ª Emissão de Debêntures da São Manoel Para ‘AA+
+[2026-07-23 17:03:15]   [64/379] | decorrido 13min04s, falta ~1h04min Fitch Atribui Rating ‘AAA(EXP)sf(bra)’ à Proposta de 42ª Emissão de De
+[2026-07-23 17:03:24]   [65/379] | decorrido 13min13s, falta ~1h03min Fitch Afirma Rating ‘AAA(bra)’ da EDP Brasil; Perspectiva Estável
+[2026-07-23 17:03:38]   [66/379] | decorrido 13min27s, falta ~1h03min Fitch Coloca em Observação Negativa Rating ‘BBBsf(bra)’ de Debêntures 
+[2026-07-23 17:03:44]   [67/379] | decorrido 13min33s, falta ~1h03min Fitch Rebaixa Rating Nacional de Longo Prazo do Digimais para ‘CCC(bra
+[2026-07-23 17:03:51]   [68/379] | decorrido 13min40s, falta ~1h02min Fitch Atribui Rating ‘AAAsf(bra)’ à 608ª Emissão de CRIs da Opea; Risc
+[2026-07-23 17:03:59]   [69/379] | decorrido 13min48s, falta ~1h02min Fitch Atribui Ratings às Propostas de Emissão de Cotas do FIDC Consig 
+[2026-07-23 17:04:05]   [70/379] | decorrido 13min54s, falta ~1h01min Fitch Afirma Rating ‘AAA(bra)’ da 2ª Emissão de Debêntures da Tamoios;
+[2026-07-23 17:04:15]   [71/379] | decorrido 14min04s, falta ~1h01min Fitch Afirma Ratings ‘AAA(bra)’ da Solar Bebidas e da Norsa; Perspecti
+[2026-07-23 17:04:21]   [72/379] | decorrido 14min10s, falta ~1h00min Fitch Afirma Rating ‘AAA(bra)’ da Primeira Emissão de Debêntures da Ti
+[2026-07-23 17:04:30]   [73/379] | decorrido 14min20s, falta ~1h00min Fitch Afirma Rating ‘BBB(bra)’ da 1ª Emissão de Debêntures da Thopen S
+[2026-07-23 17:04:43]   [74/379] | decorrido 14min32s, falta ~59min55s Fitch Atribui Ratings a Emissões de Cotas do Crédito Universitário III
+[2026-07-23 17:04:59]   [75/379] | decorrido 14min48s, falta ~1h00min Fitch Afirma Ratings de Subsidiárias da Equatorial; Perspectiva Revisa
+[2026-07-23 17:05:12]   [76/379] | decorrido 15min01s, falta ~59min54s Fitch Afirma e Retira Ratings da Terracap
+[2026-07-23 17:05:18]   [77/379] | decorrido 15min07s, falta ~59min17s Fitch Eleva Ratings da Elea Para ‘A-(bra)’; Perspectiva Positiva
+[2026-07-23 17:05:23]   [78/379] | decorrido 15min12s, falta ~58min41s Fitch Atribui Rating ‘A+(bra)’ à Proposta de 8ª Emissão de Debêntures 
+[2026-07-23 17:05:28]   [79/379] | decorrido 15min17s, falta ~58min06s Fitch Rebaixa Rating da Sanasa Para ‘BB-(bra)’; Perspectiva Estável
+[2026-07-23 17:05:34]   [80/379] | decorrido 15min23s, falta ~57min31s Fitch Afirma Rating ‘AAA(bra)’ da TIM Brasil e da TIM S.A.; Perspectiv
+[2026-07-23 17:05:40]   [81/379] | decorrido 15min29s, falta ~57min00s Fitch Afirma Debêntures de BSB e Eletroriver; Perspectiva da Eletroriv
+[2026-07-23 17:05:46]   [82/379] | decorrido 15min35s, falta ~56min27s Fitch Coloca Cotas Seniores do Facta INSS CB FIDC em Observação Negati
+[2026-07-23 17:05:55]   [83/379] | decorrido 15min44s, falta ~56min08s Fitch Afirma IDRs ‘BB’ do Badesc; Perspectiva Estável
+[2026-07-23 17:06:04]   [84/379] | decorrido 15min53s, falta ~55min47s Fitch Afirma Ratings 'BB'/'AAA(bra)' da Desenvolve SP; Perspectiva Est
+[2026-07-23 17:06:17]   [85/379] | decorrido 16min06s, falta ~55min43s Fitch Afirma Rating de Qualidade de Gestão de Investimentos ‘Forte’ da
+[2026-07-23 17:06:33]   [86/379] | decorrido 16min22s, falta ~55min48s Fitch Afirma Rating de Qualidade de Gestão de Investimentos ‘Forte’ da
+[2026-07-23 17:06:40]   [87/379] | decorrido 16min29s, falta ~55min21s Fitch Rebaixa Ratings da Aegea para ‘B+’/‘A(bra)’; Perspectiva Estável
+[2026-07-23 17:06:45]   [88/379] | decorrido 16min35s, falta ~54min50s Fitch Afirma Rating ‘A-(bra)’ da RNI; Perspectiva Estável
+[2026-07-23 17:06:51]   [89/379] | decorrido 16min40s, falta ~54min20s Fitch Afirma Rating ‘AA+(bra)’ da Rodobens; Perspectiva Estável
+[2026-07-23 17:07:00]   [90/379] | decorrido 16min49s, falta ~54min01s Fitch Afirma Ratings ‘AA+(bra)’ da Blau; Perspectiva Estável
+[2026-07-23 17:07:06]   [91/379] | decorrido 16min55s, falta ~53min33s Fitch Rebaixa Ratings da GSB para ‘C’/‘C(bra)’ Após Anúncio de Oferta 
+[2026-07-23 17:07:12]   [92/379] | decorrido 17min01s, falta ~53min05s Fitch Rebaixa para ‘AA(bra)’ 1ª Emissão de Debêntures da Mez 4; Perspe
+[2026-07-23 17:07:25]   [93/379] | decorrido 17min14s, falta ~53min00s Fitch Remove Observação e Afirma Rating ‘AAA(bra)’ da EGP Volta Grande
+[2026-07-23 17:07:41]   [94/379] | decorrido 17min30s, falta ~53min04s Fitch Afirma Ratings ‘BB’/‘AAA(bra)’ do Estado de São Paulo; Perspecti
+[2026-07-23 17:07:56]   [95/379] | decorrido 17min45s, falta ~53min06s Fitch Eleva Para ‘AA+(bra)’ Rating de Debêntures da Rota do Atlântico;
+[2026-07-23 17:08:12]     tentativa 1/4 falhou (corpo do artigo não carregou a tempo (sem 'RATING ACTION COMMENTARY' no texto capturado)) -- tentando de novo em 5s...
+[2026-07-23 17:08:33]   [96/379] | decorrido 18min23s, falta ~54min11s Fitch Eleva Rating da 2ª Emissão de Debêntures da CRC Para ‘AA+(bra)’;
+[2026-07-23 17:08:40]   [97/379] | decorrido 18min29s, falta ~53min44s Fitch Afirma Ratings da TAG; Perspectiva Estável
+[2026-07-23 17:08:50]   [98/379] | decorrido 18min39s, falta ~53min29s Fitch Atribui Ratings a Proposta de Emissão de Cotas do Crédito Univer
+[2026-07-23 17:08:55]   [99/379] | decorrido 18min44s, falta ~53min01s Fitch Afirma IDR em Moeda Local ‘BBB-’ e Rating Nacional de Longo Praz
+[2026-07-23 17:09:01]   [100/379] | decorrido 18min50s, falta ~52min34s Fitch Afirma Rating ‘AAA(bra)’ da Sanepar; Perspectiva Estável
+[2026-07-23 17:09:10]   [101/379] | decorrido 18min59s, falta ~52min17s Fitch Afirma Ratings ‘BB+’/‘AAA(bra)’ do Banco ABC Brasil; Perspectiva
+[2026-07-23 17:09:17]   [102/379] | decorrido 19min06s, falta ~51min52s Fitch Afirma Ratings 'AA(bra)'/'F1+(bra)' do BR Partners; Perspectiva 
+[2026-07-23 17:09:26]   [103/379] | decorrido 19min15s, falta ~51min36s Fitch Afirma Ratings ‘BB-’/‘AA(bra)’ da Simpar; Perspectiva Estável
+[2026-07-23 17:09:43]   [104/379] | decorrido 19min32s, falta ~51min39s Fitch Afirma Ratings ‘BB-’/‘AA(bra)’ da Vamos; Perspectiva Estável
+[2026-07-23 17:09:59]   [105/379] | decorrido 19min48s, falta ~51min40s Fitch Afirma e Retira IDRs ‘BB-’ da JSL e Afirma Rating Nacional ‘AA(b
+[2026-07-23 17:10:15]   [106/379] | decorrido 20min04s, falta ~51min42s Fitch Mantém Rating 'AAA(bra)' da 1ª Emissão de Debêntures da Mez 5 em
+[2026-07-23 17:10:21]   [107/379] | decorrido 20min10s, falta ~51min17s Fitch Afirma Ratings ‘BB-’/‘AA(bra)’ da Movida; Perspectiva Estável
+[2026-07-23 17:10:27]   [108/379] | decorrido 20min16s, falta ~50min52s Fitch Atribui Rating ‘AAA(bra)’ à Proposta de 12ª Emissão de Debênture
+[2026-07-23 17:10:33]   [109/379] | decorrido 20min22s, falta ~50min28s Fitch Coloca em Observação Negativa 64ª Série da 4ª Emissão de CRIs da
+[2026-07-23 17:10:39]   [110/379] | decorrido 20min28s, falta ~50min03s Fitch Afirma Rating Nacional de Longo Prazo ‘BBB(bra)' da Delfinance; 
+[2026-07-23 17:10:52]   [111/379] | decorrido 20min41s, falta ~49min57s Fitch Atribui Ratings ‘B-’/‘BB+(bra)’ à InterCement; Perspectiva Estáv
+[2026-07-23 17:11:01]   [112/379] | decorrido 20min50s, falta ~49min41s Fitch Atribui ‘AAA(EXP)sf(bra)’ à Proposta de 454ª Emissão de CRAs da 
+[2026-07-23 17:11:11]   [113/379] | decorrido 21min00s, falta ~49min26s Fitch Rebaixa Ratings da Sulgás para ‘AA(bra)’; Observação Negativa
+[2026-07-23 17:11:24]   [114/379] | decorrido 21min13s, falta ~49min20s Fitch Rebaixa Rating de Debêntures da Via Brasil MT 246 para ‘A+(bra)’
+[2026-07-23 17:11:36]   [115/379] | decorrido 21min25s, falta ~49min10s Fitch Afirma IDRs 'BB' da XP Inc. e Ratings Nacionais do Banco XP; Per
+[2026-07-23 17:11:46]   [116/379] | decorrido 21min35s, falta ~48min56s Fitch Coloca Rating ‘AAsf(bra)’ da 349ª Emissão de CRAs da Eco em Obse
+[2026-07-23 17:11:56]   [117/379] | decorrido 21min45s, falta ~48min43s Fitch Rebaixa Rating da União Química Para ‘AA-(bra)’; Perspectiva Est
+[2026-07-23 17:12:10]   [118/379] | decorrido 21min59s, falta ~48min38s Fitch Atribui ‘AA-(EXP)(bra)’ à Proposta da 1ª Emissão de Letras Finan
+[2026-07-23 17:12:16]   [119/379] | decorrido 22min05s, falta ~48min15s Fitch Rebaixa Rating da Delga para ‘BB+(bra)’ e o Retira
+[2026-07-23 17:12:22]   [120/379] | decorrido 22min11s, falta ~47min54s Fitch Afirma Rating ‘AAA(bra)’ da Vivara; Perspectiva Estável
+[2026-07-23 17:12:28]   [121/379] | decorrido 22min17s, falta ~47min31s Fitch Retira Rating da Proposta de 12ª Emissão de Debêntures da Zamp
+[2026-07-23 17:12:34]   [122/379] | decorrido 22min23s, falta ~47min09s Fitch Retira Rating da Proposta de 4ª Emissão de Debêntures da SBF Com
+[2026-07-23 17:12:47]   [123/379] | decorrido 22min36s, falta ~47min02s Fitch Afirma Ratings ‘BB-’/‘AA-(bra)’ da FS; Perspectiva Estável
+[2026-07-23 17:13:00]   [124/379] | decorrido 22min49s, falta ~46min55s Fitch Coloca Ratings da Amaggi em Observação Negativa
+[2026-07-23 17:13:16]   [125/379] | decorrido 23min05s, falta ~46min55s Fitch Afirma Rating ‘A(bra)’ da Casan; Perspectiva Revisada Para Estáv
+[2026-07-23 17:13:32]   [126/379] | decorrido 23min21s, falta ~46min54s Fitch Atribui Rating ‘AAA(EXP)sf(bra)’ à Proposta de 608ª Emissão de C
+[2026-07-23 17:13:46]   [127/379] | decorrido 23min35s, falta ~46min48s Fitch Atribui Rating ‘AAA(bra)’ à 1ª Emissão de Debêntures da EDP Tran
+[2026-07-23 17:13:56]   [128/379] | decorrido 23min45s, falta ~46min35s Fitch Atribui Rating ‘AAA(bra)’ à Proposta de 1ª Emissão de Debêntures
+[2026-07-23 17:14:05]   [129/379] | decorrido 23min54s, falta ~46min19s Fitch Rebaixa Rating da 1ª Emissão de Debêntures da GY Para ‘A-(bra)’ 
+[2026-07-23 17:14:11]   [130/379] | decorrido 24min00s, falta ~45min58s Fitch Afirma Rating ‘AA(bra)’ de Debêntures da Ecovias Minas Goiás; Pe
+[2026-07-23 17:14:27]   [131/379] | decorrido 24min16s, falta ~45min56s Fitch Afirma Ratings ‘AAA(bra)’ da Copel e de Suas Subsidiárias; Persp
+[2026-07-23 17:14:36]   [132/379] | decorrido 24min25s, falta ~45min42s Fitch Afirma Rating Nacional de Longo Prazo do Sicoob MaxiCrédito em ‘
+[2026-07-23 17:14:45]   [133/379] | decorrido 24min34s, falta ~45min26s Fitch Afirma Rating ‘A+(bra)’ da Sicoob Credicocapec; Perspectiva Está
+[2026-07-23 17:14:51]   [134/379] | decorrido 24min40s, falta ~45min06s Fitch Afirma Rating ‘A+(bra)’ do Sicoob Engecred; Perspectiva Revisada
+[2026-07-23 17:15:00]   [135/379] | decorrido 24min49s, falta ~44min52s Fitch Afirma Rating ‘A(bra)’ da Sicoob Pro; Perspectiva Estável
+[2026-07-23 17:15:06]   [136/379] | decorrido 24min56s, falta ~44min33s Fitch Afirma Rating Nacional de Longo Prazo ‘A-(bra)’ da Sicoob Credic
+[2026-07-23 17:15:13]   [137/379] | decorrido 25min02s, falta ~44min13s Fitch Afirma Rating 'AAA(bra)' da 1ª Emissão de Debêntures da Serra do
+[2026-07-23 17:15:26]   [138/379] | decorrido 25min15s, falta ~44min06s Fitch Afirma Rating ‘A+(bra)’ da Sicoob Cocred; Perspectiva Estável
+[2026-07-23 17:15:42]   [139/379] | decorrido 25min31s, falta ~44min04s Fitch Afirma Rating Nacional de Longo Prazo da Credicitrus em ‘AA+(bra
+[2026-07-23 17:15:59]   [140/379] | decorrido 25min48s, falta ~44min03s Fitch Mantém Rating ‘BB(bra)’ de Debêntures da Via Brasil MT 320 em Ob
+[2026-07-23 17:16:11]   [141/379] | decorrido 26min00s, falta ~43min53s Fitch Atribui Rating ‘F1+(bra)’ à 2ª Emissão de Notas Comerciais da En
+[2026-07-23 17:16:20]   [142/379] | decorrido 26min09s, falta ~43min40s Fitch Coloca Ratings da Brava em Observação Positiva
+[2026-07-23 17:16:35]   [143/379] | decorrido 26min24s, falta ~43min34s Fitch Afirma Ratings 'BBB-'/'AAA(bra)' da JBS; Perspectiva Estável
+[2026-07-23 17:16:48]   [144/379] | decorrido 26min37s, falta ~43min27s Fitch Afirma Ratings ‘AAAsf(bra)’ das Cotas Seniores do FIDC IV Energi
+[2026-07-23 17:17:05]   [145/379] | decorrido 26min54s, falta ~43min24s Fitch Afirma Ratings ‘CC’/‘CC(bra)’ da General Shopping e Outlets do B
+[2026-07-23 17:17:20]   [146/379] | decorrido 27min09s, falta ~43min21s Fitch Afirma Ratings 'BB-'/'AA+(bra)' do Banestes; Perspectiva Estável
+[2026-07-23 17:17:44]   [147/379] | decorrido 27min33s, falta ~43min29s Fitch Afirma Rating Nacional de Longo Prazo ‘AA+(bra)’ do Banese; Pers
+[2026-07-23 17:18:06]   [148/379] | decorrido 27min55s, falta ~43min34s Fitch Afirma Ratings ‘BB-’/‘AA+(bra)’ do Banrisul; Perspectiva Estável
+[2026-07-23 17:18:12]   [149/379] | decorrido 28min01s, falta ~43min15s Fitch Afirma Rating ‘AA-sf(bra)’ da 331ª e da 384ª Emissão de CRAs da 
+[2026-07-23 17:18:22]   [150/379] | decorrido 28min11s, falta ~43min02s Fitch Realiza Ações de Rating em Cotas do FIDC Creditas Auto XII
+[2026-07-23 17:18:33]   [151/379] | decorrido 28min22s, falta ~42min51s Fitch Afirma e Retira Ratings ‘BB’/‘AAA(bra)’ do Maranhão; Perspectiva
+[2026-07-23 17:20:11]     tentativa 1/4 falhou (corpo do artigo não carregou a tempo (sem 'RATING ACTION COMMENTARY' no texto capturado)) -- tentando de novo em 5s...
+[2026-07-23 17:20:29]   [152/379] | decorrido 30min18s, falta ~45min16s Fitch Afirma Rating ‘AA-(bra)’ da Selmi; Perspectiva Estável
+[2026-07-23 17:20:42]   [153/379] | decorrido 30min31s, falta ~45min05s Fitch Afirma Ratings do Bandes em ‘BB’/‘AAA(bra)’; Perspectiva Estável
+[2026-07-23 17:20:48]   [154/379] | decorrido 30min37s, falta ~44min45s Fitch Atribui Rating ‘AAAsf(bra)’ à 447ª Emissão de CRAs da Eco Securi
+[2026-07-23 17:20:54]   [155/379] | decorrido 30min43s, falta ~44min24s Fitch Afirma Ratings ‘BB’/‘AAA(bra)’ do BRDE; Perspectiva Estável
+[2026-07-23 17:21:00]   [156/379] | decorrido 30min49s, falta ~44min03s Fitch Coloca Ratings da Elea em Observação Positiva Após Anúncio de Mu
+[2026-07-23 17:21:05]   [157/379] | decorrido 30min54s, falta ~43min42s Fitch Afirma Rating ‘AAA(bra)’ da 3ª Emissão de Debêntures da SVP; Per
+[2026-07-23 17:21:14]   [158/379] | decorrido 31min03s, falta ~43min26s Fitch Afirma Rating ‘AA+(bra)’ da Smartfit; Perspectiva Estável
+[2026-07-23 17:21:20]   [159/379] | decorrido 31min09s, falta ~43min06s Fitch Afirma Ratings ‘AAA(bra)’ da Saab e de suas Subsidiárias; Perspe
+[2026-07-23 17:21:33]   [160/379] | decorrido 31min22s, falta ~42min56s Fitch Afirma Rating ‘AA(bra)’ de Debêntures de Sinop; Perspectiva Posi
+[2026-07-23 17:21:39]   [161/379] | decorrido 31min28s, falta ~42min37s Fitch Rebaixa Ratings da Energisa Para ‘BB’/’AA+(bra)’
+[2026-07-23 17:21:45]   [162/379] | decorrido 31min34s, falta ~42min17s Fitch Eleva Rating da Espaçolaser para ‘A(bra)’; Perspectiva Estável
+[2026-07-23 17:21:51]   [163/379] | decorrido 31min40s, falta ~41min58s Fitch Atribui, Pela 1ª Vez, Rating ‘AAA(bra)’ à Nexa Brasil e Afirma R
+[2026-07-23 17:21:57]   [164/379] | decorrido 31min46s, falta ~41min38s Fitch Afirma Rating da Alliança em ‘RD(bra)’
+[2026-07-23 17:22:02]   [165/379] | decorrido 31min51s, falta ~41min19s Fitch Afirma Rating da Telefônica Brasil em ‘AAA(bra)’; Perspectiva Es
+[2026-07-23 17:22:07]   [166/379] | decorrido 31min56s, falta ~40min59s Fitch Afirma Rating ‘AA+(bra)’ da Cogna; Perspectiva Positiva
+[2026-07-23 17:22:21]   [167/379] | decorrido 32min10s, falta ~40min50s Fitch Afirma Ratings de Debêntures com Lastro em Cartões Consignados d
+[2026-07-23 17:22:30]   [168/379] | decorrido 32min19s, falta ~40min35s Fitch Atribui, Pela Primeira Vez, Rating ‘BB(bra)’ à Multiplike Financ
+[2026-07-23 17:22:38]   [169/379] | decorrido 32min27s, falta ~40min20s Fitch Atribui Rating Nacional ‘AA(bra)’ à Senior Sistemas; Perspectiva
+[2026-07-23 17:22:44]   [170/379] | decorrido 32min33s, falta ~40min01s Fitch Atribui Rating 'BB' às Notas Seniores Sem Garantia de USD500 Mil
+[2026-07-23 17:22:50]   [171/379] | decorrido 32min39s, falta ~39min43s Fitch Afirma e Retira Ratings Nacionais ‘AAA(bra)’/‘F1+(bra)’ do Banco
+[2026-07-23 17:22:56]   [172/379] | decorrido 32min45s, falta ~39min25s Fitch Rebaixa Ratings da Enel Brasil e de suas Subsidiárias para ‘AA+(
+[2026-07-23 17:23:02]   [173/379] | decorrido 32min51s, falta ~39min07s Fitch Afirma Rating ‘AAA(bra)’ da 1ª Emissão de Debêntures de Rialma V
+[2026-07-23 17:23:08]   [174/379] | decorrido 32min57s, falta ~38min49s Fitch Afirma Rating ‘AAA(bra)’ da 3ª Emissão de Debêntures da HRZ Tran
+[2026-07-23 17:23:21]   [175/379] | decorrido 33min10s, falta ~38min40s Fitch Rebaixa Rating da 349ª Emissão de CRAs da Eco Securitizadora Par
+[2026-07-23 17:23:33]   [176/379] | decorrido 33min22s, falta ~38min29s Fitch Rebaixa IDRs de Longo Prazo do BRB para ‘CC’ e Retira Todos os R
+[2026-07-23 17:23:43]   [177/379] | decorrido 33min32s, falta ~38min16s Fitch Afirma IDR em ME e Rating Nacional da Rede D’Or e Rebaixa IDR em
+[2026-07-23 17:23:48]   [178/379] | decorrido 33min37s, falta ~37min58s Fitch Rebaixa Para ‘Dsf(bra)’ e Retira Ratings de CRIs da Opea; Risco 
+[2026-07-23 17:23:53]   [179/379] | decorrido 33min42s, falta ~37min40s Fitch Afirma Rating do Mater Dei em ‘AA+(bra)’; Perspectiva Estável
+[2026-07-23 17:23:59]   [180/379] | decorrido 33min48s, falta ~37min22s Fitch Afirma Rating ‘AAA(bra)’ da Eurofarma; Perspectiva Estável
+[2026-07-23 17:24:05]   [181/379] | decorrido 33min54s, falta ~37min05s Fitch Rebaixa para 'AA+(bra)' Ratings de Debêntures de Vila Piauí 1 e 
+[2026-07-23 17:24:11]   [182/379] | decorrido 34min00s, falta ~36min48s Fitch Afirma ‘AAA(bra)’ de Debêntures da Ventos de S. Clemente; Perspe
+[2026-07-23 17:24:17]   [183/379] | decorrido 34min06s, falta ~36min31s Fitch Remove Observação Negativa e Afirma Rating das Debêntures de Mor
+[2026-07-23 17:24:33]   [184/379] | decorrido 34min22s, falta ~36min25s Fitch Atribui Rating ‘AAA(bra)’ à proposta de 21ª Emissão de Debênture
+[2026-07-23 17:24:49]   [185/379] | decorrido 34min38s, falta ~36min19s Fitch Afirma Rating ‘A(bra)’ da 1ª Emissão de Debêntures da Norte Ener
+[2026-07-23 17:24:59]   [186/379] | decorrido 34min48s, falta ~36min06s Fitch Remove Observação Negativa e Afirma Rating ‘CCC(bra)’ de debêntu
+[2026-07-23 17:25:09]   [187/379] | decorrido 34min58s, falta ~35min54s Fitch Rebaixa Rating da Alliança Saúde Para ‘RD(bra)’
+[2026-07-23 17:25:22]   [188/379] | decorrido 35min11s, falta ~35min45s Fitch Eleva Rating de Qualidade de Gestão de Investimentos da Plural I
+[2026-07-23 17:25:32]   [189/379] | decorrido 35min21s, falta ~35min33s Fitch Afirma Rating de Qualidade de Gestão de Investimentos ‘Excelente
+[2026-07-23 17:25:42]   [190/379] | decorrido 35min31s, falta ~35min20s Fitch Atribui Rating ‘BB’ a Notas Seniores sem Garantia Real da Minerv
+[2026-07-23 17:25:55]   [191/379] | decorrido 35min44s, falta ~35min10s Fitch Afirma Rating ‘AA(bra)’ de Debêntures da GDPar SN; Perspectiva R
+[2026-07-23 17:26:03]   [192/379] | decorrido 35min52s, falta ~34min56s Fitch Afirma Rating da 2ª Emissão de Debêntures da GDPar SR; Perspecti
+[2026-07-23 17:26:45]     tentativa 1/4 falhou (corpo do artigo não carregou a tempo (sem 'RATING ACTION COMMENTARY' no texto capturado)) -- tentando de novo em 5s...
+[2026-07-23 17:27:07]   [193/379] | decorrido 36min56s, falta ~35min35s Fitch Rebaixa Ratings da Amaggi para 'BB-'/'AA(bra)'; Perspectiva Nega
+[2026-07-23 17:27:12]   [194/379] | decorrido 37min01s, falta ~35min18s Fitch Afirma Rating ‘AA-(bra)’ da Pague Menos; Perspectiva Revisada Pa
+[2026-07-23 17:27:22]     tentativa 1/4 falhou (corpo do artigo não carregou a tempo (sem 'RATING ACTION COMMENTARY' no texto capturado)) -- tentando de novo em 5s...
+[2026-07-23 17:27:33]   [195/379] | decorrido 37min22s, falta ~35min16s Fitch Atribui Rating ‘BB+’ a Proposta de Troca de Notas Seniores Sem G
+[2026-07-23 17:27:39]   [196/379] | decorrido 37min28s, falta ~34min59s Fitch Atribui Rating ‘BB+’ a Proposta de Emissão de Notas Seniores da 
+[2026-07-23 17:27:45]   [197/379] | decorrido 37min34s, falta ~34min43s Fitch Afirma Ratings da Engie Brasil
+[2026-07-23 17:27:51]   [198/379] | decorrido 37min41s, falta ~34min26s Fitch Atribui ‘AAA(EXP)sf(bra)’ à Proposta de 447ª Emissão de CRAs da 
+[2026-07-23 17:27:57]   [199/379] | decorrido 37min46s, falta ~34min10s Fitch Afirma Rating ‘AA(bra)’ das Debêntures da Assuruá 4 e 5; Perspec
+[2026-07-23 17:28:13]   [200/379] | decorrido 38min02s, falta ~34min02s Fitch Afirma Rating ‘AA-(bra)’ das Debêntures da Ventos de São Jorge; 
+[2026-07-23 17:28:19]   [201/379] | decorrido 38min08s, falta ~33min46s Fitch Afirma Ratings de Subsidiárias da Equatorial; Rebaixa Rating da 
+[2026-07-23 17:28:25]   [202/379] | decorrido 38min14s, falta ~33min30s Fitch Afirma Ratings do FIDC Fortbrasil e de Emissões da DMCard e Fort
+[2026-07-23 17:28:31]   [203/379] | decorrido 38min20s, falta ~33min14s Fitch Afirma Ratings ‘BB+’/‘AAA(bra)’ da Bradseg; Perspectiva Estável
+[2026-07-23 17:28:36]   [204/379] | decorrido 38min25s, falta ~32min58s Fitch Rebaixa Rating da Oncoclínicas Para ‘RD(bra)’
+[2026-07-23 17:28:42]   [205/379] | decorrido 38min31s, falta ~32min42s Fitch Remove Observação Negativa e Afirma Rating da 2ª Emissão de Debê
+[2026-07-23 17:28:48]   [206/379] | decorrido 38min37s, falta ~32min25s Fitch Rebaixa Rating da 1ª Série de Debêntures de São Roque para ‘A(br
+[2026-07-23 17:28:54]   [207/379] | decorrido 38min43s, falta ~32min10s Fitch Rebaixa Rating da Kora Para ‘RD(bra)’
+[2026-07-23 17:28:59]   [208/379] | decorrido 38min48s, falta ~31min54s Fitch Afirma Rating ‘AAA(bra)’ da 2ª Emissão de Debêntures de Ventos d
+[2026-07-23 17:29:05]   [209/379] | decorrido 38min54s, falta ~31min38s Fitch Afirma Rating ‘AAA(bra)’ da Copasa; Perspectiva Estável
+[2026-07-23 17:29:21]   [210/379] | decorrido 39min10s, falta ~31min31s Fitch Rebaixa Ratings da Aegea para ‘BB-’/‘A+(bra)’; Observação Negati
+[2026-07-23 17:29:27]   [211/379] | decorrido 39min16s, falta ~31min16s Fitch Atribui Rating ‘AAAsf(bra)’ à 588ª Emissão de CRIs da Opea; Risc
+[2026-07-23 17:29:33]   [212/379] | decorrido 39min22s, falta ~31min01s Fitch Afirma Rating ‘AAAsf(bra)’ das Cotas Seniores do iCred INSS FIDC
+[2026-07-23 17:29:39]   [213/379] | decorrido 39min28s, falta ~30min45s Fitch Afirma Rating ‘AAA(bra)’ da CMPC Celulose Riograndense; Perspect
+[2026-07-23 17:29:45]   [214/379] | decorrido 39min34s, falta ~30min30s Fitch Atribui 'AAA(bra)' à Proposta de 11ª Emissão de Debêntures da En
+[2026-07-23 17:29:51]   [215/379] | decorrido 39min40s, falta ~30min15s Fitch Afirma Rating de Qualidade de Gestão de Investimentos ‘Excelente
+[2026-07-23 17:29:56]   [216/379] | decorrido 39min45s, falta ~30min00s Fitch Afirma Ratings ‘BB+’/‘AAA(bra)’ da BRF; Perspectiva Estável
+[2026-07-23 17:30:10]   [217/379] | decorrido 39min59s, falta ~29min51s Fitch Atribui Rating ‘Asf(bra)’ à 442ª Emissão de CRAs da Eco Securiti
+[2026-07-23 17:30:19]   [218/379] | decorrido 40min08s, falta ~29min38s Fitch Afirma Ratings da Marfrig em ‘BB+’/‘AAA(bra)’; Perspectiva Estáv
+[2026-07-23 17:30:28]   [219/379] | decorrido 40min17s, falta ~29min25s Fitch Afirma Ratings ‘AA(bra)’ da Dasa; Perspectiva Estável
+[2026-07-23 17:30:33]   [220/379] | decorrido 40min22s, falta ~29min10s Fitch Afirma Rating ‘A(bra)’ da Tegma; Perspectiva Estável
+[2026-07-23 17:30:39]   [221/379] | decorrido 40min28s, falta ~28min56s Fitch Afirma Ratings ‘BB’/‘AAA(bra)’ de Sergipe; Perspectiva Estável
+[2026-07-23 17:30:44]   [222/379] | decorrido 40min33s, falta ~28min41s Fitch Atribui Rating ‘AAA(bra)’ à Proposta de 1ª Emissão de Debêntures
+[2026-07-23 17:30:50]   [223/379] | decorrido 40min39s, falta ~28min26s Fitch Atribui Rating ‘AAA(bra)’ à 3ª Emissão de Letras Financeiras do 
+[2026-07-23 17:30:55]   [224/379] | decorrido 40min44s, falta ~28min11s Fitch Rebaixa Rating da Cimed Para ‘AA(bra)’; Perspectiva Estável
+[2026-07-23 17:31:01]   [225/379] | decorrido 40min50s, falta ~27min57s Fitch Rebaixa Ratings do Banco Digimais Para 'BB+(bra)'/'B(bra)'; Obse
+[2026-07-23 17:31:14]   [226/379] | decorrido 41min03s, falta ~27min47s Fitch Atribui Rating à Proposta de Emissão de Cotas Seniores do iCred 
+[2026-07-23 17:31:24]   [227/379] | decorrido 41min13s, falta ~27min35s Fitch Rebaixa Ratings da Elfa Para ‘B-(bra)’; Perspectiva Negativa
+[2026-07-23 17:31:32]   [228/379] | decorrido 41min21s, falta ~27min23s Fitch Afirma Rating ‘AA(bra)’ da 3ª Emissão de Debêntures da Ferreira 
+[2026-07-23 17:31:38]   [229/379] | decorrido 41min27s, falta ~27min09s Fitch Revisa Perspectiva dos IDRs da Klabin para Positiva; Ratings Afi
+[2026-07-23 17:31:43]   [230/379] | decorrido 41min32s, falta ~26min54s Fitch Rebaixa Para ‘Dsf(bra)’ e Retira Ratings de CRAs da Opea; Risco 
+[2026-07-23 17:31:49]   [231/379] | decorrido 41min38s, falta ~26min40s Fitch Afirma Rating de Qualidade de Gestão de Investimentos ‘Excelente
+[2026-07-23 17:31:54]   [232/379] | decorrido 41min43s, falta ~26min26s Fitch Afirma em ‘AAA(bra)’ 1ª Emissão de Debêntures da Aliança Transmi
+[2026-07-23 17:31:59]   [233/379] | decorrido 41min48s, falta ~26min12s Fitch Remove Observação Negativa e Afirma Rating da 1ª Emissão de Debê
+[2026-07-23 17:32:12]   [234/379] | decorrido 42min02s, falta ~26min02s Fitch Rebaixa Rating da CEEE-G Para ‘BBB-(bra)’; Observação Negativa
+[2026-07-23 17:32:25]   [235/379] | decorrido 42min14s, falta ~25min53s Fitch Atribui Rating ‘AAA(bra)’ à Proposta de 22ª Emissão de Debênture
+[2026-07-23 17:32:31]   [236/379] | decorrido 42min20s, falta ~25min39s Fitch Remove Observação Negativa e Rebaixa Rating da Alliança Saúde Pa
+[2026-07-23 17:32:37]   [237/379] | decorrido 42min26s, falta ~25min25s Fitch Afirma Rating 'AA-(bra)' do Sofisa ; Perspectiva Estável
+[2026-07-23 17:32:43]   [238/379] | decorrido 42min32s, falta ~25min12s Fitch Afirma Ratings ‘BB’/‘AA+(bra)’ do Banco Daycoval; Perspectiva Es
+[2026-07-23 17:32:49]   [239/379] | decorrido 42min38s, falta ~24min58s Fitch Afirma Ratings ‘BB-’/‘AA(bra)’ do Banco Industrial do Brasil; Pe
+[2026-07-23 17:32:56]   [240/379] | decorrido 42min45s, falta ~24min45s Fitch Realiza Ações de Rating em Duas Séries da 15ª Emissão de Debêntu
+[2026-07-23 17:33:06]   [241/379] | decorrido 42min55s, falta ~24min34s Fitch Afirma Rating ‘AA-(bra)’ do Salta; Perspectiva Positiva
+[2026-07-23 17:33:20]   [242/379] | decorrido 43min09s, falta ~24min25s Fitch Atribui Rating ‘AA(bra)’ à 1ª Emissão de Debêntures da Suno Proj
+[2026-07-23 17:33:32]   [243/379] | decorrido 43min21s, falta ~24min15s Fitch Atribui Rating ‘AAA(bra)’ à 5ª Emissão de Debêntures da Transmis
+[2026-07-23 17:33:38]   [244/379] | decorrido 43min27s, falta ~24min02s Fitch Rebaixa Para ‘Dsf(bra)’ e Retira Rating da 80ª Emissão de CRIs d
+[2026-07-23 17:33:44]   [245/379] | decorrido 43min33s, falta ~23min49s Fitch Rebaixa Ratings da Compass e do TRSP para ‘AA(bra)’; Observação 
+[2026-07-23 17:33:50]   [246/379] | decorrido 43min39s, falta ~23min36s Fitch Rebaixa Rating de Debêntures da Serra do Mel 2 Para ‘AA-(bra)’; 
+[2026-07-23 17:33:56]   [247/379] | decorrido 43min45s, falta ~23min23s Fitch Afirma Rating ‘AA(bra)’ de Debêntures da GDS Subholding; Perspec
+[2026-07-23 17:34:03]   [248/379] | decorrido 43min52s, falta ~23min10s Fitch Publica Rating Nacional ‘AA-(bra)’ da MagaluPay Financeira; Pers
+[2026-07-23 17:34:08]   [249/379] | decorrido 43min57s, falta ~22min57s Fitch Rebaixa Rating de CRIs da Opea para ‘Csf(bra)’; Risco Oncoclínic
+[2026-07-23 17:34:21]   [250/379] | decorrido 44min10s, falta ~22min47s Fitch Afirma e Retira Rating ‘CCC-(bra)’ da Aeris
+[2026-07-23 17:34:35]   [251/379] | decorrido 44min24s, falta ~22min38s Fitch Atribui Rating ‘AAA(bra)’ à Proposta de 2ª Emissão de Notas Come
+[2026-07-23 17:34:48]   [252/379] | decorrido 44min37s, falta ~22min29s Fitch Rebaixa para ‘Csf(bra)’ CRAs da Opea; Risco Raízen
+[2026-07-23 17:34:59]   [253/379] | decorrido 44min48s, falta ~22min18s Fitch Rebaixa Rating da 80ª Emissão de CRIs da Riza para ‘Csf(bra)’; R
+[2026-07-23 17:35:09]   [254/379] | decorrido 44min58s, falta ~22min07s Fitch Afirma Rating ‘AA(bra)’ da 2ª Emissão de Debêntures da EPR Vias 
+[2026-07-23 17:35:19]   [255/379] | decorrido 45min08s, falta ~21min56s Fitch Afirma Rating ‘AAA(bra)’ da VLI e de suas Subsidiárias; Perspect
+[2026-07-23 17:35:32]   [256/379] | decorrido 45min21s, falta ~21min47s Fitch Afirma Rating 'BBBf(bra)' do Pátria Infra Crédito FIDC
+[2026-07-23 17:35:39]   [257/379] | decorrido 45min28s, falta ~21min35s Fitch Atribui Rating ‘AAA(bra)’ à 20ª Emissão de Debêntures da Votoran
+[2026-07-23 17:35:48]   [258/379] | decorrido 45min37s, falta ~21min23s Fitch Atribui Rating ‘AA(bra)’ à Proposta de 12ª Emissão de Debêntures
+[2026-07-23 17:35:54]   [259/379] | decorrido 45min43s, falta ~21min11s Fitch Rebaixa Rating da Alliança Saúde Para ‘CCC+(bra)’; Observação Ne
+[2026-07-23 17:36:00]   [260/379] | decorrido 45min49s, falta ~20min58s Fitch Realiza Ações de Rating em Cotas do FIDC Creditas Auto XII
+[2026-07-23 17:36:06]   [261/379] | decorrido 45min55s, falta ~20min45s Fitch Afirma Rating ‘AAAsf(bra)’ das Cotas Seniores do FIDC Tramontina
+[2026-07-23 17:36:12]   [262/379] | decorrido 46min01s, falta ~20min33s Fitch Eleva Rating da DM IP para ‘BBB-(bra)’; Perspectiva Estável
+[2026-07-23 17:36:22]   [263/379] | decorrido 46min11s, falta ~20min22s Fitch Rebaixa Rating da Oncoclínicas Para ‘C(bra)’
+[2026-07-23 17:36:35]   [264/379] | decorrido 46min25s, falta ~20min13s Fitch Afirma Rating ‘BBB+(bra)’ da Copobras; Perspectiva Estável
+[2026-07-23 17:36:45]   [265/379] | decorrido 46min34s, falta ~20min02s Fitch Rebaixa Ratings da Raízen Para ‘C’/‘C(bra)’
+[2026-07-23 17:36:56]   [266/379] | decorrido 46min45s, falta ~19min51s Fitch Atribui Rating ‘AAA(bra)’ à Proposta de 21ª Emissão de Debênture
+[2026-07-23 17:37:03]   [267/379] | decorrido 46min52s, falta ~19min39s Fitch Afirma Rating ‘AA(bra)’ de Debêntures da RDVE Subholding; Perspe
+[2026-07-23 17:37:11]   [268/379] | decorrido 47min00s, falta ~19min28s Fitch Mantém Rating ‘BBB(bra)’ de Debêntures da Aquapolo em Observação
+[2026-07-23 17:37:23]   [269/379] | decorrido 47min12s, falta ~19min18s Fitch Afirma Rating ‘A-sf(bra)’ de Cotas Seniores do Minerva FIDC II
+[2026-07-23 17:38:03]     tentativa 1/4 falhou (corpo do artigo não carregou a tempo (sem 'RATING ACTION COMMENTARY' no texto capturado)) -- tentando de novo em 5s...
+[2026-07-23 17:38:25]   [270/379] | decorrido 48min14s, falta ~19min28s Fitch Rebaixa Rating da CBD Para ‘C(bra)’
+[2026-07-23 17:38:38]     tentativa 1/4 falhou (corpo do artigo não carregou a tempo (sem 'RATING ACTION COMMENTARY' no texto capturado)) -- tentando de novo em 5s...
+[2026-07-23 17:38:50]   [271/379] | decorrido 48min39s, falta ~19min23s Fitch Atribui Rating ‘AA(bra)’ à Proposta de 4ª Emissão de Debêntures 
+[2026-07-23 17:38:56]   [272/379] | decorrido 48min45s, falta ~19min10s Fitch Atribui Rating ‘AAA(bra)’ à Proposta de 12ª Emissão de Debênture
+[2026-07-23 17:39:02]   [273/379] | decorrido 48min51s, falta ~18min58s Fitch Atribui Rating ‘AAA(EXP)sf(bra)’ à Proposta de 588ª Emissão de C
+[2026-07-23 17:39:08]   [274/379] | decorrido 48min57s, falta ~18min45s Fitch Atribui Rating ‘AAA(bra)’ à Proposta de 16ª Emissão de Debênture
+[2026-07-23 17:39:14]   [275/379] | decorrido 49min03s, falta ~18min33s Fitch Remove Observação Negativa e Rebaixa Rating da Kora para ‘C(bra)
+[2026-07-23 17:39:26]   [276/379] | decorrido 49min15s, falta ~18min23s Fitch Atribui Rating ‘AAA(bra)’ à Proposta de Emissão de CPR-Fs da Suz
+[2026-07-23 17:39:43]   [277/379] | decorrido 49min32s, falta ~18min14s Fitch Afirma Ratings ‘BB+’/‘AAA(bra)’ da Sabesp; Perspectiva Estável
+[2026-07-23 17:39:53]   [278/379] | decorrido 49min42s, falta ~18min03s Fitch Afirma Rating ‘AA(bra)’ da J. Macêdo; Perspectiva Estável
+[2026-07-23 17:39:59]   [279/379] | decorrido 49min49s, falta ~17min51s Fitch Afirma Ratings do Grupo Serena; Perspectiva Estável
+[2026-07-23 17:40:10]   [280/379] | decorrido 49min59s, falta ~17min40s Fitch Rebaixa Rating da 80ª Emissão de CRIs da Riza Para ‘CCCsf(bra)’;
+[2026-07-23 17:40:20]   [281/379] | decorrido 50min09s, falta ~17min29s Fitch Eleva Para ‘AAA(bra)’ Rating da 1ª Emissão de Debêntures de São 
+[2026-07-23 17:40:31]   [282/379] | decorrido 50min20s, falta ~17min18s Fitch Eleva Para ‘AAA(bra)’ Rating da 1ª Emissão de Debêntures de São 
+[2026-07-23 17:40:48]   [283/379] | decorrido 50min37s, falta ~17min10s Fitch Atribui Rating ‘AAA(EXP)(bra)’ à Proposta de 3ª Emissão de Letra
+[2026-07-23 17:41:11]   [284/379] | decorrido 51min00s, falta ~17min03s Fitch Rebaixa Ratings da Oi Para ‘RD’/‘RD(bra)’
+[2026-07-23 17:41:30]   [285/379] | decorrido 51min19s, falta ~16min55s Fitch Afirma Ratings ‘BB’/‘AAA(bra)’ da Caixa Econômica Federal; Persp
+[2026-07-23 17:41:47]   [286/379] | decorrido 51min36s, falta ~16min46s Fitch Atribui Rating ‘AAAsf(bra)’ às Séries Seniores da 36ª Emissão de
+[2026-07-23 17:42:01]   [287/379] | decorrido 51min50s, falta ~16min36s Fitch Afirma Rating ‘AA(bra)’ da Cruzeiro do Sul; Perspectiva Estável
+[2026-07-23 17:42:06]   [288/379] | decorrido 51min55s, falta ~16min24s Fitch Afirma Ratings ‘BB’/‘AAA(bra)’ do BNDES; Perspectiva Estável
+[2026-07-23 17:42:12]   [289/379] | decorrido 52min01s, falta ~16min12s Fitch Afirma Ratings ‘BB’/‘AAA(bra)’ do Banco da Amazônia; Perspectiva
+[2026-07-23 17:42:18]   [290/379] | decorrido 52min07s, falta ~15min59s Fitch Afirma Ratings ‘BB’/‘AAA(bra)’ do Banco do Nordeste; Perspectiva
+[2026-07-23 17:42:27]   [291/379] | decorrido 52min16s, falta ~15min48s Fitch Atribui Ratings Finais ‘B-’/‘BBB-(bra)’ à Azul e ‘B-’ às Notas d
+[2026-07-23 17:43:04]     tentativa 1/4 falhou (corpo do artigo não carregou a tempo (sem 'RATING ACTION COMMENTARY' no texto capturado)) -- tentando de novo em 5s...
+[2026-07-23 17:43:26]   [292/379] | decorrido 53min15s, falta ~15min52s Fitch Afirma Rating ‘A+(bra)’ da Althaia; Perspectiva Estável
+[2026-07-23 17:43:32]   [293/379] | decorrido 53min21s, falta ~15min39s Fitch Coloca Ratings da Rumo e de Suas Subsidiárias em Observação Nega
+[2026-07-23 17:43:39]   [294/379] | decorrido 53min28s, falta ~15min27s Fitch Atribui Rating ‘AA(bra)’ à Proposta de 7ª Emissão de Debêntures 
+[2026-07-23 17:43:45]   [295/379] | decorrido 53min34s, falta ~15min15s Fitch Atribui Rating ‘AA+(bra)’ à Proposta de 14ª Emissão de Debênture
+[2026-07-23 17:43:52]   [296/379] | decorrido 53min41s, falta ~15min03s Fitch Remove Observação Negativa e Rebaixa Rating da CBD Para ‘CCC(bra
+[2026-07-23 17:43:59]   [297/379] | decorrido 53min48s, falta ~14min51s Fitch Rebaixa Rating de CRIs da Opea para ‘CCC-sf(bra)’; Risco Oncoclí
+[2026-07-23 17:44:05]   [298/379] | decorrido 53min54s, falta ~14min39s Fitch Remove Observação Negativa e Afirma Rating de Debêntures de São 
+[2026-07-23 17:44:11]   [299/379] | decorrido 54min00s, falta ~14min26s Fitch Rebaixa Rating da 1ª Emissão de Debêntures de Asa Branca para ‘A
+[2026-07-23 17:44:27]   [300/379] | decorrido 54min16s, falta ~14min17s Fitch Atribui Rating ‘AAA(bra)’ às Propostas de 11ª e 12ª Emissões de 
+[2026-07-23 17:44:36]   [301/379] | decorrido 54min25s, falta ~14min06s Fitch Atribui Rating ‘AAA(EXP)sf(bra)’ à Proposta de 36ª Emissão de De
+[2026-07-23 17:44:42]   [302/379] | decorrido 54min31s, falta ~13min54s Fitch Rebaixa Ratings da Cosan para ‘BB-’/‘A+(bra)’; Observação Negati
+[2026-07-23 17:44:48]   [303/379] | decorrido 54min37s, falta ~13min42s Fitch Atribui Rating ‘AAA(bra)’ a Propostas de Emissão de Debêntures d
+[2026-07-23 17:44:54]   [304/379] | decorrido 54min43s, falta ~13min30s Fitch Atribui Rating ‘A(EXP)sf(bra)’ à Proposta de 442ª Emissão de CRA
+[2026-07-23 17:45:01]   [305/379] | decorrido 54min50s, falta ~13min18s Fitch Remove Observação Negativa e Rebaixa Rating da Oncoclínicas para
+[2026-07-23 17:45:07]   [306/379] | decorrido 54min56s, falta ~13min06s Fitch Rebaixa Para ‘BBB-sf(bra)’ Rating de CRIs da Riza; Risco CSN Cim
+[2026-07-23 17:45:13]   [307/379] | decorrido 55min02s, falta ~12min54s Fitch Atribui ‘AAA(EXP)(bra)’ à proposta de 5ª Emissão da Transmissora
+[2026-07-23 17:45:30]   [308/379] | decorrido 55min19s, falta ~12min45s Fitch Atribui Rating ‘AAA(bra)’ à Proposta de 22ª Emissão de Debênture
+[2026-07-23 17:45:40]   [309/379] | decorrido 55min29s, falta ~12min34s Fitch Atribui Ratings ‘AAA(bra)’ a Quatro Propostas de Emissão de Debê
+[2026-07-23 17:45:46]   [310/379] | decorrido 55min35s, falta ~12min22s Fitch Atribui Rating ‘AAA(bra)’ à Proposta de 14ª Emissão de Debênture
+[2026-07-23 17:45:52]   [311/379] | decorrido 55min41s, falta ~12min10s Fitch Atribui Rating ‘AA(bra)’ à Proposta de 7ª Emissão de Debêntures 
+[2026-07-23 17:45:58]   [312/379] | decorrido 55min47s, falta ~11min58s Fitch Rebaixa CSN para 'B'/'BBB-(bra)'; Observação Negativa
+[2026-07-23 17:46:04]   [313/379] | decorrido 55min53s, falta ~11min47s Fitch Afirma Ratings de Debêntures da PGE Guaraú e de Emissão de CRIs 
+[2026-07-23 17:46:10]   [314/379] | decorrido 55min59s, falta ~11min35s Fitch Afirma Rating ‘AAAsf(bra)’ de CRIs Pulverizados Originados pela 
+[2026-07-23 17:46:20]   [315/379] | decorrido 56min09s, falta ~11min24s Fitch Afirma Ratings 'AAA(bra)' de Debêntures da Rota das Bandeiras; P
+[2026-07-23 17:46:33]   [316/379] | decorrido 56min22s, falta ~11min14s Fitch Eleva Para ‘AA+(bra)’ Rating de Debêntures da Rodovias do Brasil
+[2026-07-23 17:46:39]   [317/379] | decorrido 56min28s, falta ~11min02s Fitch Atribui Rating ‘AA-(bra)’ à Proposta de 4ª Emissão de Debêntures
+[2026-07-23 17:46:46]   [318/379] | decorrido 56min35s, falta ~10min51s Fitch Afirma Rating 'AA+(bra)' da Ventos de São Tomé; Perspectiva Está
+[2026-07-23 17:46:53]   [319/379] | decorrido 56min42s, falta ~10min40s Fitch Atribui Ratings ‘AAsf(bra)’ e ‘A+sf(bra)’ a CRIs da Opea; Risco 
+[2026-07-23 17:47:00]   [320/379] | decorrido 56min49s, falta ~10min28s Fitch Rebaixa Ratings de CRAs da Opea Para ‘CCCsf(bra)’; Risco Raízen 
+[2026-07-23 17:47:11]   [321/379] | decorrido 57min00s, falta ~10min18s Fitch Eleva Rating da EMAE Para ‘AAA(bra)’; Perspectiva Estável
+[2026-07-23 17:47:23]   [322/379] | decorrido 57min12s, falta ~10min07s Fitch Afirma Rating ‘AAAsf(bra)’ das Debêntures Seniores da CSCF Vert-
+[2026-07-23 17:47:49]   [323/379] | decorrido 57min38s, falta ~9min59s Fitch Afirma Rating ‘A+(bra)’ da 1ª Emissão de Debêntures de Serras Ho
+[2026-07-23 17:48:31]   [324/379] | decorrido 58min20s, falta ~9min54s Fitch Rebaixa IDRs da Raízen Para ‘CCC’/‘CCC(bra)’
+[2026-07-23 17:48:47]   [325/379] | decorrido 58min36s, falta ~9min44s Fitch Rebaixa e Coloca em Observação Negativa Rating de CRIs da Riza; 
+[2026-07-23 17:48:55]   [326/379] | decorrido 58min44s, falta ~9min32s Fitch Rebaixa IDRs da Raízen Para ‘B’ e Mantém Observação Negativa
+[2026-07-23 17:49:06]   [327/379] | decorrido 58min55s, falta ~9min22s Fitch Realiza Ações de Rating na Vports e em Suas Emissões de Debêntur
+[2026-07-23 17:49:13]   [328/379] | decorrido 59min02s, falta ~9min10s Fitch Afirma Ratings ‘AA-(bra)’ da Vix e da Let’s; Perspectiva Revisad
+[2026-07-23 17:49:20]   [329/379] | decorrido 59min09s, falta ~8min59s Fitch Afirma Rating ‘AA+(bra)’ da Bahiagás; Perspectiva Estável
+[2026-07-23 17:49:26]   [330/379] | decorrido 59min15s, falta ~8min47s Fitch Afirma Ratings ‘AAA(bra)’ de Emissões de Debêntures da CLI e da 
+[2026-07-23 17:49:32]   [331/379] | decorrido 59min21s, falta ~8min36s Fitch Rebaixa CSN para 'BB-'/'AA-(bra)'; Coloca em Obs. Negativa e Rem
+[2026-07-23 17:49:49]   [332/379] | decorrido 59min38s, falta ~8min26s Fitch Publica Ratings ‘BB+’ /‘AAA(bra)’ da J&F; Perspectiva Estável
+[2026-07-23 17:50:05]   [333/379] | decorrido 59min54s, falta ~8min16s Fitch Afirma Ratings de Emissões da BSB e da Eletroriver; Perspectiva 
+[2026-07-23 17:50:12]   [334/379] | decorrido 1h00min, falta ~8min05s A Fitch Atribui Rating ‘AA(bra)’ à 1ª Emissão de Debêntures da Albioma
+[2026-07-23 17:50:18]   [335/379] | decorrido 1h00min, falta ~7min53s Fitch Atribui Rating ‘AAA(bra)’ à Proposta de 14ª Emissão de Debênture
+[2026-07-23 17:50:24]   [336/379] | decorrido 1h00min, falta ~7min42s Fitch Retira Ratings ‘BBB+(bra)’ da Elekeiroz
+[2026-07-23 17:50:30]   [337/379] | decorrido 1h00min, falta ~7min31s Fitch Rebaixa Rating de Qualidade de Gestão de Investimento da Reag As
+[2026-07-23 17:50:40]   [338/379] | decorrido 1h00min, falta ~7min20s Fitch Atribui Rating ‘AAA(bra)’ à 33ª Emissão de Debêntures da Sabesp
+[2026-07-23 17:50:50]   [339/379] | decorrido 1h00min, falta ~7min09s Fitch Rebaixa Ratings de Cotas Seniores do Pneucash FIDC; Perspectiva 
+[2026-07-23 17:50:56]   [340/379] | decorrido 1h00min, falta ~6min58s Fitch Retira Ratings do Automotivo FIDC (GM)
+[2026-07-23 17:51:09]   [341/379] | decorrido 1h00min, falta ~6min47s Fitch Rebaixa Rating da Cota Mezanino do FIDC Infra para ‘Csf(bra)’
+[2026-07-23 17:51:16]   [342/379] | decorrido 1h01min, falta ~6min36s Fitch Afirma em ‘CCCsf(bra)’ Ratings de CRAs da Vert Securitizadora (B
+[2026-07-23 17:51:23]   [343/379] | decorrido 1h01min, falta ~6min25s Fitch Eleva Ratings de Emissões de Securitizações da Solfácil
+[2026-07-23 17:51:29]   [344/379] | decorrido 1h01min, falta ~6min14s Fitch Afirma Rating ‘AA+(bra)’ de Debêntures da Faro IV; Perspectiva R
+[2026-07-23 17:51:44]   [345/379] | decorrido 1h01min, falta ~6min03s Fitch Atribui Rating ‘B-(EXP) à Proposta de USD1,2 bi em Notas de Saíd
+[2026-07-23 17:52:07]     tentativa 1/4 falhou (corpo do artigo não carregou a tempo (sem 'RATING ACTION COMMENTARY' no texto capturado)) -- tentando de novo em 5s...
+[2026-07-23 17:52:51]   [346/379] | decorrido 1h02min, falta ~5min58s Fitch Atribui Rating ‘AA(bra)’ à 1ª Série da 1ª Emissão de Debêntures 
+[2026-07-23 17:53:12]   [347/379] | decorrido 1h03min, falta ~5min48s Fitch Revisa Perspectiva da Brava Para Positiva e Afirma Ratings
+[2026-07-23 17:53:22]   [348/379] | decorrido 1h03min, falta ~5min37s Fitch Atribui Rating ‘AA-(bra)’ à Proposta de Emissão de Debêntures da
+[2026-07-23 17:53:28]   [349/379] | decorrido 1h03min, falta ~5min26s Fitch Mantém Observação Negativa de Cotas Seniores e Rebaixa Cotas Mez
+[2026-07-23 17:53:35]   [350/379] | decorrido 1h03min, falta ~5min15s Fitch Remove Observação Negativa e Afirma Rating das Debêntures da Ita
+[2026-07-23 17:53:41]   [351/379] | decorrido 1h03min, falta ~5min03s Fitch Afirma Ratings ‘AAA(bra)’ da Compass e do TRSP; Perspectiva Revi
+[2026-07-23 17:53:51]   [352/379] | decorrido 1h03min, falta ~4min53s Fitch Rebaixa Rating da 1ª Emissão de Debêntures da Tupi para ‘AA-(bra
+[2026-07-23 17:54:00]   [353/379] | decorrido 1h03min, falta ~4min42s Fitch Atribui Rating ‘BB-’ à Proposta de Notas da FS Luxembourg e Afir
+[2026-07-23 17:54:06]   [354/379] | decorrido 1h03min, falta ~4min30s Fitch Afirma Rating de Qualidade de Gestão de Investimentos ‘Forte’ da
+[2026-07-23 17:54:20]   [355/379] | decorrido 1h04min, falta ~4min20s Fitch Rebaixa Rating ‘BBB-(bra)’ da 1ª Emissão de Debêntures da Rota d
+[2026-07-23 17:54:26]   [356/379] | decorrido 1h04min, falta ~4min09s Fitch Atribui Ratings ‘AAA(bra)’ a Duas Propostas de Emissão de Debênt
+[2026-07-23 17:54:41]   [357/379] | decorrido 1h04min, falta ~3min58s Fitch Afirma Rating ‘AAA(bra)’ do Grupo CPFL; Perspectiva Estável
+[2026-07-23 17:55:22]   [358/379] | decorrido 1h05min, falta ~3min49s Fitch Afirma Rating ‘AAA(bra)’ da 3ª Emissão de Debêntures da BRK Mans
+[2026-07-23 17:55:45]   [359/379] | decorrido 1h05min, falta ~3min39s Fitch Rebaixa Rating do Grupo Reag para ‘CC(bra)’ e Retira Classificaç
+[2026-07-23 17:55:59]   [360/379] | decorrido 1h05min, falta ~3min28s Fitch Mantém Rating da 1ª Emissão de Debêntures da Borborema em Observ
+[2026-07-23 17:56:04]   [361/379] | decorrido 1h05min, falta ~3min17s Fitch Mantém Rating da 1ª Emissão de Debêntures da Solaris em Observaç
+[2026-07-23 17:56:10]   [362/379] | decorrido 1h05min, falta ~3min05s Fitch Atribui Rating ‘AAAsf(bra)’ à 2ª Série de Cotas Seniores do FIDC
+[2026-07-23 17:56:16]   [363/379] | decorrido 1h06min, falta ~2min54s Fitch Afirma e Retira Rating ‘A+(bra)’ da BRK Ambiental
+[2026-07-23 17:56:22]   [364/379] | decorrido 1h06min, falta ~2min43s Fitch Atribui Rating ‘AAA(bra)’ a Três Propostas de Emissão de Debêntu
+[2026-07-23 17:56:28]   [365/379] | decorrido 1h06min, falta ~2min32s Fitch Eleva Ratings da Guararapes Para ‘AA-(bra)’; Perspectiva Estável
+[2026-07-23 17:56:38]   [366/379] | decorrido 1h06min, falta ~2min21s Fitch Atribui Rating ‘AA-(bra)’ à Segunda Emissão de Debêntures da UTE
+[2026-07-23 17:56:48]   [367/379] | decorrido 1h06min, falta ~2min10s Fitch Afirma Rating da 1ª Emissão de Debêntures da Saesa em ‘AAA(bra)’
+[2026-07-23 17:56:53]   [368/379] | decorrido 1h06min, falta ~1min59s Fitch Afirma Ratings ‘BB’/‘AAA(bra)’ do Município de Niterói; Perspect
+[2026-07-23 17:57:03]   [369/379] | decorrido 1h06min, falta ~1min48s Fitch Atribui Rating ‘AA(bra)’ à Proposta de 21ª Emissão de Debêntures
+[2026-07-23 17:57:09]   [370/379] | decorrido 1h06min, falta ~1min37s Fitch Atribui, Pela Primeira Vez, Rating ‘AAA(bra)’ à TECP; Perspectiv
+[2026-07-23 17:57:15]   [371/379] | decorrido 1h07min, falta ~1min26s Fitch Atribui, Pela Primeira Vez, Rating ‘BBB-(bra)’ à Delga e à Sua P
+[2026-07-23 17:57:21]   [372/379] | decorrido 1h07min, falta ~1min15s Fitch Atribui Rating ‘AAAsf(bra)’ à 488ª Emissão de CRIs da Opea; Risc
+[2026-07-23 17:57:27]   [373/379] | decorrido 1h07min, falta ~1min04s Fitch Atribui Rating ‘AAA(bra)’ à Proposta de 21ª Emissão de Debênture
+[2026-07-23 17:57:33]   [374/379] | decorrido 1h07min, falta ~54s Fitch Publica, Pela Primeira Vez, Rating 'AA+(bra)' da Rodobens Consór
+[2026-07-23 17:57:42]   [375/379] | decorrido 1h07min, falta ~43s Fitch Atribui Rating ‘AA(EXP)(bra)’ à Proposta de 1ª Emissão de Debênt
+[2026-07-23 17:57:55]   [376/379] | decorrido 1h07min, falta ~32s Fitch Afirma Rating ‘AAA(bra)’ da 2ª Emissão de Debêntures da EDTE
+[2026-07-23 17:58:01]   [377/379] | decorrido 1h07min, falta ~21s Fitch Atribui Rating ‘AAAsf(bra)’ a Cotas Seniores do FIDC Medici I; P
+[2026-07-23 17:58:11]   [378/379] | decorrido 1h08min, falta ~10s Fitch Atribui Rating ‘AAA(bra)’ à Proposta de 6ª Emissão de Debêntures
+[2026-07-23 17:58:17]   [379/379] | decorrido 1h08min, falta ~0s Fitch Afirma Rating ‘AAA(bra)’ da Bradespar; Perspectiva Estável
+[2026-07-23 17:58:23]   Fitch Ratings: 379 ações buscadas em 1h08min.
+[2026-07-23 17:58:27]   qualidade: 496/785 linhas marcadas p/ revisão manual (63.2%) -- ver aba 'Revisar manualmente'
+[2026-07-23 17:58:27] 
+Planilha salva em: C:\Users\allan\OneDrive\Documentos\IBBA\Claude\Monitoramento de Notícias\credit_monitor\data\mapeamento_ratings_2026-01-01_2026-07-23.xlsx
+[2026-07-23 17:58:27] 
+Total de ações mapeadas: 785

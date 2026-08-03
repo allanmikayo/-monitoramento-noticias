@@ -10,12 +10,29 @@
     <button data-window="30d" class="win-btn active">Último mês</button>
   </div>
 
-  <select id="filter-sector">
-    <option value="">Todos os setores</option>
-    {% for s in sectors %}<option value="{{ s.id }}">{{ s.name }}</option>{% endfor %}
-  </select>
+  <!-- Setor/Empresa/Cobertura viraram multi-select (pedido do Allan,
+       03/08/2026: poder marcar mais de uma opção) -- select nativo não
+       suporta bem multi-seleção com busca, então cada um vira um botão +
+       painel de checkboxes (static/app.js, função `initMultiSelect`).
+       filter-type continua single-select de propósito (não foi pedido). -->
+  <div class="ms" id="ms-sector">
+    <button type="button" class="ms-btn" id="ms-sector-btn">Setor: Todos</button>
+    <div class="ms-panel" id="ms-sector-panel" hidden>
+      <button type="button" class="ms-clear" data-clear-target="ms-sector">Limpar seleção</button>
+      {% for s in sectors %}
+      <label class="ms-option"><input type="checkbox" class="ms-check" data-ms="sector" value="{{ s.id }}"> {{ s.name }}</label>
+      {% endfor %}
+    </div>
+  </div>
 
-  <select id="filter-company"><option value="">Todas as empresas</option></select>
+  <div class="ms" id="ms-company">
+    <button type="button" class="ms-btn" id="ms-company-btn">Empresa: Todas</button>
+    <div class="ms-panel" id="ms-company-panel" hidden>
+      <input type="search" id="ms-company-search" placeholder="Buscar empresa…">
+      <button type="button" class="ms-clear" data-clear-target="ms-company">Limpar seleção</button>
+      <div id="ms-company-options"></div>
+    </div>
+  </div>
 
   <select id="filter-type">
     <option value="">Todos os tipos</option>
@@ -26,10 +43,13 @@
     <option value="research">Research</option>
   </select>
 
-  <select id="filter-coverage" title="Minha cobertura: empresas/setores que você acompanha + todas as ações de rating. Todos: tudo que foi capturado, mesmo sem bater com sua cobertura.">
-    <option value="minha">Cobertura: Minha cobertura</option>
-    <option value="todos">Cobertura: Todos</option>
-  </select>
+  <div class="ms" id="ms-coverage" title="Minha cobertura: empresas/setores que você acompanha + todas as ações de rating. Todos: tudo que foi capturado, mesmo sem bater com sua cobertura.">
+    <button type="button" class="ms-btn" id="ms-coverage-btn">Cobertura: Minha cobertura</button>
+    <div class="ms-panel" id="ms-coverage-panel" hidden>
+      <label class="ms-option"><input type="checkbox" class="ms-check" data-ms="coverage" value="minha" checked> Minha cobertura</label>
+      <label class="ms-option"><input type="checkbox" class="ms-check" data-ms="coverage" value="todos"> Todos</label>
+    </div>
+  </div>
 
   {% if user %}<button id="btn-refresh" class="btn-primary">Forçar atualização</button>{% endif %}
 </div>

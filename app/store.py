@@ -144,11 +144,11 @@ def list_articles(
     db: Session,
     *,
     window_hours: int,
-    sector_id: int | None = None,
-    company_id: int | None = None,
+    sector_ids: list[int] | None = None,
+    company_ids: list[int] | None = None,
     source_domain: str | None = None,
     article_type: str | None = None,
-    coverage: str = "minha",  # "minha" (default) | "todos"
+    coverage: list[str] | None = None,  # ["minha"] (default) | ["todos"] | ["minha","todos"]
     limit: int = 500,
 ):
     from .models import Company
@@ -173,29 +173,39 @@ def list_articles(
         stmt = stmt.where(Article.domain == source_domain)
     if article_type:
         stmt = stmt.where(Article.article_type == article_type)
-    if coverage != "todos":
+    coverage = coverage or ["minha"]
+    if "todos" not in coverage:
         # "Minha cobertura": bateu com alguma empresa/setor OU é ação de
         # rating (essas o usuário sempre quer ver, mesmo fora da cobertura
         # nomeada -- uma agência rebaixando qualquer emissor do mercado de
         # crédito privado é relevante pra um analista de credit research).
         stmt = stmt.where((Article.is_covered.is_(True)) | (Article.article_type == "rating_action"))
-    if company_id:
-        stmt = stmt.join(Article.companies).where(Company.id == company_id)
-    elif sector_id:
+    # Setor e empresa agora aceitam MAIS DE UM valor (pedido do Allan,
+    # 03/08/2026: poder marcar mais de uma opção nos filtros). "Bate com
+    # QUALQUER um dos selecionados" (OR), não "todos ao mesmo tempo" --
+    # continua usando EXISTS em vez de JOIN pra não multiplicar linha
+    # quando um artigo casa com mais de uma empresa/setor selecionado ao
+    # mesmo tempo (mesma razão que já valia pro filtro de setor sozinho).
+    if company_ids:
+        empresa_bate = exists().where(
+            article_company.c.article_id == Article.id,
+            article_company.c.company_id.in_(company_ids),
+        )
+        stmt = stmt.where(empresa_bate)
+    elif sector_ids:
         # Um artigo pode estar ligado a um setor de duas formas: via empresa
         # especifica daquele setor (article_company -> companies.sector_id),
         # ou via tag direta de setor (article_sector, quando so' bateu termo
-        # setorial -- ver taxonomy.resolve_coverage, 17/07/2026). Usa EXISTS
-        # em vez de JOIN pra não multiplicar linha nem exigir DISTINCT.
+        # setorial -- ver taxonomy.resolve_coverage, 17/07/2026).
         empresa_do_setor = exists().where(
             article_company.c.article_id == Article.id,
             article_company.c.company_id.in_(
-                select(Company.id).where(Company.sector_id == sector_id)
+                select(Company.id).where(Company.sector_id.in_(sector_ids))
             ),
         )
         tag_de_setor = exists().where(
             article_sector.c.article_id == Article.id,
-            article_sector.c.sector_id == sector_id,
+            article_sector.c.sector_id.in_(sector_ids),
         )
         stmt = stmt.where(empresa_do_setor | tag_de_setor)
     stmt = stmt.order_by(Article.published_at.desc().nullslast(), Article.found_at.desc()).limit(limit)

@@ -1378,6 +1378,52 @@ de ponta a ponta contra a Anbima de verdade nem dentro do GitHub Actions**
 bloqueada pro sandbox; Allan deve rodar "Run workflow" manualmente uma
 vez depois do deploy pra confirmar.
 
+### Filtros de Setor/Empresa/Cobertura viram multi-select — 03/08/2026
+
+Pedido do Allan: poder marcar mais de uma opção nos 3 filtros da barra da
+aba Notícias (`filter-type` ficou de fora de propósito, não foi pedido).
+`<select>` nativo não faz multi-seleção de um jeito usável (Ctrl+clique
+não é descobrível), então os 3 viraram um componente próprio: um botão
+que abre um painel flutuante de checkboxes (`.ms*` em `static/style.css`,
+`initMultiSelect()` em `static/app.js`, reaproveitado pros 3 -- só
+"Empresa" ganha uma caixa de busca dentro do painel, já que a lista pode
+passar de 90 itens).
+
+**Backend** (`app/store.py::list_articles`, `app/app.py::api_articles`):
+`sector_id`/`company_id`/`coverage` passam a aceitar valor repetido na
+querystring (`?sector_id=1&sector_id=2`) via `Query(default=[])` do
+FastAPI, que já junta isso numa lista sozinho. Dentro da query,
+setor/empresa continuam usando `EXISTS` (não `JOIN`) pra "bate com
+QUALQUER um dos selecionados" (OR) sem multiplicar linha quando um
+artigo casa com mais de uma empresa/setor marcado ao mesmo tempo --
+mesma proteção que já existia pro filtro de setor sozinho, agora também
+pro de empresa (o `JOIN` antigo do filtro de empresa nunca tinha esse
+problema porque só filtrava 1 valor; com lista, passou a ter o mesmo
+risco de duplicar linha, por isso trocado). `coverage` vira lista também
+(`["minha"]`/`["todos"]`/os dois juntos) -- "todos" já é superset de
+"minha", então marcar os dois se comporta exatamente igual a marcar só
+"todos" (`"todos" not in coverage` decide, igual antes só que checando
+lista em vez de string).
+
+**Frontend**: `selectedSectors`/`selectedCompanies`/`selectedCoverage`
+(JS `Set`), refletidos no rótulo do botão ("Setor: Todos" / "Setor:
+Energia" / "Setor: 3 selecionados"). Trocar o setor invalida da seleção
+de empresa qualquer empresa que não pertença mais a nenhum setor
+marcado (mesmo efeito que o `<select>` antigo já tinha ao reconstruir a
+lista do zero). Cobertura nunca fica com 0 selecionado -- desmarcar a
+última opção volta sozinho pra "Minha cobertura" (evita o botão mostrar
+rótulo errado com o filtro "sem cobertura nenhuma" aplicado por engano).
+
+Testado contra cópia do banco real: multi-select de 2 setores = união
+EXATA dos dois individuais (sem linha duplicada); multi-select de 2
+empresas = mesma união exata; `coverage=["minha","todos"]` devolve
+exatamente a mesma contagem que `coverage=["todos"]`; ausência de
+`coverage` cai no default `["minha"]`, igual antes. Também testado de
+ponta a ponta via `TestClient` contra a rota `/api/articles` de verdade
+com parâmetro repetido na querystring (o formato que o `app.js` novo
+manda). `dashboard.html` e `app.js` conferidos renderizando/sem erro de
+sintaxe.
+
 ## Regras a manter
 
 1. **Nunca** trocar `store.upsert_article` para sobrescrever corpo/título
@@ -1770,6 +1816,107 @@ de sempre, é preciso rodar `python -m scripts.seed` (ou deixar o próprio
 `sync_known_sources` roda a cada execução) pra essas 3 fontes novas
 aparecerem em "Fontes & Empresas" — elas entram **habilitadas** por
 padrão, então vão rodar já na primeira varredura depois do deploy.
+
+### Revisão da coleta de AGD — bug real no Vórtx + CRI/CRA + diagnóstico Pentágono (03/08/2026)
+
+Pedido do Allan: revisar a coleta de AGD nas 3 fontes (o "propositalmente
+genérico" ficou sem calibrar de verdade na 1ª versão — ver seção acima) e
+avaliar incluir CRI/CRA. Testei ao vivo (Chrome, não sandbox) contra as 3
+fontes e achei uma mistura de bug real, extensão possível e um problema
+maior que precisa de decisão do Allan:
+
+**`app/sources/vortx.py` — bug real confirmado e corrigido.** Testei
+contra uma operação com conteúdo de verdade (LIGHT - Emissão 22/Série 1,
+id=91018, 11 assembleias de 2023-2024 — a mesma exploração manual da 1ª
+versão não tinha achado nenhuma operação com AGD cadastrada, só testei
+Suzano/Cosan/JSL/Vale/Cogna/MRV/Oncoclínicas). Confirmei que:
+
+- O link que o parser antigo tentava achar (`<a href>` dentro da linha)
+  **nunca existe** — cada assembleia é um acordeão (Radix UI) sem link
+  algum, mesmo expandido. Todo `RawArticle.url` gerado até aqui caía no
+  fallback `#assembleia-ddmmaaaa`, que não abre documento nenhum. Ou seja,
+  a fonte rodava sem erro mas nunca produzia um link utilizável.
+- Pior: o nome dos documentos (Edital/Ata) só existe no DOM **depois de
+  clicar** no gatilho da assembleia — nem o HTML inicial nem o payload RSC
+  do Next.js trazem esse texto antes do clique. Então mesmo consertando só
+  o link, o parser antigo (que lia `page.content()` uma vez só, sem
+  clicar nas linhas) nunca teria achado nome de arquivo nenhum.
+- Descobri o mecanismo real inspecionando a aba Network ao clicar no botão
+  de download: ele abre direto
+  `https://vxmeetings-arquivos-prd.s3.us-east-1.amazonaws.com/Operacoes/{nome-do-arquivo}`
+  — bucket S3 público, sem token, montado só com o nome do arquivo
+  (`urllib.parse.quote`, preservando a caixa original — a UI mostra tudo
+  maiúsculo só por CSS `text-transform`, o nome real no DOM é misto, ex.:
+  `AGD - LIGHT - 22E (23.05.24) - Assinada.pdf`). Confirmei em 2
+  documentos reais (Edital e Ata) que a URL montada bate byte a byte com a
+  URL real capturada no navegador.
+
+**Fix implementado**: `fetch()` agora clica em cada gatilho de assembleia
+dentro de `LOOKBACK_DAYS=40` (mesma janela da Oliveira Trust — assembleias
+mais antigas nem são clicadas, pra não gastar tempo com histórico
+irrelevante) antes de ler o HTML final; `_extrair_assembleias_do_painel`
+foi reescrita pra usar `aria-controls` do gatilho pra achar o painel de
+documentos certo e extrair `nome_arquivo`/`tipo_doc` da estrutura real
+(`div.inline-flex` = badge Edital/Ata, `span.break-all` = nome do
+arquivo). Testado com um fixture que reproduz a estrutura real confirmada
+ao vivo (gatilho aberto vs. fechado, 2 documentos, URL final) — os 2
+testes de URL bateram exatamente com as URLs reais capturadas no
+navegador. **Custo de rede sobe** (1 clique extra por assembleia dentro da
+janela, além da navegação Playwright por operação) — se ficar lento
+demais, é o primeiro lugar pra otimizar.
+
+**CRI/CRA no Vórtx — incluído.** Diferente da Oliveira Trust, aqui o
+Apelido/`<title>` da página (ex.: "LIGHT - DEB | Vórtx") já é o nome do
+EMISSOR/DEVEDOR de verdade mesmo pra CRI/CRA, não do veículo
+securitizador — então o casamento por keyword de empresa funciona sem
+precisar de 2ª etapa. Troquei o filtro que só aceitava `" - DEB "` pra
+aceitar `" - DEB "`, `" - CRI "` e `" - CRA "` (`_TIPOS_ATIVO_ACEITOS`).
+
+**`app/sources/oliveiratrust.py` — sem bug, completude confirmada.**
+Consultei a API ao vivo sem filtro de `tipo_documento`: só existem 2
+categorias (`Assembleias`, 1.629 registros, e `Relatórios`, o resto) — não
+tem nenhuma categoria de AGD sendo perdida por conta do filtro atual.
+CRI/CRA continuam de fora (decisão da 1ª versão, reconfirmada ao vivo: o
+nome do "ativo" ainda é o veículo securitizador, não o devedor —
+precisaria abrir e parsear a escritura/PDF pra achar o devedor real, um
+projeto à parte, maior que os outros dois pontos).
+
+**`app/sources/pentagono.py` — achado preocupante, possivelmente zerado em
+produção.** Duas coisas:
+
+1. `_listar_ativos()` faz `GET /Site/Investidores?emissor=X` sem o
+   parâmetro `tipo` — descobri ao vivo que o site exige `tipo=N` pra saber
+   qual categoria buscar (`tipo=1`=Debênture, `tipo=3`=CRI, e por analogia
+   CRA/NP/LF também têm seu próprio número). Sem isso, o servidor nem
+   tenta processar a busca direito.
+2. Mesmo corrigindo o `tipo`, testei ao vivo no navegador (emissor=JBS,
+   emissor=Multiplan, com e sem `tipo=1`) e a busca **sempre** devolve
+   "Houve problemas no seu acesso. Tente acessar novamente ou contacte o
+   administrador" — a página carrega `google.com/recaptcha/api.js`, então
+   a suspeita é que a busca por emissor está atrás de verificação
+   anti-bot (provavelmente reCAPTCHA v3 invisível, que pontua a sessão em
+   vez de mostrar checkbox) e o `curl_cffi` (que não roda JS, não gera
+   token nenhum) nunca vai conseguir passar por isso — com ou sem `tipo`
+   corrigido.
+
+Conferi no banco local (`data/credit_monitor.db`, que roda o pipeline de
+verdade localmente e tem artigos de dezenas de outras fontes até
+27/07/2026 22:30): **zero artigos de `pentagonotrustee.com.br` e zero de
+`vortx.com.br` desde sempre** (Oliveira Trust tem exatamente 1 — a
+Hidrovias já documentada — o que é esperado, AGD é evento raro). O total
+zero do Vórtx é consistente com o bug de link/parsing agora corrigido
+acima. Já o zero do Pentágono é mais preocupante: não achei evidência de
+que ele algum dia tenha funcionado de verdade contra produção (mesmo
+"confirmado ao vivo" na 1ª versão pode ter testado um emissor sem
+resultado, sem diferenciar "0 resultados" de "erro de acesso").
+
+**Não mexi no código da Pentágono ainda** — corrigir só o `tipo=` não
+resolve se o bloqueio for mesmo reCAPTCHA (só Playwright *talvez* ajude, e
+mesmo assim não é garantido passar por reCAPTCHA v3 de forma confiável, e
+o custo de rede da Pentágono já era a maior preocupação documentada da 1ª
+versão — trocar pra Playwright pioraria isso). Preciso decidir com o Allan
+se vale investir mais tempo tentando confirmar/contornar isso, ou se essa
+fonte fica pausada por ora.
 
 ## Spreads de debêntures — "Hub Credit Research" (23/07/2026)
 

@@ -111,6 +111,41 @@ h2 { font-size: 1.05rem; margin: 20px 0 8px; color: var(--header); font-weight: 
 }
 .filters-bar .btn-primary { margin-top: 0; margin-left: auto; }
 
+/* Multi-select (setor/empresa/cobertura, pedido do Allan 03/08/2026 --
+   poder marcar mais de uma opção). Select nativo não faz multi-seleção
+   com checkbox/busca de um jeito usável, então é um botão que abre um
+   painel flutuante com checkboxes -- ver static/app.js initMultiSelect(). */
+.ms { position: relative; }
+.ms-btn {
+  padding: 7px 10px; border: 1px solid var(--border); border-radius: 6px; font-size: 0.85rem;
+  font-family: Arial, Helvetica, sans-serif; background: #fff; color: var(--text); cursor: pointer;
+  display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; max-width: 220px;
+  overflow: hidden; text-overflow: ellipsis;
+}
+.ms-btn:after { content: "▾"; font-size: 0.65rem; color: var(--muted); flex-shrink: 0; }
+.ms-btn.ms-open { border-color: var(--accent); color: var(--accent-dark); }
+.ms-panel {
+  position: absolute; top: calc(100% + 4px); left: 0; z-index: 30; min-width: 230px; max-width: 320px;
+  max-height: 320px; overflow-y: auto; background: #fff; border: 1px solid var(--border); border-radius: 8px;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.14); padding: 8px;
+}
+.ms-panel input[type="search"] {
+  width: 100%; box-sizing: border-box; padding: 6px 8px; margin-bottom: 6px; border: 1px solid var(--border);
+  border-radius: 5px; font-size: 0.82rem; font-family: Arial, Helvetica, sans-serif;
+}
+.ms-option {
+  display: flex; align-items: center; gap: 8px; padding: 5px 6px; border-radius: 5px; font-size: 0.85rem;
+  cursor: pointer;
+}
+.ms-option:hover { background: #f5f5f5; }
+.ms-option input { margin: 0; flex-shrink: 0; }
+.ms-clear {
+  display: block; width: 100%; text-align: left; background: none; border: none; color: var(--muted);
+  font-size: 0.78rem; padding: 5px 6px; cursor: pointer; border-bottom: 1px solid var(--border); margin-bottom: 4px;
+}
+.ms-clear:hover { color: var(--off); }
+.ms-empty { padding: 6px; font-size: 0.82rem; color: var(--muted); }
+
 .status-bar { display: flex; justify-content: space-between; font-size: 0.82rem; margin-bottom: 14px; color: var(--muted); }
 
 /* --------------------------------------------------------------------- */

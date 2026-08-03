@@ -9,7 +9,7 @@ import threading
 from datetime import datetime, timezone
 from zoneinfo import ZoneInfo
 
-from fastapi import Cookie, Depends, FastAPI, Form, Header, HTTPException, Request
+from fastapi import Cookie, Depends, FastAPI, Form, Header, HTTPException, Query, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
@@ -247,17 +247,20 @@ def dashboard(request: Request, user: User | None = Depends(current_user), db: S
 @app.get("/api/articles")
 def api_articles(
     window: str = "24h",
-    sector_id: int | None = None,
-    company_id: int | None = None,
+    # Setor/empresa/cobertura agora aceitam mais de um valor (pedido do
+    # Allan, 03/08/2026) -- `?sector_id=1&sector_id=2` vira uma lista aqui
+    # (FastAPI junta parâmetros repetidos com o mesmo nome automaticamente).
+    sector_id: list[int] = Query(default=[]),
+    company_id: list[int] = Query(default=[]),
     source_domain: str | None = None,
     article_type: str | None = None,
-    coverage: str = "minha",
+    coverage: list[str] = Query(default=["minha"]),
     user: User | None = Depends(current_user),
     db: Session = Depends(get_db),
 ):
     hours = config.WINDOW_PRESETS.get(window, 24)
     articles = store.list_articles(
-        db, window_hours=hours, sector_id=sector_id, company_id=company_id,
+        db, window_hours=hours, sector_ids=sector_id, company_ids=company_id,
         source_domain=source_domain, article_type=article_type, coverage=coverage,
     )
     out = []
