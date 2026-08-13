@@ -134,9 +134,13 @@ def register_cobertura_routes(current_user) -> APIRouter:
     # -----------------------------------------------------------------
     @router.get("/cobertura", response_class=HTMLResponse)
     def pagina(request: Request, user: User | None = Depends(current_user)):
+        # Assinatura nova do Starlette: `request` é o 1º posicional. A antiga
+        # (nome, {"request": ...}) quebra com "unhashable type: dict" nas
+        # versões atuais -- o app.py já usa esta forma.
         return templates.TemplateResponse(
+            request,
             "cobertura.html",
-            {"request": request, "user": user, "is_admin": bool(user and user.role == "admin")},
+            {"user": user, "is_admin": bool(user and user.role == "admin")},
         )
 
     # -----------------------------------------------------------------
@@ -231,9 +235,9 @@ def register_cobertura_routes(current_user) -> APIRouter:
         _exige_admin(user)
         base = str(request.base_url).rstrip("/")
         return templates.TemplateResponse(
+            request,
             "cobertura_bookmarklet.html",
             {
-                "request": request,
                 "user": user,
                 "base": base,
                 "token": INGEST_TOKEN,
