@@ -21,6 +21,7 @@ from .models import AppSetting, Company, RunLog, Sector, SectorKeyword, Session 
 from .pipeline import run_pipeline
 from .scheduler import start_scheduler, trigger_now
 from .spreads import queries as spreads_queries
+from .cobertura_routes import register_cobertura_routes
 from .spreads_routes import register_spreads_routes
 from .taxonomy import build_index
 
@@ -138,6 +139,20 @@ def require_admin(user: User = Depends(require_user)) -> User:
 # seguro -- conferido antes de trocar.
 app.include_router(register_spreads_routes(current_user))
 
+# Módulo "Repositório de Relatórios" (13/08/2026) -- catálogo dos relatórios
+# do Smart tagueados por empresa/setor. Mesma dependência opcional das outras
+# abas públicas: consultar não exige login, editar tag exige role admin
+# (conferido dentro do módulo, em `_exige_admin`, não aqui).
+app.include_router(register_cobertura_routes(current_user))
+
+# Aba "Banco de Dados" (12/08/2026) -- consulta e extração do que está
+# armazenado. Ao contrário de Notícias e Spreads, esta é RESTRITA: recebe
+# `require_admin`, não `current_user`. Ver app/spreads/banco_routes.py
+# para as barreiras do SQL livre.
+from .spreads.banco_routes import registrar_rotas as _registrar_banco  # noqa: E402
+
+_registrar_banco(app, require_admin, templates)
+
 
 @app.exception_handler(HTTPException)
 async def _redirect_on_303(request: Request, exc: HTTPException):
@@ -231,11 +246,17 @@ def dashboard(request: Request, user: User | None = Depends(current_user), db: S
         [{"id": c.id, "name": c.name, "sector_id": c.sector_id} for c in companies]
     ).replace("</", "<\\/")  # evita fechar a tag <script> se algum nome contiver "</"
     last_run = db.query(RunLog).order_by(RunLog.id.desc()).first()
+    # Fontes pro filtro multi-select (12/08/2026). Vem de `sources` (o
+    # cadastro), não de um DISTINCT em `articles`: assim a lista fica
+    # estável mesmo numa janela de tempo em que a fonte não publicou nada
+    # -- uma lista que muda de tamanho conforme o filtro de data é
+    # confusa de usar.
+    fontes = db.query(Source).order_by(Source.name).all()
     return templates.TemplateResponse(
         request,
         "dashboard.html",
         {
-            "user": user, "sectors": sectors,
+            "user": user, "sectors": sectors, "fontes": fontes,
             "companies_json": companies_json,
             "window_presets": config.WINDOW_PRESETS, "default_window": config.DEFAULT_WINDOW,
             "scan_interval_minutes": config.SCAN_INTERVAL_MINUTES,
@@ -253,6 +274,8 @@ def api_articles(
     sector_id: list[int] = Query(default=[]),
     company_id: list[int] = Query(default=[]),
     source_domain: str | None = None,
+    # `?source_name=A&source_name=B` -- mesma mecânica de sector_id.
+    source_name: list[str] = Query(default=[]),
     article_type: str | None = None,
     coverage: list[str] = Query(default=["minha"]),
     user: User | None = Depends(current_user),
@@ -261,7 +284,8 @@ def api_articles(
     hours = config.WINDOW_PRESETS.get(window, 24)
     articles = store.list_articles(
         db, window_hours=hours, sector_ids=sector_id, company_ids=company_id,
-        source_domain=source_domain, article_type=article_type, coverage=coverage,
+        source_domain=source_domain, source_names=source_name,
+        article_type=article_type, coverage=coverage,
     )
     out = []
     for a in articles:

@@ -1,0 +1,73 @@
+{% extends "base.html" %}
+{% block title %}Atualizar o Repositório — Hub Credit Research{% endblock %}
+
+{# Página restrita a admin: o link do bookmarklet carrega o
+   COBERTURA_INGEST_TOKEN embutido, e quem tem o token escreve na base. #}
+{% block content %}
+<style>
+.bk{max-width:760px}
+.bk h1{font-size:20px;color:#EC7000;margin:0 0 4px}
+.bk h2{font-size:14px;margin:22px 0 8px}
+.bk p,.bk li{font-size:13.5px;line-height:1.6;color:#2B2B2B}
+.bk .drag{display:inline-block;background:#EC7000;color:#fff;padding:9px 16px;border-radius:8px;
+  font-weight:600;text-decoration:none;font-size:14px;cursor:grab}
+.bk .box{background:#FFF8F0;border:1px solid #FFD9B3;border-radius:8px;padding:12px 14px;font-size:12.5px;color:#8A5200;line-height:1.55}
+.bk .warn{background:#FFF0F0;border-color:#F5C2C2;color:#A33}
+.bk code{background:#F0F0F0;padding:1px 5px;border-radius:4px;font-size:12px}
+.bk ol{padding-left:20px}
+</style>
+
+<div class="bk">
+  <h1>Atualizar o Repositório</h1>
+  <p class="cob-note">Botão que lê os relatórios novos do Smart e alimenta o catálogo.</p>
+
+  {% if not configurado %}
+  <div class="box warn">
+    <b>Falta configurar.</b> A variável de ambiente <code>COBERTURA_INGEST_TOKEN</code> não está
+    definida, então a ingestão está desligada. Defina-a na Vercel (Settings → Environment Variables),
+    com um valor longo e aleatório, e faça o redeploy. Depois volte aqui.
+  </div>
+  {% else %}
+
+  <h2>1. Instale o botão (uma vez só)</h2>
+  <p>Mostre a barra de favoritos do Chrome com <code>Ctrl+Shift+B</code> e <b>arraste o botão abaixo</b> para ela:</p>
+  <p>
+    <a class="drag" href="javascript:(function(){window.__COBERTURA_CFG={api:'{{ base }}/api/cobertura/ingest',token:'{{ token }}',paginas:2};var s=document.createElement('script');s.src='{{ base }}/static/cobertura-coletor.js?v='+Date.now();document.body.appendChild(s);})();">↻ Atualizar Repositório</a>
+  </p>
+  <div class="box">
+    Arrastar, não clicar. Clicar aqui não faz nada — o botão só funciona dentro do Smart.
+  </div>
+
+  <h2>2. Use</h2>
+  <ol>
+    <li>Abra o Smart em <b>Fixed Income → Relatórios</b> e confirme que está logado.</li>
+    <li>Clique no favorito <b>↻ Atualizar Repositório</b>.</li>
+    <li>Um painel aparece no canto mostrando o progresso. Ao terminar ele diz quantos relatórios entraram.</li>
+  </ol>
+  <p>Leva cerca de um minuto lendo as duas primeiras páginas (60 relatórios) — folgado para rodar
+  três vezes ao dia. Para uma carga completa das 43 páginas, use o link de carga inicial abaixo.</p>
+
+  <h2>Carga inicial (43 páginas)</h2>
+  <p>Só na primeira vez, para trazer o histórico inteiro. Demora perto de uma hora e a aba precisa
+  ficar aberta. Arraste este outro botão:</p>
+  <p>
+    <a class="drag" style="background:#6B6B6B" href="javascript:(function(){window.__COBERTURA_CFG={api:'{{ base }}/api/cobertura/ingest',token:'{{ token }}',paginas:43};var s=document.createElement('script');s.src='{{ base }}/static/cobertura-coletor.js?v='+Date.now();document.body.appendChild(s);})();">↻ Carga inicial completa</a>
+  </p>
+
+  <h2>Por que não é automático</h2>
+  <p>O Smart exige sessão autenticada, e a API que o portal usa recusa requisição sem o header de
+  autorização que só o app dele emite — testado abrindo o endpoint direto no navegador já logado.
+  Um job do GitHub Actions bateria na mesma porta, como acontece com as notícias que vêm de sites
+  abertos. Por isso a coleta roda onde a sessão existe: no seu navegador.</p>
+  <p>O caminho para tornar isso automático de verdade é uma <b>credencial de serviço</b> para o
+  endpoint <code>research/v1/reports</code>, emitida pela tecnologia — o mesmo modelo do
+  <code>ANBIMA_CLIENT_ID</code> que você já usa. Com ela, um workflow passa a rodar sozinho.</p>
+
+  <div class="box">
+    <b>Sobre o token neste link:</b> ele autoriza escrever no repositório. Não compartilhe o
+    favorito nem esta página. Se vazar, troque <code>COBERTURA_INGEST_TOKEN</code> na Vercel e
+    reinstale o botão.
+  </div>
+  {% endif %}
+</div>
+{% endblock %}

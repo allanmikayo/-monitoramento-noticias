@@ -1,0 +1,329 @@
+{% extends "base.html" %}
+{% block title %}Repositório de Relatórios — Hub Credit Research{% endblock %}
+
+{# Catálogo dos relatórios do Smart (13/08/2026). Todo o CSS abaixo é
+   prefixado com `cob-` de propósito: na versão anterior (arquivo solto,
+   fora do app) uma regra `.main{min-height:60vh}` do layout pegou também
+   as tags `class="tag main"` e esticou cada tag pra 60% da altura da tela.
+   Levou três rodadas pra achar. Prefixo evita que isso volte a acontecer
+   ao conviver com style.css. #}
+{% block content %}
+<style>
+.cob{--o:#EC7000;--ink:#2B2B2B;--mut:#6B6B6B;--line:#E4E4E4;--chip:#F0F0F0}
+.cob-head{display:flex;align-items:baseline;gap:10px;margin-bottom:14px}
+.cob-head h1{margin:0;font-size:21px;color:var(--o);letter-spacing:-.3px}
+.cob-head .cob-sub{font-size:14px;color:var(--mut)}
+.cob-head .cob-stats{margin-left:auto;font-size:12px;color:var(--mut)}
+.cob-grid{display:grid;grid-template-columns:300px 1fr;gap:18px;align-items:start}
+.cob-card{background:#fff;border:1px solid var(--line);border-radius:10px}
+.cob-side{position:sticky;top:14px;max-height:calc(100vh - 40px);display:flex;flex-direction:column}
+.cob-card h2{margin:0;padding:12px 14px;font-size:12px;text-transform:uppercase;letter-spacing:.6px;color:var(--mut);border-bottom:1px solid var(--line)}
+.cob-filters{padding:11px 14px;border-bottom:1px solid var(--line);display:grid;gap:8px}
+.cob-filters label{font-size:10.5px;text-transform:uppercase;letter-spacing:.5px;color:var(--mut);display:block;margin-bottom:3px}
+.cob input,.cob select{width:100%;padding:8px 10px;border:1px solid var(--line);border-radius:7px;font-size:13px;font-family:inherit;background:#fff;color:var(--ink)}
+.cob-dates{display:grid;grid-template-columns:1fr 1fr;gap:7px}
+.cob-reset{background:none;border:1px solid var(--line);border-radius:7px;padding:7px;font-size:12px;cursor:pointer;color:var(--mut);font-family:inherit}
+.cob-reset:hover{border-color:var(--o);color:var(--o)}
+.cob-colist{overflow-y:auto;flex:1}
+.cob-sector{padding:8px 14px 4px;font-size:9.5px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:var(--o);background:#FAFAFA;border-top:1px solid var(--line)}
+.cob-co{padding:8px 14px;border-bottom:1px solid #F2F2F2;cursor:pointer;display:flex;align-items:baseline;gap:8px}
+.cob-co:hover{background:#FFF7F0}
+.cob-co.on{background:#FFF0E2;box-shadow:inset 3px 0 0 var(--o)}
+.cob-co .n{font-weight:600;flex:1}
+.cob-co .c{font-size:11px;color:var(--mut);background:var(--chip);border-radius:9px;padding:1px 7px}
+.cob-co .d{font-size:11px;color:var(--mut);width:62px;text-align:right}
+.cob-co.zero .n{color:#B0B0B0;font-weight:400}
+.cob-tabs{display:flex;gap:2px;padding:0 18px;border-bottom:1px solid var(--line);background:#FAFAFA;border-radius:10px 10px 0 0}
+.cob-tab{padding:10px 13px;font-size:13px;cursor:pointer;border-bottom:2px solid transparent;color:var(--mut)}
+.cob-tab.on{border-bottom-color:var(--o);color:var(--ink);font-weight:600}
+.cob-tab .b{font-size:10.5px;background:var(--chip);border-radius:9px;padding:1px 6px;margin-left:5px;color:#4A4A4A}
+.cob-title{padding:16px 18px;border-bottom:1px solid var(--line)}
+.cob-title h3{margin:0 0 3px;font-size:19px}
+.cob-title .m{color:var(--mut);font-size:12.5px}
+.cob-legend{font-size:11px;color:var(--mut);padding:7px 18px;background:#FCFCFC;border-bottom:1px solid var(--line)}
+.cob table{width:100%;border-collapse:collapse}
+.cob th{text-align:left;font-size:10px;text-transform:uppercase;letter-spacing:.6px;color:var(--mut);padding:9px 11px;border-bottom:1px solid var(--line);background:#FAFAFA;cursor:pointer;white-space:nowrap}
+.cob td{padding:10px 11px;border-bottom:1px solid #F2F2F2;vertical-align:top}
+.cob tr:hover td{background:#FFFBF7}
+.cob-ttl{font-weight:600;color:var(--ink);text-decoration:none;display:block;line-height:1.35}
+.cob-ttl:hover{color:var(--o)}
+.cob-tags{margin-top:5px;display:block;font-size:0}
+.cob-tag{font-size:10.5px;background:var(--chip);border-radius:9px;padding:0 8px;color:#4A4A4A;cursor:pointer;
+  display:inline-block;height:19px;line-height:19px;white-space:nowrap;margin:0 4px 4px 0;vertical-align:top}
+.cob-tag:hover{background:#FFE3CC;color:#B85400}
+.cob-tag.pri{background:#FFE9D6;color:#A34E00;font-weight:600}
+.cob-tag.set{background:#EEF3FA;color:#3B5F8A}
+.cob-tag.nao{background:#F7F7F7;color:#9A9A9A;cursor:default;font-style:italic}
+.cob-nw{white-space:nowrap;color:var(--mut);font-size:12.5px}
+.cob-btn{display:inline-block;padding:5px 9px;border:1px solid var(--line);border-radius:6px;font-size:11.5px;text-decoration:none;color:var(--ink);background:#fff;cursor:pointer;font-family:inherit;margin-right:5px}
+.cob-btn:hover{border-color:var(--o);color:var(--o)}
+.cob-btn.p{background:var(--o);border-color:var(--o);color:#fff}
+.cob-none{padding:36px 18px;color:var(--mut);text-align:center}
+.cob-toc{padding:16px 18px;column-count:3;column-gap:32px}
+@media(max-width:1250px){.cob-toc{column-count:2}}
+@media(max-width:900px){.cob-toc{column-count:1}.cob-grid{grid-template-columns:1fr}.cob-side{position:static;max-height:none}}
+.cob-tsec{break-inside:avoid;margin-bottom:13px}
+.cob-th{font-weight:700;font-size:12.5px;padding:3px 0 4px}
+.cob-ti{display:flex;align-items:baseline;gap:5px;font-size:12.5px;padding:2px 0 2px 14px;cursor:pointer}
+.cob-ti:hover{color:var(--o)}
+.cob-ti.zero{color:#B0B0B0;cursor:default}
+.cob-dots{flex:1;border-bottom:1px dotted #C9C9C9;transform:translateY(-3px)}
+.cob-dt{font-variant-numeric:tabular-nums;font-size:11.5px;color:var(--mut)}
+.cob-mask{position:fixed;inset:0;background:rgba(0,0,0,.45);display:flex;align-items:center;justify-content:center;z-index:900;padding:20px}
+.cob-modal{background:#fff;border-radius:12px;width:100%;max-width:560px;max-height:88vh;overflow:auto}
+.cob-modal h4{margin:0;padding:15px 18px;font-size:15px;border-bottom:1px solid var(--line)}
+.cob-mb{padding:15px 18px;display:grid;gap:13px}
+.cob-mf{padding:13px 18px;border-top:1px solid var(--line);display:flex;gap:8px;justify-content:flex-end}
+.cob-chips{display:block;margin-top:7px;min-height:22px;font-size:0}
+.cob-chip{display:inline-block;height:22px;line-height:22px;padding:0 4px 0 9px;border-radius:11px;background:#FFE9D6;color:#A34E00;font-size:11.5px;font-weight:600;margin:0 5px 5px 0;vertical-align:top}
+.cob-chip.s{background:#EEF3FA;color:#3B5F8A}
+.cob-chip b{cursor:pointer;font-size:14px;padding:0 3px;opacity:.6}
+.cob-note{font-size:11.5px;color:var(--mut);line-height:1.5}
+</style>
+
+<div class="cob">
+  <div class="cob-head">
+    <h1>Repositório de Relatórios</h1>
+    <div class="cob-sub">— Fixed Income Research Team</div>
+    <div class="cob-stats" id="cobStats"></div>
+  </div>
+
+  <div class="cob-grid">
+    <div class="cob-card cob-side">
+      <h2>Empresas cobertas</h2>
+      <div class="cob-filters">
+        <input id="cobQ" placeholder="Buscar empresa ou setor..." autocomplete="off">
+        <div>
+          <label>Tipo de investimento</label>
+          <select id="cobTipo"><option value="">Todos</option></select>
+        </div>
+        <div>
+          <label>Categoria</label>
+          <select id="cobCat"><option value="">Todas</option></select>
+        </div>
+        <div>
+          <label>Período de publicação</label>
+          <div class="cob-dates"><input type="date" id="cobDe"><input type="date" id="cobAte"></div>
+        </div>
+        <button class="cob-reset" id="cobReset">Redefinir filtros</button>
+      </div>
+      <div class="cob-colist" id="cobList"></div>
+    </div>
+
+    <div class="cob-card">
+      <div class="cob-tabs" id="cobTabs">
+        <div class="cob-tab on" data-v="idx">Repositório</div>
+        <div class="cob-tab" data-v="rel">Relatórios</div>
+        {% if is_admin %}<div class="cob-tab" data-v="rev">Pendências<span class="b" id="cobRev">0</span></div>{% endif %}
+      </div>
+      <div class="cob-title"><h3 id="cobTitulo">Repositório</h3><div class="m" id="cobMeta"></div></div>
+      <div class="cob-legend" id="cobLegend"></div>
+      <div id="cobBody"><div class="cob-none">Carregando…</div></div>
+    </div>
+  </div>
+</div>
+<div id="cobModal"></div>
+
+<script>
+(function(){
+  var IS_ADMIN = {{ 'true' if is_admin else 'false' }};
+  var SMART = 'https://www.itau.com.br/itaubba-pt/portal/credit/report/';
+  var MERCADO = 'Relatórios de Mercado';
+  var DB = {relatorios:[], empresas:[], gerado_em:null};
+  var sel=null, view='idx', sortKey='data', sortDir=-1;
+
+  var $=function(s){return document.querySelector(s);};
+  var norm=function(s){return (s||'').normalize('NFD').replace(/[̀-ͯ]/g,'').toLowerCase();};
+  var fmt=function(d){return d? d.split('-').reverse().join('/') : '—';};
+  var esc=function(s){return String(s==null?'':s).replace(/[&<>"]/g,function(c){
+    return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];});};
+
+  fetch('/api/cobertura/dados').then(function(r){return r.json();}).then(function(d){
+    DB=d; iniciar();
+  }).catch(function(){ $('#cobBody').innerHTML='<div class="cob-none">Não consegui carregar os dados.</div>'; });
+
+  function iniciar(){
+    var tipos={}, cats={};
+    DB.relatorios.forEach(function(r){ if(r.tipo_investimento)tipos[r.tipo_investimento]=1; if(r.categoria)cats[r.categoria]=1; });
+    Object.keys(tipos).sort().forEach(function(t){ $('#cobTipo').add(new Option(t,t)); });
+    Object.keys(cats).sort().forEach(function(c){ $('#cobCat').add(new Option(c,c)); });
+    ['#cobQ','#cobTipo','#cobCat','#cobDe','#cobAte'].forEach(function(s){ $(s).addEventListener('input',render); });
+    $('#cobReset').onclick=function(){ ['#cobQ','#cobTipo','#cobCat','#cobDe','#cobAte'].forEach(function(s){$(s).value='';}); sel=null; render(); };
+    document.querySelectorAll('#cobTabs .cob-tab').forEach(function(t){ t.onclick=function(){ setView(t.dataset.v); }; });
+    render();
+  }
+  function setView(v){ if(v==='rev'&&!IS_ADMIN) v='idx'; view=v;
+    document.querySelectorAll('#cobTabs .cob-tab').forEach(function(x){ x.classList.toggle('on', x.dataset.v===v); }); render(); }
+
+  function filtrados(){
+    var t=$('#cobTipo').value,c=$('#cobCat').value,de=$('#cobDe').value,ate=$('#cobAte').value;
+    return DB.relatorios.filter(function(r){
+      return (!t||r.tipo_investimento===t)&&(!c||r.categoria===c)&&(!de||(r.data&&r.data>=de))&&(!ate||(r.data&&r.data<=ate));
+    });
+  }
+  function porEmpresa(rels){
+    var m=new Map();
+    DB.empresas.forEach(function(e){ m.set(e.empresa,{empresa:e.empresa,setor:e.setor,rels:[]}); });
+    m.set(MERCADO,{empresa:MERCADO,setor:'Mercado',rels:[]});
+    rels.forEach(function(r){
+      if(r.mercado) m.get(MERCADO).rels.push(r);
+      (r.empresas||[]).forEach(function(n){ if(m.has(n)) m.get(n).rels.push(r); });
+    });
+    m.forEach(function(v){ v.rels.sort(function(a,b){ return (b.data||'').localeCompare(a.data||''); }); });
+    return m;
+  }
+
+  function renderSide(m){
+    var q=norm($('#cobQ').value), bySec={};
+    m.forEach(function(e){
+      if(q && norm(e.empresa).indexOf(q)<0 && norm(e.setor).indexOf(q)<0) return;
+      (bySec[e.setor]=bySec[e.setor]||[]).push(e);
+    });
+    var h='';
+    Object.keys(bySec).sort(function(a,b){ return a==='Mercado'?1:b==='Mercado'?-1:a.localeCompare(b,'pt'); }).forEach(function(s){
+      h+='<div class="cob-sector">'+esc(s)+'</div>';
+      bySec[s].sort(function(a,b){return a.empresa.localeCompare(b.empresa,'pt');}).forEach(function(e){
+        var l=e.rels[0];
+        h+='<div class="cob-co'+(e.rels.length?'':' zero')+(sel===e.empresa?' on':'')+'" data-co="'+esc(e.empresa)+'">'
+          +'<span class="n">'+esc(e.empresa)+'</span><span class="c">'+e.rels.length+'</span>'
+          +'<span class="d">'+(l?fmt(l.data):'—')+'</span></div>';
+      });
+    });
+    $('#cobList').innerHTML=h||'<div class="cob-none">Nada encontrado.</div>';
+    $('#cobList').querySelectorAll('.cob-co').forEach(function(el){
+      el.onclick=function(){ sel=(sel===el.dataset.co)?null:el.dataset.co; setView(view==='idx'?'rel':view); };
+    });
+  }
+
+  function tabela(rels){
+    if(!rels.length) return '<div class="cob-none">Nenhum relatório com os filtros atuais.</div>';
+    var s=rels.slice().sort(function(a,b){ var A=a[sortKey]||'',B=b[sortKey]||''; return (A<B?-1:A>B?1:0)*sortDir; });
+    var th=function(k,l){ return '<th data-k="'+k+'">'+l+(sortKey===k?(sortDir>0?' ▲':' ▼'):'')+'</th>'; };
+    var h='<table><thead><tr>'+th('data','Data')+th('titulo','Relatório / empresas citadas')
+      +th('categoria','Categoria')+th('tipo_investimento','Tipo')+'<th style="cursor:default">Ações</th></tr></thead><tbody>';
+    s.forEach(function(r){
+      var pri=r.empresa_principal||[];
+      var tags=(r.empresas||[]).map(function(e){
+        return '<span class="cob-tag'+(pri.indexOf(e)>=0?' pri':'')+'" data-co="'+esc(e)+'">'+esc(e)+'</span>'; }).join('');
+      tags+=(r.setores_extra||[]).map(function(x){ return '<span class="cob-tag set">setor: '+esc(x)+'</span>'; }).join('');
+      if(r.mercado) tags='<span class="cob-tag set" data-co="'+esc(MERCADO)+'">Mercado</span>'+tags;
+      if(!tags) tags='<span class="cob-tag nao">sem empresa identificada</span>';
+      h+='<tr><td class="cob-nw">'+fmt(r.data)+'</td>'
+        +'<td><a class="cob-ttl" href="'+r.url+'" target="_blank" rel="noopener">'+esc(r.titulo)+'</a>'
+        +'<div class="cob-tags">'+tags+'</div></td>'
+        +'<td class="cob-nw">'+esc(r.categoria||'—')+'</td><td class="cob-nw">'+esc(r.tipo_investimento||'—')+'</td>'
+        +'<td class="cob-nw"><a class="cob-btn p" href="'+r.url+'" target="_blank" rel="noopener">Abrir no Smart</a>'
+        +(IS_ADMIN?'<button class="cob-btn cobEd" data-id="'+r.id+'">Editar tags</button>':'')+'</td></tr>';
+    });
+    return h+'</tbody></table>';
+  }
+
+  function indice(m){
+    var bySec={};
+    m.forEach(function(e){ (bySec[e.setor]=bySec[e.setor]||[]).push(e); });
+    var h='<div class="cob-toc">';
+    Object.keys(bySec).sort(function(a,b){ return a==='Mercado'?1:b==='Mercado'?-1:a.localeCompare(b,'pt'); }).forEach(function(s){
+      h+='<div class="cob-tsec"><div class="cob-th">'+esc(s)+'</div>';
+      bySec[s].sort(function(a,b){return a.empresa.localeCompare(b.empresa,'pt');}).forEach(function(e){
+        var l=e.rels[0];
+        h+='<div class="cob-ti'+(l?'':' zero')+'"'+(l?' data-co="'+esc(e.empresa)+'"':'')+'>'
+          +'<span>'+esc(e.empresa)+'</span><span class="cob-dots"></span>'
+          +'<span class="cob-dt">'+(l?fmt(l.data):'—')+'</span></div>';
+      });
+      h+='</div>';
+    });
+    return h+'</div>';
+  }
+
+  function render(){
+    var base=filtrados(), m=porEmpresa(base);
+    renderSide(m);
+    var nRev=DB.relatorios.filter(function(r){return r.revisar;}).length;
+    if($('#cobRev')) $('#cobRev').textContent=nRev;
+    $('#cobStats').textContent=DB.relatorios.length+' relatórios · '+DB.empresas.length+' empresas · atualizado em '+fmt(DB.gerado_em);
+
+    var rels=base, titulo='Todos os relatórios', sub='';
+    if(sel && m.has(sel)){
+      var e=m.get(sel); rels=e.rels; titulo=sel;
+      sub=e.setor+' · '+e.rels.length+' relatório(s)'+(e.rels[0]?' · último em '+fmt(e.rels[0].data):'');
+    } else {
+      var comCob=0; m.forEach(function(x){ if(x.rels.length&&x.empresa!==MERCADO) comCob++; });
+      sub=base.length+' relatórios · '+comCob+' empresas com cobertura · '+base.filter(function(r){return r.mercado;}).length+' de mercado';
+    }
+    $('#cobTitulo').textContent = view==='idx'?'Repositório':titulo;
+    $('#cobMeta').textContent = view==='idx'
+      ? 'Empresas por setor, com a data do relatório mais recente que cita cada uma. Clique para ver todos os relatórios.'
+      : sub;
+
+    if(view==='idx'){ $('#cobLegend').style.display='none'; $('#cobBody').innerHTML=indice(m); }
+    else {
+      $('#cobLegend').style.display='';
+      $('#cobLegend').innerHTML = view==='rev'
+        ? 'Relatórios sem empresa identificada que não são de mercado. Use <b>Editar tags</b> para classificar.'
+        : 'Tags: <b>laranja</b> = empresa do título · cinza = citada no resumo · azul = setor/mercado. Clique para filtrar.';
+      $('#cobBody').innerHTML=tabela(view==='rev'?base.filter(function(r){return r.revisar;}):rels);
+    }
+    $('#cobBody').querySelectorAll('th[data-k]').forEach(function(th){
+      th.onclick=function(){ if(sortKey===th.dataset.k) sortDir*=-1; else {sortKey=th.dataset.k;sortDir=-1;} render(); };
+    });
+    $('#cobBody').querySelectorAll('[data-co]').forEach(function(el){
+      el.onclick=function(){ sel=el.dataset.co; setView('rel'); window.scrollTo({top:0,behavior:'smooth'}); };
+    });
+    $('#cobBody').querySelectorAll('.cobEd').forEach(function(b){ b.onclick=function(){ editar(b.dataset.id); }; });
+  }
+
+  /* ---------- edição (admin; o servidor confere de novo) ---------- */
+  function editar(id){
+    var r=DB.relatorios.filter(function(x){return x.id===id;})[0]; if(!r) return;
+    var emp=(r.empresas||[]).slice(), setores=(r.setores_extra||[]).slice(), merc=!!r.mercado;
+    var listaSet={}; DB.empresas.forEach(function(e){ listaSet[e.setor]=1; });
+    var opcoesSet=Object.keys(listaSet).sort(function(a,b){return a.localeCompare(b,'pt');});
+
+    $('#cobModal').innerHTML='<div class="cob-mask"><div class="cob-modal cob"><h4>Editar tags</h4><div class="cob-mb">'
+      +'<div style="font-weight:600;line-height:1.4">'+esc(r.titulo)+'</div>'
+      +'<div class="cob-note">'+fmt(r.data)+' · '+esc(r.categoria||'—')+' · '+esc(r.tipo_investimento||'—')+'</div>'
+      +'<div><label class="cob-note">Empresas citadas</label>'
+      +'<input id="cobBusca" list="cobLista" placeholder="Digite e escolha..." autocomplete="off">'
+      +'<datalist id="cobLista">'+DB.empresas.map(function(e){return '<option value="'+esc(e.empresa)+'">';}).join('')+'</datalist>'
+      +'<div class="cob-chips" id="cobChips"></div></div>'
+      +'<div><label class="cob-note">Setores citados (quando não há empresa específica)</label>'
+      +'<select id="cobSel"><option value="">Adicionar setor...</option>'
+      +opcoesSet.map(function(s){return '<option>'+esc(s)+'</option>';}).join('')+'</select>'
+      +'<div class="cob-chips" id="cobChipsS"></div></div>'
+      +'<div class="cob-note"><input type="checkbox" id="cobMerc" style="width:auto;margin-right:6px"'+(merc?' checked':'')+'>'
+      +'Relatório de mercado (não é sobre empresas específicas)</div>'
+      +'<div class="cob-note">A empresa precisa existir em <a href="/fontes">Fontes &amp; Empresas</a> — é o que mantém os nomes padronizados.</div>'
+      +'<div id="cobErr" class="cob-note" style="color:#C23B3B"></div>'
+      +'</div><div class="cob-mf"><button class="cob-btn" id="cobCancel">Cancelar</button>'
+      +'<button class="cob-btn p" id="cobSalvar">Salvar</button></div></div></div>';
+
+    function pinta(){
+      $('#cobChips').innerHTML = emp.length? emp.map(function(e){return '<span class="cob-chip">'+esc(e)+'<b data-x="'+esc(e)+'">×</b></span>';}).join('') : '<span class="cob-note">nenhuma</span>';
+      $('#cobChipsS').innerHTML = setores.length? setores.map(function(s){return '<span class="cob-chip s">'+esc(s)+'<b data-y="'+esc(s)+'">×</b></span>';}).join('') : '<span class="cob-note">nenhum</span>';
+      $('#cobChips').querySelectorAll('b').forEach(function(b){ b.onclick=function(){ emp=emp.filter(function(x){return x!==b.dataset.x;}); pinta(); }; });
+      $('#cobChipsS').querySelectorAll('b').forEach(function(b){ b.onclick=function(){ setores=setores.filter(function(x){return x!==b.dataset.y;}); pinta(); }; });
+    }
+    pinta();
+    $('#cobBusca').addEventListener('input',function(ev){
+      var v=ev.target.value.trim();
+      if(DB.empresas.some(function(e){return e.empresa===v;}) && emp.indexOf(v)<0){ emp.push(v); emp.sort(); ev.target.value=''; pinta(); }
+    });
+    $('#cobSel').onchange=function(ev){ var v=ev.target.value; if(v&&setores.indexOf(v)<0){ setores.push(v); setores.sort(); pinta(); } ev.target.value=''; };
+    $('#cobCancel').onclick=function(){ $('#cobModal').innerHTML=''; };
+    $('#cobSalvar').onclick=function(){
+      fetch('/api/cobertura/relatorio/'+encodeURIComponent(id)+'/tags',{
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({empresas:emp,setores:setores,mercado:$('#cobMerc').checked})
+      }).then(function(resp){ return resp.json().then(function(j){ return {ok:resp.ok,j:j}; }); })
+        .then(function(o){
+          if(!o.ok){ $('#cobErr').textContent=o.j.detail||'Não consegui salvar.'; return; }
+          r.empresas=emp.slice(); r.setores_extra=setores.slice(); r.mercado=$('#cobMerc').checked;
+          r.empresa_principal=(r.empresa_principal||[]).filter(function(x){return emp.indexOf(x)>=0;});
+          r.revisar = !(emp.length||setores.length||r.mercado);
+          $('#cobModal').innerHTML=''; render();
+        }).catch(function(){ $('#cobErr').textContent='Falha de rede.'; });
+    };
+  }
+})();
+</script>
+{% endblock %}

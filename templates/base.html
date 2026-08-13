@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>{% block title %}Hub Credit Research{% endblock %} — IBBA</title>
+  <title>{% block title %}Hub Credit Research{% endblock %}</title>
   <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
@@ -18,7 +18,15 @@
       <nav>
         <a href="/">Notícias</a>
         <a href="/spreads">Spreads</a>
+        {# Repositório de Relatórios (13/08/2026): público como Notícias e
+           Spreads -- os relatórios de research são públicos, só a edição
+           das tags é restrita a admin (checado na rota). #}
+        <a href="/cobertura">Repositório</a>
         {% if user %}<a href="/fontes">Fontes &amp; Empresas</a>{% endif %}
+        {# Banco de Dados: só admin (12/08/2026). A rota já exige
+           `require_admin`; este `if` é só pra não mostrar link que
+           levaria a um 403. #}
+        {% if user and user.role == 'admin' %}<a href="/banco">Banco de Dados</a>{% endif %}
         {% if user and user.role == 'admin' %}<a href="/admin">Administração</a>{% endif %}
       </nav>
       <div class="user-box">
