@@ -59,6 +59,7 @@
   const selectedSectors = new Set();
   const selectedCompanies = new Set();
   const selectedCoverage = new Set(["minha"]); // mesmo padrão de sempre
+  const selectedSources = new Set();            // filtro de fonte (12/08/2026)
 
   function closeAllPanels(except) {
     document.querySelectorAll(".ms-panel").forEach((p) => {
@@ -274,6 +275,7 @@
     // quando a lista vem vazia).
     selectedSectors.forEach((id) => params.append("sector_id", id));
     selectedCompanies.forEach((id) => params.append("company_id", id));
+    selectedSources.forEach((v) => params.append("source_name", v));
     selectedCoverage.forEach((v) => params.append("coverage", v));
     if (typeSelect.value) params.set("article_type", typeSelect.value);
 
@@ -388,6 +390,29 @@
     nameLookup: (id) => (companiesData.find((c) => String(c.id) === id) || {}).name || id,
     onChange: () => loadArticles(),
   });
+
+  // Fonte (12/08/2026): mesmo padrão de Setor/Empresa. O valor do
+  // checkbox é o NOME da fonte, não um id -- é o que `Article.source_name`
+  // guarda e o que aparece no card, então o filtro casa com o que o
+  // usuário está vendo na tela.
+  initMultiSelect({
+    msId: "ms-source", btnId: "ms-source-btn", panelId: "ms-source-panel",
+    prefix: "Fonte", allLabel: "Todas", selectedSet: selectedSources,
+    nameLookup: (v) => v,
+    onChange: () => loadArticles(),
+  });
+
+  // Busca dentro do painel de fontes -- são 26 e crescendo; sem isso a
+  // lista vira rolagem longa.
+  const buscaFonte = document.getElementById("ms-source-search");
+  if (buscaFonte) {
+    buscaFonte.addEventListener("input", () => {
+      const termo = buscaFonte.value.trim().toLowerCase();
+      document.querySelectorAll("#ms-source-options .ms-option").forEach((el) => {
+        el.hidden = termo !== "" && !(el.dataset.nome || "").includes(termo);
+      });
+    });
+  }
 
   const coverageNames = { minha: "Minha cobertura", todos: "Todos" };
   initMultiSelect({

@@ -1,0 +1,290 @@
+"""Testes de app/spreads/b3_agregado.py — agregado diário da B3.
+
+    python -m pytest tests/test_b3_agregado.py -v
+"""
+from __future__ import annotations
+
+from datetime import date, timedelta
+
+import pytest
+from sqlalchemy import create_engine
+from sqlalchemy.orm import Session
+
+from app.db import Base
+from app.models import NegocioB3, NegocioB3Diario
+from app.spreads import b3_agregado as agg
+
+
+@pytest.fixture()
+def db():
+    engine = create_engine("sqlite://")
+    Base.metadata.create_all(engine)
+    with Session(engine) as s:
+        yield s
+
+
+def _neg(codigo="ABCD11", dia=date(2026, 7, 27), **kw):
+    base = {"codigo": codigo, "data_negocio": dia, "instrument_type": "DEB",
+            "quantidade": 100.0, "preco": 1000.0, "volume": 100_000.0,
+            "taxa": 10.0, "spread": 150.0}
+    base.update(kw)
+    return base
+
+
+# ---------------------------------------------------------------------------
+# Ponderação
+# ---------------------------------------------------------------------------
+
+def test_taxa_ponderada_por_volume_nao_media_simples():
+    """Um negócio de R$ 50 mil e outro de R$ 50 milhões não podem pesar
+    igual. É o mesmo princípio do spread ponderado por estoque no resto do
+    projeto (bug de 27/07/2026 no card "SPREAD MÉDIO").
+
+    Aqui: taxa 8% com R$ 1 mi e taxa 12% com R$ 9 mi.
+    Simples daria 10,0; ponderada dá 11,6.
+    """
+    linhas = agg.agregar_linhas([
+        _neg(taxa=8.0, volume=1_000_000.0),
+        _neg(taxa=12.0, volume=9_000_000.0),
+    ])
+    assert linhas[0]["taxa_media"] == pytest.approx(11.6, abs=0.01)
+
+
+def test_sem_volume_cai_para_media_simples(db):
+    """Melhor uma média simples do que perder o dia inteiro. Acontece
+    pouco, mas acontece."""
+    linhas = agg.agregar_linhas([
+        _neg(taxa=8.0, volume=None),
+        _neg(taxa=12.0, volume=None),
+    ])
+    assert linhas[0]["taxa_media"] == pytest.approx(10.0)
+
+
+def test_negocio_sem_taxa_nao_entra_na_media():
+    linhas = agg.agregar_linhas([
+        _neg(taxa=10.0, volume=1_000_000.0),
+        _neg(taxa=None, volume=9_000_000.0),
+    ])
+    assert linhas[0]["taxa_media"] == pytest.approx(10.0)
+    assert linhas[0]["n_negocios"] == 2      # mas conta como negócio
+
+
+# ---------------------------------------------------------------------------
+# Agregação
+# ---------------------------------------------------------------------------
+
+def test_agrupa_por_codigo_e_data():
+    linhas = agg.agregar_linhas([
+        _neg("AAAA11", date(2026, 7, 27)),
+        _neg("AAAA11", date(2026, 7, 27)),
+        _neg("AAAA11", date(2026, 7, 28)),
+        _neg("BBBB11", date(2026, 7, 27)),
+    ])
+    chaves = {(l["codigo"], l["data"]) for l in linhas}
+    assert len(chaves) == 3
+    por = {(l["codigo"], l["data"]): l for l in linhas}
+    assert por[("AAAA11", date(2026, 7, 27))]["n_negocios"] == 2
+
+
+def test_maior_negocio_separa_bloco_de_fluxo():
+    """Volume igual pode ser um bloco só ou fluxo pulverizado — são
+    liquidezes diferentes, e só o total não distingue."""
+    bloco = agg.agregar_linhas([_neg(volume=10_000_000.0)])[0]
+    fluxo = agg.agregar_linhas([_neg(volume=1_000_000.0) for _ in range(10)])[0]
+    assert bloco["volume"] == fluxo["volume"] == 10_000_000.0
+    assert bloco["maior_negocio"] == 10_000_000.0
+    assert fluxo["maior_negocio"] == 1_000_000.0
+
+
+def test_min_e_max_preservam_a_dispersao():
+    linhas = agg.agregar_linhas([
+        _neg(spread=100.0), _neg(spread=300.0), _neg(spread=200.0),
+    ])
+    assert (linhas[0]["spread_min"], linhas[0]["spread_max"]) == (100.0, 300.0)
+
+
+def test_lista_vazia_nao_quebra():
+    assert agg.agregar_linhas([]) == []
+
+
+def test_negocio_sem_codigo_ou_data_e_descartado():
+    linhas = agg.agregar_linhas([
+        _neg(codigo=None), _neg(dia=None), _neg(),
+    ])
+    assert len(linhas) == 1
+
+
+# ---------------------------------------------------------------------------
+# Persistência e reconstrução
+# ---------------------------------------------------------------------------
+
+def test_grava_e_e_idempotente(db):
+    linhas = agg.agregar_linhas([_neg(), _neg()])
+    agg.gravar_agregado(db, linhas)
+    agg.gravar_agregado(db, linhas)
+    assert db.query(NegocioB3Diario).count() == 1
+
+
+def test_agregar_do_banco(db):
+    for i in range(3):
+        db.add(NegocioB3(trade_code=f"#{i}", codigo="ABCD11",
+                         data_negocio=date(2026, 7, 27), instrument_type="DEB",
+                         volume=1_000_000.0, taxa=10.0, spread=150.0, preco=1000.0))
+    db.commit()
+    r = agg.agregar_do_banco(db)
+    assert r["linhas_agregado"] == 1
+    linha = db.query(NegocioB3Diario).one()
+    assert linha.n_negocios == 3
+    assert linha.volume == 3_000_000.0
+    assert linha.taxa_media == pytest.approx(10.0)
+
+
+# ---------------------------------------------------------------------------
+# Poda — a parte perigosa
+# ---------------------------------------------------------------------------
+
+def test_nao_poda_sem_agregado_gravado(db):
+    """A salvaguarda que importa: apagar o bruto sem o agregado
+    correspondente perderia o dado de vez."""
+    antigo = date.today() - timedelta(days=200)
+    db.add(NegocioB3(trade_code="#1", codigo="ABCD11", data_negocio=antigo,
+                     instrument_type="DEB", volume=1000.0))
+    db.commit()
+    r = agg.podar_bruto(db, dias=90)
+    assert r["apagados"] == 0
+    assert db.query(NegocioB3).count() == 1
+
+
+def test_poda_apaga_so_o_antigo(db):
+    hoje = date(2026, 8, 5)
+    antigo, recente = hoje - timedelta(days=200), hoje - timedelta(days=10)
+    for i, dt in enumerate([antigo, recente]):
+        db.add(NegocioB3(trade_code=f"#{i}", codigo="ABCD11", data_negocio=dt,
+                         instrument_type="DEB", volume=1000.0))
+        # AMBOS os dias precisam de agregado — é a condição para a poda
+        # aceitar rodar (ver test_recusa_dia_sem_agregado).
+        db.add(NegocioB3Diario(codigo="ABCD11", data=dt, n_negocios=1))
+    db.commit()
+    r = agg.podar_bruto(db, dias=90, hoje=hoje)
+    assert r["apagados"] == 1
+    restante = db.query(NegocioB3).one()
+    assert restante.data_negocio == recente
+
+
+def test_recusa_dia_sem_agregado(db):
+    """A salvaguarda que importa: se UM dia a apagar não tem agregado, a
+    poda não roda — apagar ali perderia o dado de vez.
+
+    Compara com as datas que SERIAM apagadas, não com a data de corte: a
+    primeira versão exigia `max(agregado) >= corte` e se recusava a rodar
+    num banco só com dado antigo, mesmo com tudo devidamente agregado.
+    """
+    hoje = date(2026, 8, 5)
+    d1, d2 = hoje - timedelta(days=200), hoje - timedelta(days=150)
+    for i, dt in enumerate([d1, d2]):
+        db.add(NegocioB3(trade_code=f"#{i}", codigo="ABCD11", data_negocio=dt,
+                         instrument_type="DEB", volume=1000.0))
+    db.add(NegocioB3Diario(codigo="ABCD11", data=d1, n_negocios=1))   # falta o d2
+    db.commit()
+    r = agg.podar_bruto(db, dias=90, hoje=hoje)
+    assert r["apagados"] == 0
+    assert "sem agregado" in r["motivo"]
+    assert db.query(NegocioB3).count() == 2
+
+
+def test_poda_sem_dado_nao_quebra(db):
+    assert agg.podar_bruto(db, dias=90)["apagados"] == 0
+
+
+# ---------------------------------------------------------------------------
+# Retenção infinita — decisão do Allan (12/08/2026)
+# ---------------------------------------------------------------------------
+
+def test_duas_retencoes_diferentes(db):
+    """Desenho do Allan (12/08/2026): consolidado para SEMPRE, negócio a
+    negócio só nos últimos 5 dias.
+
+    É o que resolve o espaço sem perder análise — o bruto passa a ter
+    tamanho de regime (~15 MB), não taxa de crescimento.
+    """
+    assert agg.RETENCAO_BRUTO_DIAS == 5
+    hoje = date(2026, 8, 12)
+    antigo, recente = hoje - timedelta(days=30), hoje - timedelta(days=2)
+    for i, dt in enumerate([antigo, recente]):
+        db.add(NegocioB3(trade_code=f"#{i}", codigo="ABCD11", data_negocio=dt,
+                         instrument_type="DEB", volume=1000.0))
+        db.add(NegocioB3Diario(codigo="ABCD11", data=dt, n_negocios=1))
+    db.commit()
+
+    agg.podar_bruto(db, hoje=hoje)
+    # o bruto antigo sai...
+    assert db.query(NegocioB3).count() == 1
+    assert db.query(NegocioB3).one().data_negocio == recente
+    # ...e o consolidado dos DOIS dias permanece
+    assert db.query(NegocioB3Diario).count() == 2
+
+
+def test_consolidado_nunca_e_apagado(db):
+    """A poda só toca `negocios_b3`. O consolidado é a série histórica —
+    apagá-lo perderia justamente o que a aba Balcão B3 analisa no tempo."""
+    hoje = date(2026, 8, 12)
+    for anos in (1, 2, 3):
+        dt = hoje - timedelta(days=365 * anos)
+        db.add(NegocioB3Diario(codigo="ABCD11", data=dt, n_negocios=1))
+    db.commit()
+    agg.podar_bruto(db, hoje=hoje)
+    assert db.query(NegocioB3Diario).count() == 3
+
+
+def test_arquivar_antes_de_podar(tmp_path, db):
+    """A poda nunca deve significar perda — o CSV comprimido guarda a
+    operação individual em ~4% do espaço da tabela."""
+    import gzip
+    for i in range(3):
+        db.add(NegocioB3(trade_code=f"#{i}", codigo="ABCD11",
+                         data_negocio=date(2026, 1, 10), instrument_type="DEB",
+                         volume=1000.0 * i, taxa=10.0))
+    db.commit()
+    destino = tmp_path / "b3_2026.csv.gz"
+    r = agg.arquivar_bruto(db, destino, date(2026, 6, 30))
+    assert r["arquivadas"] == 3 and destino.exists()
+    with gzip.open(destino, "rt", encoding="utf-8") as fh:
+        linhas = fh.read().splitlines()
+    assert len(linhas) == 4                    # cabeçalho + 3
+    assert "trade_code" in linhas[0]
+
+
+def test_arquivar_sem_dado_nao_cria_arquivo(tmp_path, db):
+    destino = tmp_path / "vazio.csv.gz"
+    r = agg.arquivar_bruto(db, destino, date(2026, 6, 30))
+    assert r["arquivadas"] == 0 and not destino.exists()
+
+
+# ---------------------------------------------------------------------------
+# Só DEB, CRI e CRA — pedido explícito do Allan (12/08/2026)
+# ---------------------------------------------------------------------------
+
+def test_so_guarda_os_tres_instrumentos():
+    """A fonte da B3 traz CFF, CDCA, COE, CPR, LF... O filtro existe na
+    captura; esta é a segunda barreira, para o caso de o dado entrar por
+    outro caminho."""
+    linhas = agg.agregar_linhas([
+        _neg(codigo="DEB11", instrument_type="DEB"),
+        _neg(codigo="CRI11", instrument_type="CRI"),
+        _neg(codigo="CRA11", instrument_type="CRA"),
+        _neg(codigo="LF11", instrument_type="LF"),
+        _neg(codigo="COE11", instrument_type="COE"),
+        _neg(codigo="CDCA1", instrument_type="CDCA"),
+    ])
+    assert {l["codigo"] for l in linhas} == {"DEB11", "CRI11", "CRA11"}
+
+
+def test_agregar_do_banco_ignora_outros_instrumentos(db):
+    for i, tipo in enumerate(["DEB", "CRI", "CRA", "LF", "COE"]):
+        db.add(NegocioB3(trade_code=f"#{i}", codigo=f"{tipo}11",
+                         data_negocio=date(2026, 8, 10), instrument_type=tipo,
+                         volume=1000.0, taxa=10.0))
+    db.commit()
+    agg.agregar_do_banco(db)
+    tipos = {r.instrument_type for r in db.query(NegocioB3Diario).all()}
+    assert tipos == {"DEB", "CRI", "CRA"}

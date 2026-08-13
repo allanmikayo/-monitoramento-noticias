@@ -34,6 +34,22 @@
     </div>
   </div>
 
+  {# Fonte (12/08/2026, pedido do Allan): multi-select no mesmo padrão de
+     Setor e Empresa. Lista vem do cadastro `sources`, não de um DISTINCT
+     em artigos -- ver o comentário em app.py::dashboard. #}
+  <div class="ms" id="ms-source">
+    <button type="button" class="ms-btn" id="ms-source-btn">Fonte: Todas</button>
+    <div class="ms-panel" id="ms-source-panel" hidden>
+      <input type="search" id="ms-source-search" placeholder="Buscar fonte…">
+      <button type="button" class="ms-clear" data-clear-target="ms-source">Limpar seleção</button>
+      <div id="ms-source-options">
+        {% for f in fontes %}
+        <label class="ms-option" data-nome="{{ f.name|lower }}"><input type="checkbox" class="ms-check" data-ms="source" value="{{ f.name }}"> {{ f.name }}</label>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+
   <select id="filter-type">
     <option value="">Todos os tipos</option>
     <option value="news">Notícia</option>

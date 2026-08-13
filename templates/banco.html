@@ -1,0 +1,144 @@
+{% extends "base.html" %}
+{% block title %}Banco de Dados{% endblock %}
+{% block content %}
+{#
+  Aba "Banco de Dados" (pedido do Allan, 12/08/2026) -- consulta e
+  extração do que está armazenado. Só admin: a rota exige `require_admin`
+  e o link no base.html só aparece pra admin.
+
+  Três blocos: capacidade (quanto ocupa e por quanto tempo cabe),
+  inventário (tabela a tabela, com pré-visualização e export) e consulta
+  SQL livre somente leitura.
+#}
+
+<div class="filters-bar" style="justify-content:space-between;">
+  <div>
+    <h1 style="margin:0;font-size:1.15rem;">Banco de Dados</h1>
+    <p class="muted small" style="margin:2px 0 0;">
+      Consulta e extração do que está armazenado · acesso restrito a administradores
+    </p>
+  </div>
+  <span class="muted small">Medido em {{ capacidade.medido_em }}</span>
+</div>
+
+{# Capacidade virou UMA LINHA, não três cards (12/08/2026): o Allan
+   apontou que ocupação de banco não é análise, é manutenção — não merece
+   o mesmo peso visual que o conteúdo da tela. Fica aqui, discreta, porque
+   é onde faz sentido quem administra o banco olhar. #}
+<p class="muted small" style="margin:-6px 0 16px;">
+  {{ '%.0f'|format(capacidade.total_mb) }} MB usados de {{ capacidade.regime.limite_mb }}
+  ({{ capacidade.regime.uso_pct }}%) · cresce {{ '%.0f'|format(capacidade.regime.crescimento_mb_ano) }} MB/ano
+  · retenção: consolidado diário para sempre, negócio a negócio nos últimos 5 dias
+</p>
+
+{# ---------- Inventário ---------- #}
+<div class="chart-card">
+  <div class="chart-card-head">
+    <div>
+      <h2 style="margin:0;">Tabelas armazenadas</h2>
+      <p class="muted small">Clique numa linha para pré-visualizar · o botão exporta o conteúdo em CSV</p>
+    </div>
+  </div>
+  <table class="table" id="tabela-inventario">
+    <thead>
+      <tr>
+        <th>Tabela</th><th>Linhas</th><th>Período</th><th>MB</th><th>Ações</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for t in tabelas %}
+      <tr data-tabela="{{ t.tabela }}" data-coluna="{{ t.coluna_data or '' }}">
+        <td><code>{{ t.tabela }}</code></td>
+        <td class="num">{{ '{:,}'.format(t.linhas).replace(',', '.') }}</td>
+        <td class="muted small">
+          {% if t.periodo %}{{ t.periodo.de }} a {{ t.periodo.ate }}{% else %}—{% endif %}
+        </td>
+        <td class="num">{{ '%.2f'|format(t.mb) }}</td>
+        <td>
+          <button class="btn-small btn-ver" type="button">Ver</button>
+          <a class="btn-small" href="/api/banco/export?tabela={{ t.tabela }}"
+             target="_blank" rel="noopener" style="text-decoration:none;">CSV</a>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+{# ---------- Pré-visualização ---------- #}
+<div class="chart-card" id="preview-wrap" style="display:none;margin-top:16px;">
+  <div class="chart-card-head">
+    <div>
+      <h2 style="margin:0;" id="preview-titulo">—</h2>
+      <p class="muted small" id="preview-sub">—</p>
+    </div>
+    <button class="btn-small" id="btn-fechar-preview" type="button">Fechar ✕</button>
+  </div>
+
+  <div class="filters-bar" style="margin-top:10px;">
+    <label class="muted small" id="filtro-periodo" style="display:flex;align-items:center;gap:6px;">
+      De <input type="date" id="preview-de">
+      até <input type="date" id="preview-ate">
+    </label>
+    <button class="btn-small" id="btn-aplicar-periodo" type="button">Aplicar</button>
+    <div class="window-tabs" style="margin-left:auto;">
+      <button class="win-btn" id="btn-anterior" type="button">‹ Anterior</button>
+      <button class="win-btn" id="btn-proxima" type="button">Próxima ›</button>
+    </div>
+    <a class="btn-small" id="btn-export-recorte" href="#" target="_blank" rel="noopener"
+       style="text-decoration:none;">Exportar recorte</a>
+  </div>
+
+  <div style="overflow:auto;max-height:520px;">
+    <table class="table" id="tabela-preview">
+      <thead><tr></tr></thead>
+      <tbody></tbody>
+    </table>
+  </div>
+</div>
+
+{# ---------- SQL ---------- #}
+<div class="chart-card" style="margin-top:16px;">
+  <div class="chart-card-head">
+    <div>
+      <h2 style="margin:0;">Consulta SQL</h2>
+      <p class="muted small">
+        Somente leitura: apenas <code>SELECT</code> e <code>WITH</code>, uma instrução por vez.
+        <code>LIMIT</code> é adicionado automaticamente (máx. {{ limite_maximo }} linhas na tela).
+      </p>
+    </div>
+  </div>
+
+  <textarea id="sql-input" rows="6" spellcheck="false"
+    style="width:100%;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:.82rem;
+           padding:10px;border:1px solid var(--border);border-radius:8px;resize:vertical;"
+>SELECT setor, rating_medio, COUNT(*) AS papeis,
+       ROUND(SUM(spread * estoque) / NULLIF(SUM(estoque), 0), 1) AS spread_ponderado
+  FROM v_spread_rating
+ WHERE data = (SELECT MAX(data) FROM v_spread_rating)
+   AND indexador = 'IPCA +'
+ GROUP BY setor, rating_medio
+ ORDER BY papeis DESC</textarea>
+
+  <div class="filters-bar" style="margin-top:10px;">
+    <button class="btn-primary" id="btn-rodar" type="button">Executar</button>
+    <label class="muted small" style="display:flex;align-items:center;gap:6px;">
+      Limite <input type="number" id="sql-limite" value="{{ limite_padrao }}" min="1"
+                    max="{{ limite_maximo }}" style="width:90px;">
+    </label>
+    <a class="btn-small" id="btn-export-sql" href="#" target="_blank" rel="noopener"
+       style="text-decoration:none;margin-left:auto;">Exportar resultado (CSV)</a>
+  </div>
+
+  <p class="muted small" id="sql-status" style="margin:8px 0 0;"></p>
+
+  <div style="overflow:auto;max-height:520px;margin-top:8px;">
+    <table class="table" id="tabela-sql">
+      <thead><tr></tr></thead>
+      <tbody></tbody>
+    </table>
+  </div>
+</div>
+
+<script src="/static/banco.js"></script>
+{% endblock %}

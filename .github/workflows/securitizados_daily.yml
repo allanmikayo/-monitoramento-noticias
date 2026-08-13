@@ -1,0 +1,70 @@
+name: Securitizados CRI/CRA (diário)
+
+# Roda scripts/fetch_securitizados.py contra a API oficial da Anbima
+# (/feed/precos-indices/v1/cri-cra/mercado-secundario). Fase 2 do Hub
+# Credit Research (04/08/2026) -- alimenta a aba Securitizados, que até
+# então não tinha fonte no banco.
+#
+# HORÁRIO: 21h30 BRT = 00h30 UTC. Trinta minutos DEPOIS do job de
+# debêntures (spreads_daily.yml, 00h UTC) de propósito -- não é
+# preferência, é dependência:
+#
+#   Papel CRI/CRA em IPCA+ precisa da taxa da NTN-B de referência pra ter
+#   spread, e essa curva já é buscada e cacheada pelo job de debêntures
+#   (tabela `ntnb_referencia`). Rodando depois, este job LÊ o cache em vez
+#   de bater na Anbima de novo pelo mesmo dado. Se por algum motivo o de
+#   debêntures falhar ou atrasar, este busca a curva ao vivo (ver
+#   scripts/fetch_securitizados.py::_curva_ntnb) -- degrada, não quebra.
+#
+# A Anbima divulga a partir das 20h de Brasília, então 21h30 dá folga.
+# Brasil não tem horário de verão desde 2019 (fuso fixo -3), o cron não
+# precisa de ajuste sazonal.
+on:
+  schedule:
+    - cron: "30 0 * * *"
+  # Vazio (uso normal) = só hoje. Preenchidos = backfill manual pelo
+  # Allan em Actions -> "Run workflow".
+  workflow_dispatch:
+    inputs:
+      start:
+        description: "Data inicial (AAAA-MM-DD) -- em branco = hoje"
+        required: false
+        default: ""
+      end:
+        description: "Data final (AAAA-MM-DD) -- em branco = igual a start"
+        required: false
+        default: ""
+
+# Backfill longo disparado à mão não pode rodar em cima do job diário --
+# os dois escrevem nas mesmas tabelas.
+concurrency:
+  group: securitizados
+  cancel-in-progress: false
+
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Baixar o codigo
+        uses: actions/checkout@v4
+
+      - name: Preparar Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Instalar dependencias
+        run: pip install -r requirements.txt
+
+      - name: Capturar CRI/CRA
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          ANBIMA_CLIENT_ID: ${{ secrets.ANBIMA_CLIENT_ID }}
+          ANBIMA_CLIENT_SECRET: ${{ secrets.ANBIMA_CLIENT_SECRET }}
+        run: |
+          ARGS=""
+          if [ -n "${{ github.event.inputs.start }}" ]; then ARGS="$ARGS --start ${{ github.event.inputs.start }}"; fi
+          if [ -n "${{ github.event.inputs.end }}" ]; then ARGS="$ARGS --end ${{ github.event.inputs.end }}"; fi
+          python -m scripts.fetch_securitizados $ARGS

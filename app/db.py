@@ -117,6 +117,28 @@ def run_migrations() -> None:
         # dia (não só o vértice mais curto) -- ver app/models.py
         # NtnbReferencia.curva_json.
         "ALTER TABLE ntnb_referencia ADD COLUMN curva_json TEXT",
+        # NOVO (04/08/2026, Fase 1 do Hub): liga a debênture ao emissor
+        # canônico (`issuers`), que carrega setor/subsetor/grupo e os
+        # ratings. As tabelas novas em si (issuers, issuer_aliases,
+        # issuer_ratings, issuer_rating_atual) são criadas por
+        # `Base.metadata.create_all` -- só esta coluna precisa de ALTER,
+        # porque `debentures` já existe.
+        #
+        # NÃO substitui `company_id`: aquele aponta pro cadastro editorial
+        # de notícias (~96 empresas cobertas), este pro emissor de mercado
+        # (~470). Uma debênture pode ter issuer_id sem company_id (emissor
+        # fora da cobertura), e o caminho pra notícia é
+        # debentures -> issuers -> companies.
+        "ALTER TABLE debentures ADD COLUMN issuer_id INTEGER",
+        # Mesmo racional pro CRA/CRI quando a tabela existir (Fase 2) --
+        # o ALTER falha silencioso enquanto ela não existir, que é o
+        # comportamento desejado deste bloco.
+        "ALTER TABLE securitizados ADD COLUMN issuer_id INTEGER",
+        # NOVO (04/08/2026): % REUNE -- quanto da taxa indicativa veio de
+        # negócio real em vez de modelo. Métrica de confiança no preço,
+        # usada pela aba Securitizados pra separar "spread abriu" de "a
+        # marcação mudou" (ver app/spreads/queries_securitizados.py).
+        "ALTER TABLE securitizado_spreads ADD COLUMN pct_reune FLOAT",
     ]
     with engine.connect() as conn:
         for stmt in statements:

@@ -23,7 +23,7 @@ from sqlalchemy.orm import Session
 
 from .db import get_db
 from .models import User
-from .spreads import queries
+from .spreads import analitico, queries
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 templates = Jinja2Templates(directory=os.path.join(BASE_DIR, "templates"))
@@ -139,6 +139,68 @@ def register_spreads_routes(require_user_dep) -> APIRouter:
                 db, _validar_classe(classe), dias_comparacao=_validar_base(base), data_referencia=_parse_data(data),
             )
         }
+
+    # ------------------------------------------------------------------
+    # Análises de valor relativo (pedido do Allan, 12/08/2026) — ver
+    # app/spreads/analitico.py pro desenho e pros números medidos que
+    # justificam cada uma. Rotas separadas (não um único /analitico que
+    # devolve tudo) de propósito: o bloco de valor relativo é o mais caro
+    # de calcular (~0,4 s) e a tela carrega os quatro blocos em paralelo,
+    # então uma consulta lenta não segura as outras três.
+    # ------------------------------------------------------------------
+
+    @router.get("/api/spreads/posicao-historica")
+    def api_spreads_posicao_historica(
+        classe: str, data: str | None = None,
+        user: User | None = Depends(require_user_dep), db: Session = Depends(get_db),
+    ):
+        return analitico.posicao_historica(
+            db, _validar_classe(classe), data_referencia=_parse_data(data),
+        )
+
+    @router.get("/api/spreads/curva")
+    def api_spreads_curva(
+        classe: str, data: str | None = None,
+        user: User | None = Depends(require_user_dep), db: Session = Depends(get_db),
+    ):
+        return analitico.curva_por_rating(
+            db, _validar_classe(classe), data_referencia=_parse_data(data),
+        )
+
+    @router.get("/api/spreads/dispersao")
+    def api_spreads_dispersao(
+        classe: str, data: str | None = None,
+        user: User | None = Depends(require_user_dep), db: Session = Depends(get_db),
+    ):
+        return analitico.dispersao_intra_rating(
+            db, _validar_classe(classe), data_referencia=_parse_data(data),
+        )
+
+    @router.get("/api/spreads/compressao")
+    def api_spreads_compressao(
+        classe: str,
+        user: User | None = Depends(require_user_dep), db: Session = Depends(get_db),
+    ):
+        return analitico.compressao_entre_ratings(db, _validar_classe(classe))
+
+    @router.get("/api/spreads/valor-relativo")
+    def api_spreads_valor_relativo(
+        classe: str, data: str | None = None, top: int = 12,
+        user: User | None = Depends(require_user_dep), db: Session = Depends(get_db),
+    ):
+        return analitico.decomposicao(
+            db, _validar_classe(classe), data_referencia=_parse_data(data),
+            top_n=max(1, min(top, 50)),
+        )
+
+    @router.get("/api/spreads/por-rating")
+    def api_spreads_por_rating(
+        classe: str, data: str | None = None,
+        user: User | None = Depends(require_user_dep), db: Session = Depends(get_db),
+    ):
+        return analitico.resumo_por_rating(
+            db, _validar_classe(classe), data_referencia=_parse_data(data),
+        )
 
     @router.get("/api/spreads/search")
     def api_spreads_search(

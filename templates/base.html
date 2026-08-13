@@ -14,14 +14,19 @@
      -- não deve vazar pro HTML servido pro público. #}
   <header class="topbar">
     <div class="topbar-inner">
-      <a class="brand" href="/">Hub Credit Research</a>
+      {# Sem login o "brand" leva pro Repositório, não pra "/" -- "/" agora
+         exige login e mandaria o visitante direto pra tela de senha. #}
+      <a class="brand" href="{% if user %}/{% else %}/cobertura{% endif %}">Hub Credit Research</a>
       <nav>
-        <a href="/">Notícias</a>
-        <a href="/spreads">Spreads</a>
-        {# Repositório de Relatórios (13/08/2026): público como Notícias e
-           Spreads -- os relatórios de research são públicos, só a edição
-           das tags é restrita a admin (checado na rota). #}
+        {# MUDOU (13/08/2026): o Repositório de Relatórios é a única aba
+           aberta. Notícias e Spreads voltaram a exigir login (eram públicos
+           desde 27/07) -- os relatórios de research são públicos, o resto é
+           interno. Os links só aparecem pra quem está logado; as rotas em si
+           também exigem, este `if` é só pra não mostrar link que levaria
+           direto pro /login. #}
         <a href="/cobertura">Repositório</a>
+        {% if user %}<a href="/">Notícias</a>{% endif %}
+        {% if user %}<a href="/spreads">Spreads</a>{% endif %}
         {% if user %}<a href="/fontes">Fontes &amp; Empresas</a>{% endif %}
         {# Banco de Dados: só admin (12/08/2026). A rota já exige
            `require_admin`; este `if` é só pra não mostrar link que

@@ -137,12 +137,14 @@ def require_admin(user: User = Depends(require_user)) -> User:
 # Os handlers em spreads_routes.py só usam esse `user` como parâmetro de
 # dependência (nunca leem `user.algumacoisa`), então aceitar `None` aqui é
 # seguro -- conferido antes de trocar.
-app.include_router(register_spreads_routes(current_user))
+# MUDOU DE NOVO (13/08/2026): volta a `require_user`. Spreads era público
+# desde 27/07; agora a única aba aberta é o Repositório de Relatórios.
+app.include_router(register_spreads_routes(require_user))
 
 # Módulo "Repositório de Relatórios" (13/08/2026) -- catálogo dos relatórios
-# do Smart tagueados por empresa/setor. Mesma dependência opcional das outras
-# abas públicas: consultar não exige login, editar tag exige role admin
-# (conferido dentro do módulo, em `_exige_admin`, não aqui).
+# do Smart tagueados por empresa/setor. É a ÚNICA aba pública do Hub: recebe
+# `current_user` (opcional) de propósito. Consultar não exige login; editar
+# tag exige role admin, conferido dentro do módulo em `_exige_admin`.
 app.include_router(register_cobertura_routes(current_user))
 
 # Aba "Banco de Dados" (12/08/2026) -- consulta e extração do que está
@@ -237,8 +239,14 @@ def signup_submit(
 # Dashboard
 # ---------------------------------------------------------------------------
 
+# MUDOU (13/08/2026, pedido do Allan): o dashboard de notícias voltou a
+# exigir login. Desde 27/07/2026 ele era público; agora a ÚNICA aba aberta
+# é o Repositório de Relatórios -- os relatórios de research são públicos,
+# o resto (notícias captadas, spreads, cadastro) é interno e só entra quem
+# o Allan aprovar. Ver também `require_user` no /spreads e o menu em
+# base.html, que esconde os links de quem não está logado.
 @app.get("/", response_class=HTMLResponse)
-def dashboard(request: Request, user: User | None = Depends(current_user), db: Session = Depends(get_db)):
+def dashboard(request: Request, user: User = Depends(require_user), db: Session = Depends(get_db)):
     import json as _json
     sectors = db.query(Sector).order_by(Sector.name).all()
     companies = db.query(Company).filter(Company.active.is_(True)).order_by(Company.name).all()
@@ -278,7 +286,10 @@ def api_articles(
     source_name: list[str] = Query(default=[]),
     article_type: str | None = None,
     coverage: list[str] = Query(default=["minha"]),
-    user: User | None = Depends(current_user),
+    # Fechado junto com o dashboard (13/08/2026): é o endpoint que devolve
+    # as notícias captadas, não faria sentido a página exigir login e a API
+    # que a alimenta continuar aberta.
+    user: User = Depends(require_user),
     db: Session = Depends(get_db),
 ):
     hours = config.WINDOW_PRESETS.get(window, 24)

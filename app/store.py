@@ -147,6 +147,13 @@ def list_articles(
     sector_ids: list[int] | None = None,
     company_ids: list[int] | None = None,
     source_domain: str | None = None,
+    # Filtro de FONTE por nome, multi-seleção (pedido do Allan,
+    # 12/08/2026: "um filtro de caixa suspensa com as fontes, igual o
+    # filtro de setor"). Usa `Article.source_name`, não `domain`: é o que
+    # aparece na tela e o que o usuário reconhece ("Valor Econômico", não
+    # "valor.globo.com"). `source_domain` continua existindo para quem
+    # chama por domínio.
+    source_names: list[str] | None = None,
     article_type: str | None = None,
     coverage: list[str] | None = None,  # ["minha"] (default) | ["todos"] | ["minha","todos"]
     limit: int = 500,
@@ -171,6 +178,8 @@ def list_articles(
     )
     if source_domain:
         stmt = stmt.where(Article.domain == source_domain)
+    if source_names:
+        stmt = stmt.where(Article.source_name.in_(source_names))
     if article_type:
         stmt = stmt.where(Article.article_type == article_type)
     coverage = coverage or ["minha"]
