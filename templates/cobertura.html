@@ -9,7 +9,12 @@
    ao conviver com style.css. #}
 {% block content %}
 <style>
-.cob{--o:#EC7000;--ink:#2B2B2B;--mut:#6B6B6B;--line:#E4E4E4;--chip:#F0F0F0}
+/* Cores vêm do style.css do Hub (13/08/2026) -- antes este bloco definia um
+   laranja próprio (#EC7000) e derivados (#A34E00, #B85400, #FFE9D6), o que
+   deixava a tela com vários tons de laranja diferentes do resto do site.
+   Agora tudo aponta pra --accent/--accent-dark/--accent-tint. */
+.cob{--o:var(--accent);--o-dark:var(--accent-dark);--o-tint:var(--accent-tint);
+     --ink:var(--text);--mut:var(--muted);--line:var(--border);--chip:#F0F0F0;font-size:13.5px}
 .cob-head{display:flex;align-items:baseline;gap:10px;margin-bottom:14px}
 .cob-head h1{margin:0;font-size:21px;color:var(--o);letter-spacing:-.3px}
 .cob-head .cob-sub{font-size:14px;color:var(--mut)}
@@ -25,13 +30,13 @@
 .cob-reset{background:none;border:1px solid var(--line);border-radius:7px;padding:7px;font-size:12px;cursor:pointer;color:var(--mut);font-family:inherit}
 .cob-reset:hover{border-color:var(--o);color:var(--o)}
 .cob-colist{overflow-y:auto;flex:1}
-.cob-sector{padding:8px 14px 4px;font-size:9.5px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:var(--o);background:#FAFAFA;border-top:1px solid var(--line)}
-.cob-co{padding:8px 14px;border-bottom:1px solid #F2F2F2;cursor:pointer;display:flex;align-items:baseline;gap:8px}
-.cob-co:hover{background:#FFF7F0}
-.cob-co.on{background:#FFF0E2;box-shadow:inset 3px 0 0 var(--o)}
-.cob-co .n{font-weight:600;flex:1}
-.cob-co .c{font-size:11px;color:var(--mut);background:var(--chip);border-radius:9px;padding:1px 7px}
-.cob-co .d{font-size:11px;color:var(--mut);width:62px;text-align:right}
+.cob-sector{padding:8px 14px 4px;font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:var(--o);background:#FAFAFA;border-top:1px solid var(--line)}
+.cob-co{padding:7px 14px;border-bottom:1px solid #F2F2F2;cursor:pointer;display:flex;align-items:baseline;gap:8px;font-size:12.5px}
+.cob-co:hover{background:var(--o-tint)}
+.cob-co.on{background:var(--o-tint);box-shadow:inset 3px 0 0 var(--o)}
+.cob-co .n{font-weight:600;flex:1;font-size:12.5px}
+.cob-co .c{font-size:10.5px;color:var(--mut);background:var(--chip);border-radius:9px;padding:1px 7px}
+.cob-co .d{font-size:10.5px;color:var(--mut);width:62px;text-align:right}
 .cob-co.zero .n{color:#B0B0B0;font-weight:400}
 .cob-tabs{display:flex;gap:2px;padding:0 18px;border-bottom:1px solid var(--line);background:#FAFAFA;border-radius:10px 10px 0 0}
 .cob-tab{padding:10px 13px;font-size:13px;cursor:pointer;border-bottom:2px solid transparent;color:var(--mut)}
@@ -40,18 +45,19 @@
 .cob-title{padding:16px 18px;border-bottom:1px solid var(--line)}
 .cob-title h3{margin:0 0 3px;font-size:19px}
 .cob-title .m{color:var(--mut);font-size:12.5px}
+.cob-legend b{color:var(--o)}
 .cob-legend{font-size:11px;color:var(--mut);padding:7px 18px;background:#FCFCFC;border-bottom:1px solid var(--line)}
 .cob table{width:100%;border-collapse:collapse}
 .cob th{text-align:left;font-size:10px;text-transform:uppercase;letter-spacing:.6px;color:var(--mut);padding:9px 11px;border-bottom:1px solid var(--line);background:#FAFAFA;cursor:pointer;white-space:nowrap}
 .cob td{padding:10px 11px;border-bottom:1px solid #F2F2F2;vertical-align:top}
-.cob tr:hover td{background:#FFFBF7}
-.cob-ttl{font-weight:600;color:var(--ink);text-decoration:none;display:block;line-height:1.35}
+.cob tr:hover td{background:var(--o-tint)}
+.cob-ttl{font-weight:600;font-size:13px;color:var(--ink);text-decoration:none;display:block;line-height:1.35}
 .cob-ttl:hover{color:var(--o)}
 .cob-tags{margin-top:5px;display:block;font-size:0}
 .cob-tag{font-size:10.5px;background:var(--chip);border-radius:9px;padding:0 8px;color:#4A4A4A;cursor:pointer;
   display:inline-block;height:19px;line-height:19px;white-space:nowrap;margin:0 4px 4px 0;vertical-align:top}
-.cob-tag:hover{background:#FFE3CC;color:#B85400}
-.cob-tag.pri{background:#FFE9D6;color:#A34E00;font-weight:600}
+.cob-tag:hover{background:var(--o-tint);color:var(--o)}
+.cob-tag.pri{background:var(--o-tint);color:var(--o);font-weight:600}
 .cob-tag.set{background:#EEF3FA;color:#3B5F8A}
 .cob-tag.nao{background:#F7F7F7;color:#9A9A9A;cursor:default;font-style:italic}
 .cob-nw{white-space:nowrap;color:var(--mut);font-size:12.5px}
@@ -75,7 +81,7 @@
 .cob-mb{padding:15px 18px;display:grid;gap:13px}
 .cob-mf{padding:13px 18px;border-top:1px solid var(--line);display:flex;gap:8px;justify-content:flex-end}
 .cob-chips{display:block;margin-top:7px;min-height:22px;font-size:0}
-.cob-chip{display:inline-block;height:22px;line-height:22px;padding:0 4px 0 9px;border-radius:11px;background:#FFE9D6;color:#A34E00;font-size:11.5px;font-weight:600;margin:0 5px 5px 0;vertical-align:top}
+.cob-chip{display:inline-block;height:22px;line-height:22px;padding:0 4px 0 9px;border-radius:11px;background:var(--o-tint);color:var(--o);font-size:11.5px;font-weight:600;margin:0 5px 5px 0;vertical-align:top}
 .cob-chip.s{background:#EEF3FA;color:#3B5F8A}
 .cob-chip b{cursor:pointer;font-size:14px;padding:0 3px;opacity:.6}
 .cob-note{font-size:11.5px;color:var(--mut);line-height:1.5}

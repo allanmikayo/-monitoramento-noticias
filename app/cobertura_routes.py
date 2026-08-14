@@ -256,6 +256,29 @@ def register_cobertura_routes(current_user) -> APIRouter:
     def empresas_preflight(origin: str | None = Header(default=None)):
         return JSONResponse({}, headers=_cors(origin))
 
+    @router.options("/api/cobertura/ids")
+    def ids_preflight(origin: str | None = Header(default=None)):
+        return JSONResponse({}, headers=_cors(origin))
+
+    @router.get("/api/cobertura/ids")
+    def ids_existentes(
+        origin: str | None = Header(default=None),
+        x_ingest_token: str | None = Header(default=None),
+        db: Session = Depends(get_db),
+    ):
+        """IDs já na base, para o coletor pular o que não precisa reprocessar.
+
+        Existe por causa de um problema real (13/08/2026): a carga inicial das
+        43 páginas rodou uma hora acumulando tudo na memória do navegador e só
+        então mandou um POST único com 1.285 relatórios. A função estourou o
+        tempo processando aquilo e a hora inteira foi perdida. Agora o coletor
+        (a) pula o que já existe e (b) grava em lotes — uma falha custa no
+        máximo o lote atual, e reabrir o botão retoma de onde parou."""
+        if not INGEST_TOKEN or x_ingest_token != INGEST_TOKEN:
+            raise HTTPException(status_code=401, detail="Token de ingestão inválido.")
+        ids = list(db.scalars(select(Report.id)).all())
+        return JSONResponse({"ids": ids}, headers=_cors(origin))
+
     @router.get("/api/cobertura/empresas")
     def empresas_termos(
         origin: str | None = Header(default=None),

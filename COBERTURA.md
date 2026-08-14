@@ -133,6 +133,34 @@ Relatórios de categoria **Market Dynamics** sem empresa no título (Semanal, To
 Highlights) são marcados como *mercado* e ficam fora da fila de pendências: são ~40% da base e
 nunca são sobre empresa específica.
 
+## Como o tagueamento funciona
+
+1. O título é comparado com os nomes e aliases do cadastro de empresas. **Se resolve, para por
+   aí — o resumo não é aberto** (13/08/2026). Além de cortar a carga completa de ~48 para
+   ~9 minutos, isso melhora a precisão: o resumo de um *"Quick Take on PRIO"* cita Gerdau e
+   Usiminas por comparação setorial, e isso virava tag de cobertura que não existe.
+2. Se o título não resolve (ex.: *"Resultados 2T26 – Parte 1"*), aí sim o **Resumo** da página do
+   relatório no Smart é lido — é ele que cita as empresas nominalmente. Esse relatório sozinho
+   rendeu 20 tags; *"Resultados 1T26 – Parte 2"*, 25. É o caso que justifica o projeto inteiro.
+3. **Market Dynamics** sem empresa no título nunca é sobre empresa: vira Mercado, sem abrir resumo.
+4. O que sobra cai em Pendências de revisão.
+
+Na base já coletada, isso significa abrir o resumo de 14 relatórios em cada 120 — 80% menos do
+que antes.
+
+O preço da regra 1 é perder a tag secundária legítima de vez em quando: *Nexa* citando
+*Votorantim Cimentos*, que é a controladora. Se um dia incomodar, é uma linha em
+`static/cobertura-coletor.js` (a condição `pri.length === 0`).
+
+## A coleta grava em lotes
+
+O coletor manda para o servidor **a cada 40 relatórios**, não no fim. Antes acumulava tudo na
+memória do navegador e fazia um POST único — a carga inicial rodou uma hora, o POST com 1.285
+relatórios estourou o tempo da função, e a hora inteira se perdeu (13/08/2026).
+
+Junto disso, antes de começar ele pergunta ao servidor quais IDs já existem e pula esses. Então
+clicar no botão de novo **retoma de onde parou**, sem refazer nada.
+
 ## Por que a atualização não roda sozinha na nuvem
 
 O Smart exige sessão autenticada. A API que o portal consome

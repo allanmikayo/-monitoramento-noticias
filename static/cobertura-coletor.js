@@ -25,7 +25,18 @@
   var LISTA = 'https://www.itau.com.br/itaubba-pt/portal/credit?tab=reports';
 
   if (location.hostname.indexOf('itau.com.br') === -1) {
-    alert('Abra o Smart primeiro:\n' + LISTA);
+    // Caso mais comum (13/08/2026, aconteceu com o Allan na primeira vez):
+    // clicou no link da página de instalação em vez de ARRASTAR pra barra de
+    // favoritos. Aí o script roda na própria página do Hub, que não é o
+    // Smart. A mensagem antiga ("Abra o Smart primeiro") não ajudava, porque
+    // o Smart já estava aberto em outra aba -- o problema era outro.
+    alert(
+      'Este botão precisa ser clicado DENTRO do Smart, não aqui.\n\n' +
+      'Se você acabou de clicar no link da página de instalação: ele serve para ser ' +
+      'ARRASTADO até a barra de favoritos (Ctrl+Shift+B), não clicado.\n\n' +
+      'Depois de arrastar, vá até a aba do Smart em Fixed Income → Relatórios e ' +
+      'clique no favorito que apareceu na barra.\n\n' + LISTA
+    );
     return;
   }
   if (!API || !TOKEN) {
@@ -184,39 +195,102 @@
         return hits;
       }
 
-      var envio = [], lidos = 0;
-      for (i = 0; i < todos.length; i++) {
-        var r = todos[i];
+      // Pula o que já está na base. Sem isso, refazer a carga custaria a
+      // hora inteira de novo -- e é o que torna a retomada barata depois de
+      // uma interrupção.
+      msg('Vendo o que já está na base…');
+      var jaTem = {};
+      try {
+        var exist = await fetch(API.replace('/ingest', '/ids'), { headers: { 'X-Ingest-Token': TOKEN } })
+          .then(function (r) { return r.json(); });
+        (exist.ids || []).forEach(function (id) { jaTem[id] = 1; });
+      } catch (e) { /* sem a lista, segue e reprocessa tudo */ }
+
+      var pendentes = todos.filter(function (r) { return !jaTem[r.id]; });
+      var jaSalvos = todos.length - pendentes.length;
+      if (!pendentes.length) {
+        msg('<b style="color:#7BD88F">Nada novo.</b><br>' +
+            '<span style="opacity:.6">' + todos.length + ' relatórios já estavam na base</span>');
+        return;
+      }
+
+      // Envio em lotes: uma falha custa no máximo o lote atual, e cada
+      // requisição fica pequena o bastante pra não estourar o tempo da
+      // função. Antes ia tudo num POST só no final -- foi assim que a carga
+      // inicial de 1.285 relatórios se perdeu inteira (13/08/2026).
+      var LOTE = 40;
+      var lote = [], enviados = 0, criados = 0, falhas = 0;
+
+      async function despachar() {
+        if (!lote.length) return;
+        var corpo = JSON.stringify({ relatorios: lote });
+        for (var tent = 1; tent <= 3; tent++) {
+          try {
+            var resp = await fetch(API, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json', 'X-Ingest-Token': TOKEN },
+              body: corpo
+            });
+            if (!resp.ok) throw new Error('HTTP ' + resp.status);
+            var j = await resp.json();
+            enviados += lote.length;
+            criados += (j.criados || 0);
+            lote = [];
+            return;
+          } catch (e) {
+            if (tent === 3) { falhas += lote.length; lote = []; return; }
+            await sleep(1500 * tent);
+          }
+        }
+      }
+
+      // Quem precisa que o resumo seja aberto, só pra estimar o tempo.
+      function precisaResumo(r) {
+        var p = casar(r.titulo);
+        if (p.length) return false;                       // título já resolve
+        if (r.categoria === 'Market Dynamics') return false;  // relatório de mercado
+        return true;
+      }
+      var restamResumos = pendentes.filter(precisaResumo).length;
+
+      var lidos = 0;
+      for (i = 0; i < pendentes.length; i++) {
+        var r = pendentes[i];
         var pri = casar(r.titulo);
         var citadas = pri.slice();
-        // Relatório de mercado sem empresa no título nunca cita empresa —
-        // pular o resumo economiza ~40% do tempo de coleta.
+        // Relatório de mercado sem empresa no título nunca cita empresa.
         var mercado = (r.categoria === 'Market Dynamics') && pri.length === 0;
-        if (!mercado) {
-          lidos++;
-          msg('Lendo resumos — ' + lidos + '…<br><span style="opacity:.6">' + (r.titulo || '').slice(0, 46) + '</span>');
+        // Título já nomeia a empresa: não abre o resumo (pedido do Allan,
+        // 13/08/2026). Além de cortar ~37 min da carga completa, melhora a
+        // precisão -- o resumo de um "Quick Take on PRIO" cita Gerdau e
+        // Usiminas por comparação setorial, e isso virava tag de cobertura
+        // que não existe. O custo é perder a tag secundária legítima de vez
+        // em quando (ex.: Nexa citando Votorantim Cimentos, a controladora).
+        if (pri.length === 0 && !mercado) {
+          lidos++; restamResumos--;
+          msg((i + 1) + ' de ' + pendentes.length + ' · <b>' + enviados + ' já salvos</b>' +
+              (jaSalvos ? ' <span style="opacity:.6">(+' + jaSalvos + ' de antes)</span>' : '') +
+              '<br><span style="opacity:.6">' + (r.titulo || '').slice(0, 46) + '</span>' +
+              '<br><span style="opacity:.45">' + restamResumos + ' resumos a ler · ~' +
+              Math.max(1, Math.ceil(restamResumos * 3.5 / 60)) + ' min</span>');
           var txt = await lerResumo(r.id, r.titulo);
           var res = soResumo(txt);
           if (res) casar(res).forEach(function (n) { if (citadas.indexOf(n) === -1) citadas.push(n); });
         }
-        envio.push({
+        lote.push({
           id: r.id, titulo: r.titulo, data: iso(r.dataBr), categoria: r.categoria,
           tipo_investimento: r.tipo_investimento, analista: r.analista,
           empresas: citadas, empresa_principal: pri, mercado: mercado
         });
+        if (lote.length >= LOTE) await despachar();
       }
+      await despachar();
 
-      msg('Enviando ' + envio.length + ' relatórios…');
-      var resp = await fetch(API, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'X-Ingest-Token': TOKEN },
-        body: JSON.stringify({ relatorios: envio })
-      }).then(function (r) { return r.json(); });
-
-      msg('<b style="color:#7BD88F">Pronto.</b><br>' + resp.recebidos + ' enviados · ' +
-          resp.criados + ' novos · ' + resp.atualizados + ' atualizados<br>' +
-          '<span style="opacity:.6">' + resp.preservados_por_revisao + ' com revisão preservada · ' +
-          resp.total_na_base + ' na base</span>');
+      msg('<b style="color:#7BD88F">Pronto.</b><br>' +
+          enviados + ' gravados · ' + criados + ' novos' +
+          (falhas ? ' · <b style="color:#FF8B8B">' + falhas + ' falharam</b>' : '') + '<br>' +
+          '<span style="opacity:.6">' + (jaSalvos + enviados) + ' relatórios na base</span>' +
+          (falhas ? '<br><span style="opacity:.6">rode o botão de novo pra tentar os que faltaram</span>' : ''));
     } catch (e) {
       msg('<b style="color:#FF8B8B">Erro:</b> ' + (e && e.message ? e.message : e));
     } finally {
