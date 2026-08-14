@@ -32,7 +32,7 @@ from fastapi import APIRouter, Body, Depends, Header, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy import func, select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
 from .db import get_db
 from .models import (
@@ -148,8 +148,16 @@ def register_cobertura_routes(current_user) -> APIRouter:
     # -----------------------------------------------------------------
     @router.get("/api/cobertura/dados")
     def dados(db: Session = Depends(get_db)):
+        # selectinload é obrigatório aqui, não otimização (13/08/2026): sem
+        # ele, ler r.companies/r.sector_tags de cada relatório dispara uma
+        # consulta por relatório -- com a base cheia (1.285) viravam ~2.500
+        # idas ao Supabase numa requisição só e a tela ficava presa em
+        # "Carregando…" até a função estourar o tempo. Com selectinload são
+        # 3 consultas no total.
         relatorios = db.scalars(
-            select(Report).order_by(Report.published_at.desc().nullslast())
+            select(Report)
+            .options(selectinload(Report.companies), selectinload(Report.sector_tags))
+            .order_by(Report.published_at.desc().nullslast())
         ).unique().all()
 
         # principal (empresa do título) vive na tabela de associação; uma
@@ -171,7 +179,9 @@ def register_cobertura_routes(current_user) -> APIRouter:
 
         empresas = [
             {"empresa": c.name, "setor": c.sector.name, "analista": c.analyst or "—"}
-            for c in db.scalars(select(Company).where(Company.active.is_(True))).all()
+            for c in db.scalars(
+                select(Company).options(selectinload(Company.sector)).where(Company.active.is_(True))
+            ).all()
         ]
         empresas.sort(key=lambda e: _norm(e["empresa"]))
 
