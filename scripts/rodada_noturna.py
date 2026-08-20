@@ -1,10 +1,9 @@
-"""Rodada noturna: spreads, securitizados e ações de rating, em ordem.
+"""Rodada noturna: spreads, securitizados e fechamento do Balcão B3.
 
 Pedido do Allan (04/08/2026): *"essa atualização pode ser realizada uma
-vez no dia pela noite, quando saem os dados de spread, e aí já verifica se
-teve alguma ação de rating"*.
+vez no dia pela noite, quando saem os dados de spread"*.
 
-Substitui três jobs separados por um orquestrador — a ordem entre eles é
+Substitui jobs separados por um orquestrador — a ordem entre eles é
 DEPENDÊNCIA, não conveniência:
 
     1. DEBÊNTURES  — busca a curva de NTN-B do dia e a cacheia
@@ -12,14 +11,16 @@ DEPENDÊNCIA, não conveniência:
     2. SECURITIZADOS — LÊ essa curva do cache. Papel IPCA+ precisa dela pra
                      ter spread; sem o passo 1, seria uma requisição a mais
                      pelo mesmo dado.
-    2b. B3         — fecha o agregado diário do negócio a negócio e poda o
-                     bruto antigo. A captura em si é do `b3_trades.yml`
-                     (a cada 15 min no pregão); aqui é só o fechamento.
-    3. RATINGS     — as ações do dia entram DEPOIS que os spreads do dia
-                     já estão gravados. Assim uma ação de hoje já pega a
-                     linha de spread de hoje na junção as-of, sem precisar
-                     esperar o dia seguinte.
-    4. PERÍODOS    — reconstrói `issuer_rating_periodo` e a view.
+    3. B3          — fecha o agregado diário do negócio a negócio e poda o
+                     bruto além de 5 dias. A captura em si é do
+                     `b3_trades.yml` (a cada 15 min no pregão); aqui é só o
+                     fechamento. É esta etapa que segura o tamanho do banco.
+
+RATINGS SAIU (20/08/2026). Havia mais duas etapas, `ratings` e `periodos`.
+Foram removidas com o resto do pipeline de coleta e consolidação de rating,
+que ficou para o futuro — ver o bloco de comentário acima de `FUNCOES`.
+As **notícias** de ação de rating continuam normalmente, pelos coletores de
+S&P/Moody's/Fitch em `app/sources/`, que é outro caminho.
 
 Uma etapa que falha NÃO derruba as seguintes: cada uma é independente do
 ponto de vista de erro (a de securitizados degrada pra busca ao vivo da
@@ -29,7 +30,7 @@ gravar o que dava pra gravar.
 
     python -m scripts.rodada_noturna
     python -m scripts.rodada_noturna --data 2026-08-01
-    python -m scripts.rodada_noturna --pular ratings
+    python -m scripts.rodada_noturna --pular securitizados
 """
 from __future__ import annotations
 
@@ -47,7 +48,7 @@ from app.db import Base, SessionLocal, engine, run_migrations  # noqa: E402
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 logger = logging.getLogger("rodada_noturna")
 
-ETAPAS = ("debentures", "securitizados", "b3", "ratings", "periodos")
+ETAPAS = ("debentures", "securitizados", "b3")
 
 
 def etapa_debentures(db, dia: date | None) -> dict:
@@ -112,53 +113,34 @@ def etapa_b3(db, dia: date | None) -> dict:
     return {**r, "poda": p}
 
 
-def etapa_ratings(db, dia: date | None) -> dict:
-    """Ações de rating do dia.
-
-    Hoje o scraper (`scripts/mapear_ratings_2026.py`) gera planilha em vez
-    de gravar no banco — enquanto isso não for portado, esta etapa só
-    reporta o estado, sem capturar nada. Deixada no lugar de propósito:
-    a ordem correta (ratings DEPOIS dos spreads) já fica registrada, e
-    quando o scraper for portado é só preencher aqui.
-    """
-    from app.models import IssuerRating
-    from sqlalchemy import func, select
-
-    ultima = db.scalar(select(func.max(IssuerRating.data_acao)))
-    total = db.scalar(select(func.count()).select_from(IssuerRating))
-    logger.info("  ações de rating no banco: %s | mais recente: %s", total, ultima)
-    logger.warning(
-        "  captura de rating ainda NÃO automatizada — "
-        "scripts/mapear_ratings_2026.py grava .xlsx, não no banco"
-    )
-    return {"total": total, "ultima_acao": ultima.isoformat() if ultima else None,
-            "automatizado": False}
-
-
-def etapa_periodos(db, dia: date | None) -> dict:
-    from app.spreads import issuers as isv
-    from app.spreads.views import conferir_view, criar_views
-
-    r = isv.recalcular_todos_ratings(db)
-    criar_views(engine)
-    chk = conferir_view(engine)
-    logger.info("  períodos derivados: %d | emissores com rating: %d",
-                r["periodos"], r["com_rating"])
-    logger.info("  view: %s linhas (base %s) | nulos %d | incoerentes %d | %s",
-                f"{chk['linhas_view']:,}", f"{chk['linhas_base']:,}",
-                chk["rating_nulo"], chk["incoerentes"],
-                "OK" if chk["ok"] else "FALHOU")
-    if not chk["ok"]:
-        raise RuntimeError("v_spread_rating falhou na conferência — ver log acima")
-    return {**r, "view": chk}
-
+# RATINGS SAÍRAM DAQUI (20/08/2026, decisão do Allan)
+#
+# Existiam duas etapas, `ratings` e `periodos`. Foram removidas junto com o
+# resto do pipeline de coleta e consolidação de rating -- o assunto ficou
+# para o futuro.
+#
+# O que continua funcionando, e é o que o Allan quis manter: as **notícias**
+# de ação de rating, que os coletores de S&P, Moody's Local e Fitch em
+# `app/sources/` já trazem para a tabela `articles` na varredura de 5 min.
+# Isso é outro caminho, independente deste, e não foi tocado.
+#
+# O que ficou dormente, de propósito, para quando o assunto voltar:
+#   - tabelas `issuers`, `issuer_ratings`, `issuer_rating_periodo`
+#   - `app/spreads/issuers.py`, incluindo `registrar_acao_rating()`, que já
+#     está pronta para receber os eventos e nunca teve quem a chamasse
+#   - os quatro blocos de rating da aba Spreads (curva, dispersão, resumo,
+#     compressão). Eles já saíam vazios antes desta remoção: a tabela de
+#     ratings está zerada no Supabase desde sempre, porque as importações
+#     só rodaram no banco local.
+#
+# A view `v_spread_rating` era criada dentro de `etapa_periodos`. Mudou para
+# `scripts/init_db.py`, que é onde mora o resto do DDL -- ela é lida por
+# `analitico.py` e pela aba Banco de Dados, e funciona com rating vazio.
 
 FUNCOES = {
     "debentures": etapa_debentures,
     "securitizados": etapa_securitizados,
     "b3": etapa_b3,
-    "ratings": etapa_ratings,
-    "periodos": etapa_periodos,
 }
 
 

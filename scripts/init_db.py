@@ -46,6 +46,16 @@ def main() -> int:
     print("Rodando migrações de coluna...")
     run_migrations()
 
+    # A view `v_spread_rating` era criada dentro da etapa `periodos` da
+    # rodada noturna. Essa etapa saiu em 20/08/2026 junto com o pipeline de
+    # ratings, então a criação da view mudou de lugar para cá -- é aqui que
+    # mora o resto do DDL. A view continua sendo lida por
+    # app/spreads/analitico.py e pela aba Banco de Dados; ela funciona com a
+    # tabela de ratings vazia (as colunas de rating só ficam nulas).
+    print("Criando/atualizando views...")
+    from app.spreads.views import criar_views
+    criar_views(engine)
+
     faltando = sorted(set(Base.metadata.tables) - depois)
     if faltando:
         print(f"AVISO: ainda faltam {faltando}")

@@ -14,7 +14,7 @@ três pontos os comentários diziam o oposto do que o código fazia.
 | Curva de juro real | `ntnb_referencia` | API ANBIMA (títulos públicos) | 1×/dia, 21h BRT | Sim |
 | Securitizados | `securitizados`, `securitizado_spreads` | API ANBIMA (CRI/CRA) | 1×/dia, após debêntures | Sim |
 | Balcão B3 | `negocios_b3`, `negocios_b3_diario` | API pública do BDI da B3 | 15 min no pregão | Sim |
-| **Ratings** | `issuer_ratings`, `issuers`, derivadas | **Planilha / banco local seu** | **Manual** | **Não** |
+| ~~Ratings~~ | ~~`issuer_ratings`, `issuers`~~ | — | — | **Removido em 20/08** |
 | Repositório | `reports` | Catálogo do Smart | Manual | Não |
 | Infra | `users`, `sessions`, `app_settings`, `run_logs` | — | — | — |
 
@@ -113,7 +113,33 @@ Sem a poda, o bruto cresce ~740 MB/ano. **Foi exatamente o que aconteceu:** a ro
 
 ---
 
-## 6. Ratings — você está certo, é a base manual
+## 6. Ratings — REMOVIDO em 20/08/2026
+
+> **Decisão do Allan (20/08/2026):** manter apenas a **coleta de notícias**
+> de ação de rating, que já funciona; tirar todo o pipeline de coleta e
+> consolidação de base. Assunto adiado.
+>
+> **O que continua:** os coletores de S&P, Moody's Local e Fitch em
+> `app/sources/` seguem trazendo as ações de rating como **notícia**, para
+> a tabela `articles`, na varredura de 5 minutos. Nada disso foi tocado.
+>
+> **O que saiu:** as etapas `ratings` e `periodos` da rodada noturna e os
+> scripts `mapear_ratings_2026.py`, `reconstruir_ratings_historicos.py`,
+> `importar_ws_credit_research.py`, `seed_issuers.py` mais o
+> `Mapear Ratings 2026.bat`.
+>
+> **O que ficou dormente:** tabelas `issuers` / `issuer_ratings` /
+> `issuer_rating_periodo`, o módulo `app/spreads/issuers.py` (incluindo
+> `registrar_acao_rating()`, pronta e nunca chamada) e os quatro blocos de
+> rating da aba Spreads. Eles já saíam vazios antes da remoção.
+>
+> **Para retomar:** `git log --diff-filter=D --name-only` acha os arquivos;
+> `git checkout <commit>^ -- <caminho>` traz de volta.
+
+O texto abaixo descreve como era, e continua valendo como mapa para quando
+o assunto voltar.
+
+### Como era
 
 **Tabelas:** `issuers` · `issuer_aliases` · `issuer_ratings` (eventos) · `issuer_rating_atual` (view) · `issuer_rating_periodo` (derivada)
 
@@ -150,12 +176,14 @@ Não é conveniência, é dependência real:
 ```
 1. DEBÊNTURES    → busca e cacheia a curva de NTN-B
 2. SECURITIZADOS → LÊ essa curva do cache
-2b. B3           → fecha o agregado do dia e poda o bruto
-3. RATINGS       → entra depois dos spreads do dia (junção as-of)
-4. PERÍODOS      → reconstrói issuer_rating_periodo
+3. B3            → fecha o agregado do dia e poda o bruto
 ```
 
 Uma etapa que falha não derruba as seguintes.
+
+A view `v_spread_rating` era criada na antiga etapa `periodos`; passou para
+`scripts/init_db.py`. Rode `python -m scripts.init_db` depois de qualquer
+mudança de schema.
 
 ---
 
@@ -163,8 +191,8 @@ Uma etapa que falha não derruba as seguintes.
 
 | Item | Situação | Gravidade |
 |---|---|---|
-| `issuer_ratings` vazio em produção | Importação nunca subiu para o Supabase | **Alta** — análises por rating vazias |
-| Captura de rating não automatizada | Scraper gera `.xlsx`, não grava no banco | Média — exige rodada manual |
 | Originador → emissor em CRI/CRA | 0 de 354 ligados | Média |
+| Blocos de rating na aba Spreads | Saem vazios (tabela zerada, pipeline removido) | Baixa — decisão consciente |
 | Disk IO do Supabase | Corrigido em 20/08 (rodada noturna ligada) | Resolvido |
 | Agregação B3 em Postgres | Corrigido em 20/08 (SQL era SQLite-only) | Resolvido |
+| Pipeline de ratings | Removido em 20/08, por decisão | Resolvido |
