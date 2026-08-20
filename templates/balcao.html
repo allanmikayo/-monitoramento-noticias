@@ -1,0 +1,175 @@
+{% extends "base.html" %}
+{% block title %}Balcão B3{% endblock %}
+{% block content %}
+{#
+  Aba Balcão B3 (20/08/2026).
+
+  A aba Spreads responde "quanto este papel VALE" (marcação da Anbima).
+  Esta responde "o quanto ele GIROU e a que taxa" -- é volumetria, não
+  apreçamento. Por isso são duas abas e não duas seções da mesma.
+
+  A ordem dos blocos vai do agregado ao granular:
+
+    1. TERMÔMETRO   o dia está movimentado?      (uma linha, sem gráfico)
+    2. VOLUMETRIA   qual é o tamanho normal?     (média diária, 4 janelas)
+    3. EVOLUÇÃO     como veio no tempo?
+    4. RANKING      quem girou mais?             (volume e giro sobre estoque)
+    5. VOLUME x SPREAD  a que preço girou?
+    6. AO VIVO      o que está passando agora?
+
+  DUAS FONTES, DE PROPÓSITO (ver app/spreads/b3_agregado.py):
+    negocios_b3_diario  -> blocos 1 a 5   (guardado para sempre)
+    negocios_b3         -> bloco 6        (só os últimos 5 dias)
+#}
+<div class="page-head">
+  <h1 style="margin:0;font-size:1.4rem;">Balcão B3</h1>
+  <span class="kpi-tag" id="dados-ate">Dados até: —</span>
+  <span class="kpi-tag" id="termometro-tag" title="Volume do dia contra a mediana dos últimos 20 pregões">Termômetro: —</span>
+</div>
+
+<div class="filters-bar">
+  <div class="window-tabs" id="tipo-tabs">
+    <button data-tipo="" class="win-btn active">Todos</button>
+    {% for t in tipos %}
+    <button data-tipo="{{ t }}" class="win-btn">{{ t }}</button>
+    {% endfor %}
+  </div>
+
+  <label class="muted small" style="display:flex;align-items:center;gap:6px;"
+         title="Janela usada no ranking e no gráfico de volume × spread.">
+    Janela
+    <select id="janela-dias">
+      <option value="5" selected>5 pregões</option>
+      <option value="10">10 pregões</option>
+      <option value="21">21 pregões</option>
+      <option value="63">63 pregões</option>
+    </select>
+  </label>
+</div>
+
+{# ---- 2. Volumetria ------------------------------------------------- #}
+<h2 style="margin:18px 0 8px;font-size:1.05rem;">Volumetria</h2>
+<small class="muted">
+  Média diária por pregão <b>com negócio</b> na janela — não por dia de
+  calendário. A contagem de pregões fica visível em cada cartão de propósito:
+  média diária sem denominador à vista é fácil de ler errado.
+</small>
+<div class="kpi-row" id="cartoes-volumetria" style="margin-top:10px;">
+  <div class="kpi-card"><span class="muted small">Carregando…</span></div>
+</div>
+
+{# ---- 3. Evolução ---------------------------------------------------- #}
+<div class="chart-card" style="margin-top:22px;">
+  <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+    <h2 style="margin:0;font-size:1.05rem;">Evolução do volume negociado</h2>
+    <div class="window-tabs" id="serie-tabs">
+      <button data-dias="30" class="win-btn">30d</button>
+      <button data-dias="90" class="win-btn active">90d</button>
+      <button data-dias="180" class="win-btn">180d</button>
+      <button data-dias="365" class="win-btn">1a</button>
+    </div>
+    <div class="window-tabs" id="serie-metrica">
+      <button data-metrica="volume" class="win-btn active">R$</button>
+      <button data-metrica="negocios" class="win-btn">Nº de negócios</button>
+    </div>
+  </div>
+  <canvas id="grafico-serie" height="90"></canvas>
+</div>
+
+{# ---- 4. Ranking ------------------------------------------------------ #}
+<div style="margin-top:26px;">
+  <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+    <h2 style="margin:0;font-size:1.05rem;">Mais negociados</h2>
+    <div class="window-tabs" id="ranking-ordem">
+      <button data-ordem="volume" class="win-btn active">Por volume</button>
+      <button data-ordem="giro" class="win-btn">Por giro</button>
+    </div>
+    <span class="kpi-tag" id="ranking-janela">—</span>
+  </div>
+  <small class="muted">
+    <b>Giro</b> = volume negociado na janela ÷ estoque do papel. O estoque vem
+    do boletim da Anbima, que já é o que está em mercado. CRI e CRA quase
+    sempre ficam sem giro por não terem esse cadastro — aparecem no ranking
+    por volume, com o giro vazio, em vez de um número inventado.
+  </small>
+  <table class="table" id="tabela-ranking" style="margin-top:10px;">
+    <thead>
+      <tr>
+        <th>Ticker</th><th>Tipo</th><th>Emissor</th><th>Indexador</th>
+        <th class="num">Volume (R$)</th><th class="num">Negócios</th>
+        <th class="num">Pregões</th><th class="num">Maior negócio</th>
+        <th class="num">Taxa média</th><th class="num">Spread (bps)</th>
+        <th class="num">Estoque (R$)</th><th class="num">Giro</th>
+      </tr>
+    </thead>
+    <tbody><tr><td colspan="12" class="muted">Carregando…</td></tr></tbody>
+  </table>
+</div>
+
+{# ---- 5. Volume x spread --------------------------------------------- #}
+<div class="chart-card" style="margin-top:26px;">
+  <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+    <h2 style="margin:0;font-size:1.05rem;">Volume × spread negociado</h2>
+    <div class="window-tabs" id="vs-classe">
+      <button data-classe="IPCA + Incentivadas" class="win-btn active">IPCA + Incentivadas</button>
+      <button data-classe="CDI + Tradicionais" class="win-btn">CDI + Tradicionais</button>
+    </div>
+    <span class="kpi-tag" id="vs-sem-spread">—</span>
+  </div>
+  <small class="muted">
+    Cada ponto é um ticker: volume da janela no eixo X, spread médio
+    ponderado por volume no eixo Y. <b>O filtro de classe é obrigatório</b> —
+    spread de IPCA+ e de CDI+ têm referências diferentes e não se comparam.
+  </small>
+  <canvas id="grafico-volume-spread" height="110"></canvas>
+</div>
+
+{# ---- 6. Ao vivo ------------------------------------------------------ #}
+<h2 style="margin:30px 0 4px;font-size:1.05rem;">
+  Ao vivo
+  <span class="kpi-tag" id="tape-atualizado">—</span>
+</h2>
+<small class="muted">
+  A B3 republica o arquivo a cada 15 minutos e reprocessa em D+1: cerca de 6%
+  dos negócios são cancelados ou ajustados no dia seguinte. Aqui só aparecem
+  os confirmados.
+</small>
+
+<div class="movers-grid" style="margin-top:12px;">
+  <div>
+    <h3 style="font-size:0.92rem;margin:0 0 6px;">Maiores aberturas vs. baseline</h3>
+    <table class="table" id="tabela-aberturas">
+      <thead><tr><th>Ticker</th><th>Emissor</th><th class="num">Hoje</th><th class="num">Baseline</th><th class="num">Δ bps</th></tr></thead>
+      <tbody><tr><td colspan="5" class="muted">Carregando…</td></tr></tbody>
+    </table>
+  </div>
+  <div>
+    <h3 style="font-size:0.92rem;margin:0 0 6px;">Maiores fechamentos vs. baseline</h3>
+    <table class="table" id="tabela-fechamentos">
+      <thead><tr><th>Ticker</th><th>Emissor</th><th class="num">Hoje</th><th class="num">Baseline</th><th class="num">Δ bps</th></tr></thead>
+      <tbody><tr><td colspan="5" class="muted">Carregando…</td></tr></tbody>
+    </table>
+  </div>
+</div>
+<small class="muted" id="baseline-nota">
+  Baseline = mediana ponderada por volume dos 3 pregões anteriores. Só entram
+  papéis com pelo menos 3 negócios e R$ 1 milhão na janela — sem esse piso o
+  topo do ranking seria sempre papel ilíquido com um print solto.
+</small>
+
+<h3 style="font-size:0.92rem;margin:22px 0 6px;">Últimos negócios</h3>
+<table class="table" id="tabela-tape">
+  <thead>
+    <tr>
+      <th>Data</th><th>Hora</th><th>Ticker</th><th>Tipo</th><th>Emissor</th>
+      <th class="num">Quantidade</th><th class="num">PU</th>
+      <th class="num">Volume (R$)</th><th class="num">Taxa</th>
+      <th class="num">Spread (bps)</th>
+    </tr>
+  </thead>
+  <tbody><tr><td colspan="10" class="muted">Carregando…</td></tr></tbody>
+</table>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+<script src="/static/balcao.js"></script>
+{% endblock %}

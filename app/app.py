@@ -141,6 +141,15 @@ def require_admin(user: User = Depends(require_user)) -> User:
 # desde 27/07; agora a única aba aberta é o Repositório de Relatórios.
 app.include_router(register_spreads_routes(require_user))
 
+# Aba "Balcão B3" (20/08/2026) -- volumetria de negociação de DEB/CRI/CRA a
+# partir do Boletim Diário do Mercado da B3. Lê `negocios_b3_diario` (o
+# agregado, guardado para sempre) nos blocos históricos e `negocios_b3` (o
+# bruto, retenção de 5 dias) só na seção "ao vivo". Atrás de login, como
+# Notícias e Spreads.
+from .balcao_routes import register_balcao_routes  # noqa: E402
+
+app.include_router(register_balcao_routes(require_user))
+
 # Módulo "Repositório de Relatórios" (13/08/2026) -- catálogo dos relatórios
 # do Smart tagueados por empresa/setor. É a ÚNICA aba pública do Hub: recebe
 # `current_user` (opcional) de propósito. Consultar não exige login; editar
