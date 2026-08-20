@@ -288,3 +288,68 @@ def test_agregar_do_banco_ignora_outros_instrumentos(db):
     agg.agregar_do_banco(db)
     tipos = {r.instrument_type for r in db.query(NegocioB3Diario).all()}
     assert tipos == {"DEB", "CRI", "CRA"}
+
+
+# ---------------------------------------------------------------------------
+# Portabilidade SQLite <-> Postgres
+# ---------------------------------------------------------------------------
+#
+# BUG REAL (20/08/2026): `gravar_agregado` e `agregar_do_banco` usavam
+# `INSERT OR REPLACE` com placeholder `?` num cursor da DBAPI -- sintaxe
+# exclusiva de SQLite. Passava em toda a suíte (que roda em SQLite) e
+# quebrava no Supabase, na PRIMEIRA execução real da rodada noturna:
+#
+#     [b3] FALHOU: the query has 0 placeholders but 3 parameters were passed
+#
+# (o psycopg usa `%s`, não `?`, então não enxergava placeholder nenhum).
+#
+# Os dois testes abaixo cobrem a lacuna sem exigir um Postgres de verdade:
+# um lê o código-fonte, o outro compila o SQL nos dois dialetos.
+
+def test_nao_usa_sintaxe_exclusiva_de_sqlite():
+    """Lê o código EXECUTÁVEL do módulo (sem docstrings, que legitimamente
+    citam os termos ao explicar a correção)."""
+    import ast
+    from pathlib import Path
+
+    fonte = Path(agg.__file__).read_text(encoding="utf-8")
+
+    class TiraDocstrings(ast.NodeTransformer):
+        def _limpa(self, node):
+            self.generic_visit(node)
+            if (node.body and isinstance(node.body[0], ast.Expr)
+                    and isinstance(node.body[0].value, ast.Constant)
+                    and isinstance(node.body[0].value.value, str)):
+                node.body = node.body[1:] or [ast.Pass()]
+            return node
+        visit_Module = visit_ClassDef = _limpa
+        visit_FunctionDef = visit_AsyncFunctionDef = _limpa
+
+    executavel = ast.unparse(TiraDocstrings().visit(ast.parse(fonte)))
+    for termo in ("INSERT OR REPLACE", "db.connection().connection",
+                  "conn.cursor", "executemany"):
+        assert termo not in executavel, (
+            f"{termo!r} só funciona em SQLite — a produção roda em Postgres"
+        )
+
+
+def test_upsert_compila_nos_dois_dialetos():
+    """Renderiza o upsert em Postgres e SQLite e confere que cada um recebe
+    o placeholder do seu driver. É exatamente isso que estava quebrado."""
+    import re
+    from sqlalchemy import text
+    from sqlalchemy.dialects import postgresql, sqlite as sqlite_dialect
+
+    campos = ("codigo", "data", "n_negocios", "volume")
+    atualiza = ", ".join(f"{c} = EXCLUDED.{c}" for c in ("n_negocios", "volume"))
+    stmt = text(
+        f"INSERT INTO negocios_b3_diario ({', '.join(campos)})"
+        f" VALUES ({', '.join(':' + c for c in campos)})"
+        f" ON CONFLICT (codigo, data) DO UPDATE SET {atualiza}"
+    )
+
+    for dialeto, marca in ((postgresql.dialect(), r"%\(\w+\)s"),
+                           (sqlite_dialect.dialect(), r"\?")):
+        sql = str(stmt.compile(dialect=dialeto))
+        assert re.findall(marca, sql), f"{dialeto.name}: placeholder não renderizado"
+        assert "ON CONFLICT" in sql

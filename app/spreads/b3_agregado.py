@@ -21,7 +21,7 @@ import logging
 from datetime import date, timedelta
 from pathlib import Path
 
-from sqlalchemy import delete, func, select
+from sqlalchemy import delete, func, select, text
 from sqlalchemy.orm import Session
 
 from ..models import NegocioB3, NegocioB3Diario
@@ -116,23 +116,32 @@ def agregar_linhas(negocios: list[dict]) -> list[dict]:
 def gravar_agregado(db: Session, linhas: list[dict]) -> int:
     """Upsert do agregado. Idempotente por Código+Data.
 
-    Usa `INSERT OR REPLACE` no driver em vez do ORM: um backfill de 500
-    dias grava centenas de milhares de linhas, e o ORM aqui só custaria
-    tempo (mesma lição da importação do banco do Allan, 05/08/2026).
+    Grava em lote via SQL, não pelo ORM: um backfill de 500 dias escreve
+    centenas de milhares de linhas, e o ORM aqui só custaria tempo (mesma
+    lição da importação do banco do Allan, 05/08/2026).
+
+    PORTABILIDADE (corrigido em 20/08/2026, junto com `agregar_do_banco`):
+    era `INSERT OR REPLACE` com `?` num cursor da DBAPI -- SQLite only.
+    Agora é `ON CONFLICT ... DO UPDATE` com parâmetro nomeado via
+    `text()`, que funciona nos dois bancos.
     """
     if not linhas:
         return 0
-    conn = db.connection().connection
-    conn.cursor().executemany(
-        "INSERT OR REPLACE INTO negocios_b3_diario"
-        " (codigo, data, instrument_type, n_negocios, volume, quantidade,"
-        "  taxa_media, taxa_min, taxa_max, spread_medio, spread_min, spread_max,"
-        "  preco_medio, maior_negocio)"
-        " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
-        [(l["codigo"], l["data"].isoformat(), l["instrument_type"], l["n_negocios"],
-          l["volume"], l["quantidade"], l["taxa_media"], l["taxa_min"], l["taxa_max"],
-          l["spread_medio"], l["spread_min"], l["spread_max"],
-          l["preco_medio"], l["maior_negocio"]) for l in linhas],
+
+    campos = ("codigo", "data", "instrument_type", "n_negocios", "volume",
+              "quantidade", "taxa_media", "taxa_min", "taxa_max",
+              "spread_medio", "spread_min", "spread_max",
+              "preco_medio", "maior_negocio")
+    atualiza = ", ".join(f"{c} = EXCLUDED.{c}" for c in campos
+                         if c not in ("codigo", "data"))
+
+    db.execute(
+        text(
+            f"INSERT INTO negocios_b3_diario ({', '.join(campos)})"
+            f" VALUES ({', '.join(':' + c for c in campos)})"
+            f" ON CONFLICT (codigo, data) DO UPDATE SET {atualiza}"
+        ),
+        [{c: l[c] for c in campos} for l in linhas],
     )
     db.commit()
     return len(linhas)
@@ -144,21 +153,44 @@ def agregar_do_banco(db: Session, inicio: date | None = None, fim: date | None =
     Faz a agregação em SQL, não em Python: são dezenas de milhares de
     linhas por dia, e trazê-las para a aplicação só para somar seria
     desperdício.
-    """
-    where = [f"instrument_type IN ({','.join('?' * len(INSTRUMENTOS))})"]
-    params: list = sorted(INSTRUMENTOS)
-    if inicio:
-        where.append("data_negocio >= ?")
-        params.append(inicio.isoformat())
-    if fim:
-        where.append("data_negocio <= ?")
-        params.append(fim.isoformat())
-    filtro = ("WHERE " + " AND ".join(where)) if where else ""
 
-    conn = db.connection().connection
-    cur = conn.cursor()
-    cur.execute(f"""
-        INSERT OR REPLACE INTO negocios_b3_diario
+    PORTABILIDADE (corrigido em 20/08/2026 -- quebrava em produção):
+    esta função era SQL de SQLite cru, com `INSERT OR REPLACE`, placeholder
+    `?` e cursor da DBAPI direto (`db.connection().connection`). Rodava
+    local (SQLite) e falhava no Supabase (Postgres) com
+
+        the query has 0 placeholders but 3 parameters were passed
+
+    -- o psycopg usa `%s`, não `?`, então não via placeholder nenhum. Os
+    testes não pegaram porque também rodam em SQLite. Agora usa `text()`
+    com parâmetro NOMEADO (`:tipo0`), que o SQLAlchemy traduz para o
+    dialeto certo, e `ON CONFLICT ... DO UPDATE`, que existe nos dois
+    (SQLite >= 3.24 e Postgres) e substitui o `INSERT OR REPLACE`.
+    """
+    tipos = sorted(INSTRUMENTOS)
+    params: dict = {f"tipo{i}": t for i, t in enumerate(tipos)}
+    where = ["instrument_type IN (" + ",".join(f":tipo{i}" for i in range(len(tipos))) + ")"]
+    if inicio:
+        where.append("data_negocio >= :inicio")
+        params["inicio"] = inicio
+    if fim:
+        where.append("data_negocio <= :fim")
+        params["fim"] = fim
+    filtro = "WHERE " + " AND ".join(where)
+
+    # Colunas atualizadas quando a linha (codigo, data) já existe. A chave
+    # do conflito é `uq_negocio_b3_diario`.
+    atualiza = ", ".join(
+        f"{c} = EXCLUDED.{c}" for c in (
+            "instrument_type", "n_negocios", "volume", "quantidade",
+            "taxa_media", "taxa_min", "taxa_max",
+            "spread_medio", "spread_min", "spread_max",
+            "preco_medio", "maior_negocio",
+        )
+    )
+
+    db.execute(text(f"""
+        INSERT INTO negocios_b3_diario
             (codigo, data, instrument_type, n_negocios, volume, quantidade,
              taxa_media, taxa_min, taxa_max, spread_medio, spread_min, spread_max,
              preco_medio, maior_negocio)
@@ -183,7 +215,8 @@ def agregar_do_banco(db: Session, inicio: date | None = None, fim: date | None =
         FROM negocios_b3
         {filtro}
         GROUP BY codigo, data_negocio
-    """, params)
+        ON CONFLICT (codigo, data) DO UPDATE SET {atualiza}
+    """), params)
     db.commit()
     total = db.scalar(select(func.count()).select_from(NegocioB3Diario))
     dias = db.scalar(select(func.count(func.distinct(NegocioB3Diario.data))))
