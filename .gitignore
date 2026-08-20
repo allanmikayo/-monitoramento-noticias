@@ -6,6 +6,19 @@ data/Setores.xlsx
 data/debug_*.html
 data/debug_*.png
 .env
+
+# Snapshots locais de apoio. Nenhum código de produção lê estes arquivos --
+# `cra_cri_snapshot.json` só aparece como argumento opcional `--seed-json`
+# de scripts/fetch_securitizados.py, e `ratings_snapshot.json` não é lido
+# por ninguém. Ficam de fora do repositório de propósito.
+data/*_snapshot.json
+
+# Pasta de trabalho da investigação do Balcão B3 (coletor próprio +
+# parquets de 10 pregões). Redundante com app/spreads/b3_trades.py, que já
+# faz a mesma captura melhor; mantida só como rascunho local. São ~13 MB de
+# parquet que não devem ir para o repositório.
+Cobertura/
+
 __pycache__/
 *.pyc
 .venv/

@@ -20,8 +20,13 @@ name: Securitizados CRI/CRA (diário)
 # Brasil não tem horário de verão desde 2019 (fuso fixo -3), o cron não
 # precisa de ajuste sazonal.
 on:
-  schedule:
-    - cron: "30 0 * * *"
+  # AGENDAMENTO DESLIGADO em 20/08/2026 -- mesma razão do spreads_daily.yml:
+  # a etapa `securitizados` da `rodada_noturna.yml` roda este mesmo script,
+  # e lá ela vem DEPOIS da etapa de debêntures, que é justamente a
+  # dependência descrita no comentário acima (a curva de NTN-B já cacheada).
+  # A rodada noturna respeita essa ordem por construção, sem depender de
+  # dois crons separados por 30 minutos torcendo para o primeiro terminar.
+  #
   # Vazio (uso normal) = só hoje. Preenchidos = backfill manual pelo
   # Allan em Actions -> "Run workflow".
   workflow_dispatch:

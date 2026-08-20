@@ -223,11 +223,20 @@ def podar_bruto(db: Session, dias: int | None = RETENCAO_BRUTO_DIAS,
                 hoje: date | None = None) -> dict:
     """Apaga negócio a negócio BRUTO mais antigo que `dias`.
 
-    **NÃO roda sozinha.** `dias=None` (o padrão) devolve sem apagar nada —
-    a retenção padrão do projeto é infinita, ver `RETENCAO_BRUTO_DIAS`.
-    Só age quando alguém passa um número explícito, e ainda assim só
-    depois de conferir que o agregado cobre o período: apagar o bruto sem
-    o agregado gravado perderia o dado de vez.
+    O padrão é `RETENCAO_BRUTO_DIAS` (5), então **a chamada sem argumento
+    APAGA**. Passe `dias=None` explicitamente para desligar a poda.
+
+    (Esta docstring dizia o contrário até 20/08/2026 — "não roda sozinha",
+    "retenção infinita" — resquício de uma versão anterior em que o padrão
+    era `None`. A contradição com o código logo abaixo atrapalhou o
+    diagnóstico do estouro de Disk IO do Supabase, porque dava a entender
+    que a poda estava desligada de propósito, quando na verdade o problema
+    era outro: `rodada_noturna.py`, que é quem chama esta função, não
+    tinha workflow e nunca rodava na nuvem.)
+
+    A salvaguarda continua: só apaga depois de conferir que cada dia a
+    apagar tem agregado gravado — apagar o bruto sem o agregado perderia
+    o dado de vez.
 
     Antes de usar, considere `arquivar_bruto()` — o CSV comprimido guarda
     a operação individual em ~4% do espaço da tabela.

@@ -268,11 +268,45 @@ ROTAS = [
 ]
 
 
+def _login(SessionLocal):
+    """Cria um usuário ativo e devolve o token de sessão.
+
+    Necessário desde 13/08/2026: a aba Spreads voltou a exigir login
+    (`app.py`: `register_spreads_routes(require_user)`) -- hoje a única
+    aba pública é o Repositório de Relatórios. Mesmo padrão de
+    `tests/test_banco.py::_login_admin`.
+    """
+    from app import auth
+    from app.models import User
+    with SessionLocal() as db:
+        u = db.query(User).first()
+        if u is None:
+            u = User(email="a@a.com", name="Teste", role="admin", active=True,
+                     password_hash=auth.hash_password("x" * 10), email_confirmed=True)
+            db.add(u)
+            db.commit()
+        s = auth.create_session(db, u, ip="1", user_agent="teste")
+        db.commit()
+        return s.token
+
+
 @pytest.fixture()
 def cliente(banco):
+    """Cliente JÁ AUTENTICADO.
+
+    ARMADILHA QUE ESTE FIXTURE FECHA (corrigido em 20/08/2026): sem o
+    cookie, `require_user` redireciona para /login e o TestClient SEGUE o
+    redirect, devolvendo a página de login com status **200**. Ou seja,
+    `assert r.status_code == 200` passava mesmo com a rota completamente
+    quebrada -- justamente o contrário do que `test_rota_responde` foi
+    escrito para pegar. O par de testes ficava um verde-falso e um
+    vermelho legítimo (o de 400, que via 200 da tela de login).
+    """
     from fastapi.testclient import TestClient
     import app.app as A
-    return TestClient(A.app, raise_server_exceptions=False)
+    c = TestClient(A.app, raise_server_exceptions=False)
+    c.cookies.set("session_token", _login(banco))
+    return c
 
 
 # `+` em query string significa ESPAÇO — "classe=IPCA + Incentivadas" cru
@@ -287,13 +321,25 @@ def test_rota_responde(cliente, rota):
     """BUG JÁ PAGO (11/08/2026): módulos escritos, rotas não registradas no
     app.py, e o Allan reiniciou o servidor sem ver mudança nenhuma. Teste
     de unidade não pega isso."""
-    r = cliente.get(f"{rota}?classe={CLASSE_Q}")
+    r = cliente.get(f"{rota}?classe={CLASSE_Q}", follow_redirects=False)
     assert r.status_code == 200, r.text
 
 
 @pytest.mark.parametrize("rota", ROTAS)
 def test_rota_recusa_classe_invalida(cliente, rota):
-    assert cliente.get(f"{rota}?classe=Outros").status_code == 400
+    r = cliente.get(f"{rota}?classe=Outros", follow_redirects=False)
+    assert r.status_code == 400, r.text
+
+
+@pytest.mark.parametrize("rota", ROTAS)
+def test_rota_exige_login(banco, rota):
+    """Contrapartida do fixture autenticado: garante que a proteção existe
+    de verdade, em vez de o teste acima passar por já estar logado."""
+    from fastapi.testclient import TestClient
+    import app.app as A
+    anon = TestClient(A.app, raise_server_exceptions=False)
+    r = anon.get(f"{rota}?classe={CLASSE_Q}", follow_redirects=False)
+    assert r.status_code in (302, 303, 401, 403), r.status_code
 
 
 def test_pagina_spreads_traz_os_quatro_blocos(cliente):

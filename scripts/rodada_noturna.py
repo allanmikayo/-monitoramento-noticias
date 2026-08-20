@@ -82,8 +82,16 @@ def etapa_b3(db, dia: date | None) -> dict:
     roda a cada 15 min durante o pregão — não faz sentido repetir aqui. O
     que falta é o passo de fim de dia: fechar o agregado e liberar espaço.
 
-    NÃO apaga nada: o bruto é acumulado indefinidamente. O agregado
-    existe para as consultas serem rápidas, não para substituir o bruto.
+    APAGA, SIM: depois de agregar, `podar_bruto()` remove o bruto além de
+    `RETENCAO_BRUTO_DIAS` (5 dias). O comentário anterior aqui dizia "NÃO
+    apaga nada / acumulado indefinidamente", contradizendo a chamada logo
+    abaixo — corrigido em 20/08/2026.
+
+    ESTA ETAPA É O QUE SEGURA O TAMANHO DO BANCO. Sem ela, `negocios_b3`
+    cresce ~17 mil linhas por pregão sem nunca diminuir. Foi o que
+    aconteceu entre a criação deste script (04/08) e 20/08: não existia
+    workflow chamando a rodada noturna, e o Supabase começou a alertar
+    estouro de Disk IO Budget.
     """
     from app.spreads import b3_agregado as agg
 

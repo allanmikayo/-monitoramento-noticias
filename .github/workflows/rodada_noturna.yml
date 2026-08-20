@@ -1,0 +1,83 @@
+name: Rodada noturna (spreads + securitizados + B3 + ratings)
+
+# POR QUE ESTE WORKFLOW EXISTE (20/08/2026)
+#
+# `scripts/rodada_noturna.py` foi escrito em 04/08/2026 para substituir os
+# jobs diários separados, mas NUNCA foi ligado na nuvem -- não havia
+# workflow para ele. Consequência medida nos alertas do Supabase de 13/08 e
+# 20/08 ("Your project is depleting its Disk IO Budget"):
+#
+#   `b3_trades.yml` grava ~17 mil negócios por dia em `negocios_b3`, a cada
+#   15 min durante o pregão. A etapa que fecha o agregado diário
+#   (`negocios_b3_diario`) e PODA o bruto além de 5 dias vive dentro da
+#   rodada noturna. Sem ela rodando, `negocios_b3` cresce sem limite --
+#   o próprio ESTRUTURA_DADOS.md projeta ~740 MB/ano e "estoura em ~6
+#   meses". O Disk IO estoura bem antes do disco.
+#
+# Isso também explica as falhas em cascata de 13/08 em TRÊS workflows
+# diferentes (scrape, b3_trades, spreads_verify), todas em 30-40 segundos:
+# com o IO esgotado o Postgres fica sem responder e qualquer job que
+# encoste no banco falha na conexão, não na lógica.
+#
+# SUBSTITUI `spreads_daily.yml` e `securitizados_daily.yml` -- as etapas
+# `debentures` e `securitizados` daqui rodam exatamente os mesmos scripts.
+# Aqueles dois ficaram só com `workflow_dispatch` (uso manual/pontual);
+# deixar os dois agendados junto com este seria trabalho dobrado no banco,
+# exatamente o que estamos tentando reduzir.
+#
+# ORDEM DAS ETAPAS É DEPENDÊNCIA, não conveniência -- ver a docstring de
+# scripts/rodada_noturna.py. Resumo: debêntures busca e cacheia a curva de
+# NTN-B; securitizados LÊ esse cache; B3 fecha o agregado e poda; ratings
+# entra depois dos spreads do dia já gravados.
+
+on:
+  schedule:
+    # 00h UTC = 21h BRT. Mesmo horário em que o `spreads_daily.yml` rodava
+    # (o boletim da Anbima sai ~18-21h BRT). `spreads_verify.yml` continua
+    # 1h depois, às 01h UTC, conferindo se a captura realmente aconteceu.
+    - cron: "0 0 * * *"
+  workflow_dispatch:
+    inputs:
+      data:
+        description: "Data (AAAA-MM-DD) -- em branco usa o último dia publicado"
+        required: false
+        default: ""
+      pular:
+        description: "Etapas a pular, separadas por espaço (debentures securitizados b3 ratings periodos)"
+        required: false
+        default: ""
+
+concurrency:
+  group: rodada_noturna
+  cancel-in-progress: false
+
+jobs:
+  rodada:
+    runs-on: ubuntu-latest
+    # A PRIMEIRA execução tem muito mais trabalho que as seguintes: vai
+    # agregar e podar todo o bruto acumulado desde que o b3_trades.yml
+    # entrou no ar. Depois disso são só 5 dias de bruto por vez.
+    timeout-minutes: 45
+    steps:
+      - name: Baixar o codigo
+        uses: actions/checkout@v4
+
+      - name: Preparar Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Instalar dependencias
+        run: pip install -r requirements.txt
+
+      - name: Rodar a rodada noturna
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          ANBIMA_CLIENT_ID: ${{ secrets.ANBIMA_CLIENT_ID }}
+          ANBIMA_CLIENT_SECRET: ${{ secrets.ANBIMA_CLIENT_SECRET }}
+        run: |
+          ARGS=""
+          if [ -n "${{ github.event.inputs.data }}" ]; then ARGS="$ARGS --data ${{ github.event.inputs.data }}"; fi
+          if [ -n "${{ github.event.inputs.pular }}" ]; then ARGS="$ARGS --pular ${{ github.event.inputs.pular }}"; fi
+          python -m scripts.rodada_noturna $ARGS

@@ -89,25 +89,50 @@ def test_filtra_por_nome_e_nao_por_dominio(db):
 # Rota e template
 # ---------------------------------------------------------------------------
 
-def test_botao_de_fonte_aparece_na_tela():
+def _cliente_logado():
+    """TestClient autenticado.
+
+    O dashboard de notícias voltou a exigir login em 13/08/2026 (só o
+    Repositório de Relatórios é público). Sem cookie, `require_user`
+    redireciona para /login e o TestClient SEGUE o redirect, devolvendo a
+    tela de login com status 200 -- então `assert status_code == 200`
+    passa, e só o assert seguinte (procurando um elemento do template)
+    denuncia o problema. Corrigido em 20/08/2026.
+    """
     from fastapi.testclient import TestClient
+    from app import auth
+    from app.db import Base, SessionLocal, engine
+    from app.models import User
     import app.app as A
-    from app.db import Base, engine
+
     Base.metadata.create_all(engine)
+    with SessionLocal() as db:
+        u = db.query(User).first()
+        if u is None:
+            u = User(email="a@a.com", name="Teste", role="admin", active=True,
+                     password_hash=auth.hash_password("x" * 10), email_confirmed=True)
+            db.add(u)
+            db.commit()
+        token = auth.create_session(db, u, ip="1", user_agent="teste").token
+        db.commit()
+
     c = TestClient(A.app, raise_server_exceptions=False)
-    r = c.get("/")
-    assert r.status_code == 200
+    c.cookies.set("session_token", token)
+    return c
+
+
+def test_botao_de_fonte_aparece_na_tela():
+    c = _cliente_logado()
+    r = c.get("/", follow_redirects=False)
+    assert r.status_code == 200, r.status_code
     assert "ms-source-btn" in r.text, "o botão Fonte não chegou ao template"
     assert 'data-ms="source"' in r.text or "Fonte: Todas" in r.text
 
 
 def test_api_aceita_source_name_repetido():
     """`?source_name=A&source_name=B` — mesma mecânica de `sector_id`."""
-    from fastapi.testclient import TestClient
-    import app.app as A
-    from app.db import Base, engine
-    Base.metadata.create_all(engine)
-    c = TestClient(A.app, raise_server_exceptions=False)
-    r = c.get("/api/articles?window=24h&coverage=todos&source_name=A&source_name=B")
-    assert r.status_code == 200
+    c = _cliente_logado()
+    r = c.get("/api/articles?window=24h&coverage=todos&source_name=A&source_name=B",
+              follow_redirects=False)
+    assert r.status_code == 200, r.status_code
     assert "articles" in r.json()
