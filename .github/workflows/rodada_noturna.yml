@@ -43,7 +43,12 @@ on:
         required: false
         default: ""
       pular:
-        description: "Etapas a pular, separadas por espaço (debentures securitizados b3 ratings periodos)"
+        # Deixe VAZIO para rodar tudo -- este campo é o que NÃO deve rodar.
+        # A lista tem que bater com `ETAPAS` em scripts/rodada_noturna.py:
+        # valor fora dela é recusado pelo argparse e o job falha na hora.
+        # (Listava `ratings periodos` até 20/08/2026; as duas saíram junto
+        # com o pipeline de rating.)
+        description: "Etapas a PULAR, separadas por espaço. Vazio = roda tudo. Opções: debentures securitizados b3"
         required: false
         default: ""
 
