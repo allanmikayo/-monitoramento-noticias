@@ -46,6 +46,12 @@
       </tr>
     </thead>
     <tbody>
+      {% if erro_inventario %}
+      <tr><td colspan="5" class="muted">
+        Não foi possível montar o inventário: <code>{{ erro_inventario }}</code><br>
+        A consulta e a extração abaixo continuam funcionando.
+      </td></tr>
+      {% endif %}
       {% for t in tabelas %}
       <tr data-tabela="{{ t.tabela }}" data-coluna="{{ t.coluna_data or '' }}">
         <td><code>{{ t.tabela }}</code></td>

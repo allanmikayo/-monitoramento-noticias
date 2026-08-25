@@ -150,6 +150,22 @@ def _linhas_e_colunas(db: Session, sql: str, params: dict | None = None):
 VIEWS = {"v_spread_rating", "issuer_rating_atual"}
 
 
+def _limpar(db: Session) -> None:
+    """Desfaz a transação depois de um erro esperado.
+
+    No Postgres, um erro aborta a transação inteira: qualquer consulta
+    seguinte falha com "current transaction is aborted, commands ignored
+    until end of transaction block". Como este módulo usa try/except para
+    tolerar tabela inexistente, sem o rollback a PRIMEIRA ausência derrubava
+    todas as consultas seguintes -- e um `except` que segue em frente vira
+    uma página inteira em branco ou um 500.
+    """
+    try:
+        db.rollback()
+    except Exception:  # noqa: BLE001
+        pass
+
+
 def _contagens_estimadas(db: Session) -> dict[str, int]:
     """Número aproximado de linhas por tabela, do catálogo do Postgres.
 
@@ -179,6 +195,15 @@ def _contagens_estimadas(db: Session) -> dict[str, int]:
         return {r[0]: int(r[1]) for r in linhas}
     except Exception as exc:  # noqa: BLE001
         logger.warning("não consegui estimar contagens pelo catálogo: %s", exc)
+        # ROLLBACK OBRIGATÓRIO: no Postgres, um erro aborta a transação
+        # inteira e TODA consulta seguinte falha com "current transaction is
+        # aborted". Sem isto, uma falha aqui contaminaria os COUNT(*) de
+        # fallback e o MIN/MAX logo abaixo, transformando um aviso local
+        # numa página quebrada.
+        try:
+            db.rollback()
+        except Exception:  # noqa: BLE001
+            pass
         return {}
 
 
@@ -204,7 +229,8 @@ def inventario(db: Session, diag: dict | None = None) -> list[dict]:
             try:
                 n = db.execute(text(f'SELECT COUNT(*) FROM "{tabela}"')).scalar() or 0
             except Exception:  # noqa: BLE001
-                continue                  # tabela ainda não existe neste banco
+                _limpar(db)               # tabela ainda não existe neste banco
+                continue
 
         periodo = None
         # MIN/MAX só onde a coluna de data é indexada e a relação é tabela
@@ -217,7 +243,7 @@ def inventario(db: Session, diag: dict | None = None) -> list[dict]:
                 if r and r[0]:
                     periodo = {"de": str(r[0])[:10], "ate": str(r[1])[:10]}
             except Exception:  # noqa: BLE001
-                pass
+                _limpar(db)
 
         info = tamanhos.get(tabela, {})
         saida.append({
@@ -258,9 +284,25 @@ def registrar_rotas(app, require_admin, templates):
         # aqui e de novo dentro de `inventario`, duplicando a consulta de
         # catálogo mais cara da página.
         diag = diagnostico(db.bind)
+        # O INVENTÁRIO É ACESSÓRIO. A função principal desta tela é consultar
+        # e extrair dado; se a contagem de linhas falhar, ela não pode levar
+        # a página junto. Mesmo princípio que `capacidade.diagnostico` já
+        # segue ("NUNCA levanta"), agora estendido para cá -- em 20/08/2026
+        # esta página devolveu Internal Server Error e a tela não dava
+        # nenhuma pista do motivo.
+        erro_inventario = None
+        try:
+            tabelas = inventario(db, diag)
+        except Exception as exc:  # noqa: BLE001
+            logger.exception("inventário falhou")
+            _limpar(db)
+            tabelas = []
+            erro_inventario = f"{type(exc).__name__}: {exc}"
+
         return templates.TemplateResponse(request, "banco.html", {
             "user": user,
-            "tabelas": inventario(db, diag),
+            "tabelas": tabelas,
+            "erro_inventario": erro_inventario,
             "capacidade": diag,
             "limite_padrao": LIMITE_PADRAO,
             "limite_maximo": LIMITE_MAXIMO,

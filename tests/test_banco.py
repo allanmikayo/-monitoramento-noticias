@@ -306,3 +306,25 @@ def test_diagnostico_calculado_uma_vez_por_pagina(cliente, monkeypatch):
     r = c.get("/banco", follow_redirects=False)
     assert r.status_code == 200
     assert chamadas["n"] == 1, f"diagnostico chamado {chamadas['n']}x"
+
+
+def test_pagina_sobrevive_a_inventario_quebrado(cliente, monkeypatch):
+    """A função da tela é consultar e extrair; o inventário é acessório.
+
+    Em 20/08/2026 a página devolveu Internal Server Error e não dava pista
+    nenhuma do motivo. Agora o erro aparece na própria tela e o resto
+    continua utilizável.
+    """
+    from app.spreads import banco_routes as br
+
+    def explode(*a, **k):
+        raise RuntimeError("boom no catalogo")
+
+    monkeypatch.setattr(br, "inventario", explode)
+    c, SessionLocal = cliente
+    c.cookies.set("session_token", _login_admin(SessionLocal))
+    r = c.get("/banco", follow_redirects=False)
+
+    assert r.status_code == 200, "a página não pode cair junto com o inventário"
+    assert "boom no catalogo" in r.text, "o erro precisa aparecer na tela"
+    assert "SELECT" in r.text, "a área de consulta tem que continuar lá"
