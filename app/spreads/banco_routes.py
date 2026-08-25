@@ -144,17 +144,72 @@ def _linhas_e_colunas(db: Session, sql: str, params: dict | None = None):
     return colunas, [list(r) for r in rs]
 
 
-def inventario(db: Session) -> list[dict]:
-    """Contagem, período coberto e tamanho de cada tabela."""
-    tamanhos = {t["tabela"]: t for t in diagnostico(db.bind)["tabelas"]}
+# Views não entram na contagem estimada nem no MIN/MAX: no Postgres não há
+# entrada de estatística para elas, e qualquer agregado força materializar o
+# join inteiro. `v_spread_rating` sozinha tem ~98 mil linhas.
+VIEWS = {"v_spread_rating", "issuer_rating_atual"}
+
+
+def _contagens_estimadas(db: Session) -> dict[str, int]:
+    """Número aproximado de linhas por tabela, do catálogo do Postgres.
+
+    POR QUE NÃO `COUNT(*)` (corrigido em 20/08/2026 -- a página dava 504):
+    no Postgres, `COUNT(*)` sem WHERE varre a tabela inteira. Esta tela
+    listava 17 tabelas, entre elas `debenture_spreads` (centenas de milhares
+    de linhas) e uma VIEW, que precisa materializar o join só para contar.
+    Somando os MIN/MAX, eram ~35 consultas pesadas numa página só, e o
+    conjunto passava dos 60s de limite da função.
+
+    `reltuples` é atualizado por ANALYZE/autovacuum: pode estar alguns
+    porcento defasado, o que é irrelevante num inventário de "quanto tem
+    aqui dentro" -- e é instantâneo, porque lê catálogo, não dado.
+
+    Fora do Postgres devolve vazio e o chamador cai no COUNT(*) exato: em
+    SQLite local as tabelas são pequenas e a contagem é barata.
+    """
+    if not (db.bind and db.bind.dialect.name == "postgresql"):
+        return {}
+    try:
+        linhas = db.execute(text("""
+            SELECT c.relname, GREATEST(c.reltuples, 0)::bigint
+              FROM pg_class c
+              JOIN pg_namespace n ON n.oid = c.relnamespace
+             WHERE n.nspname = 'public' AND c.relkind = 'r'
+        """)).all()
+        return {r[0]: int(r[1]) for r in linhas}
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("não consegui estimar contagens pelo catálogo: %s", exc)
+        return {}
+
+
+def inventario(db: Session, diag: dict | None = None) -> list[dict]:
+    """Contagem, período coberto e tamanho de cada tabela.
+
+    `diag` é recebido de fora para não chamar `diagnostico()` duas vezes na
+    mesma página -- era o que acontecia até 20/08/2026.
+    """
+    if diag is None:
+        diag = diagnostico(db.bind)
+    tamanhos = {t["tabela"]: t for t in diag["tabelas"]}
+    estimadas = _contagens_estimadas(db)
+
     saida = []
     for tabela, col_data in TABELAS.items():
-        try:
-            n = db.execute(text(f'SELECT COUNT(*) FROM "{tabela}"')).scalar() or 0
-        except Exception:  # noqa: BLE001
-            continue  # tabela ainda não existe neste banco
+        aproximado = False
+        if tabela in estimadas:
+            n, aproximado = estimadas[tabela], True
+        elif tabela in VIEWS:
+            n = None                      # contar view custa o join inteiro
+        else:
+            try:
+                n = db.execute(text(f'SELECT COUNT(*) FROM "{tabela}"')).scalar() or 0
+            except Exception:  # noqa: BLE001
+                continue                  # tabela ainda não existe neste banco
+
         periodo = None
-        if col_data:
+        # MIN/MAX só onde a coluna de data é indexada e a relação é tabela
+        # real. Numa view, cada agregado é uma varredura completa.
+        if col_data and tabela not in VIEWS:
             try:
                 r = db.execute(
                     text(f'SELECT MIN("{col_data}"), MAX("{col_data}") FROM "{tabela}"')
@@ -163,15 +218,17 @@ def inventario(db: Session) -> list[dict]:
                     periodo = {"de": str(r[0])[:10], "ate": str(r[1])[:10]}
             except Exception:  # noqa: BLE001
                 pass
+
         info = tamanhos.get(tabela, {})
         saida.append({
             "tabela": tabela,
             "linhas": n,
+            "linhas_aproximadas": aproximado,
             "coluna_data": col_data,
             "periodo": periodo,
             "mb": round(info.get("mb", 0), 2),
         })
-    return sorted(saida, key=lambda x: -x["linhas"])
+    return sorted(saida, key=lambda x: -(x["linhas"] or 0))
 
 
 def _filtro_periodo(tabela: str, de: str | None, ate: str | None):
@@ -197,10 +254,14 @@ def registrar_rotas(app, require_admin, templates):
         # do template. A antiga (`nome, {"request": ...}`) falha com
         # "unhashable type: 'dict'" -- o resto do projeto (app.py,
         # spreads_routes.py) já usa esta forma.
+        # `diagnostico` calculado UMA vez e repassado -- antes era chamado
+        # aqui e de novo dentro de `inventario`, duplicando a consulta de
+        # catálogo mais cara da página.
+        diag = diagnostico(db.bind)
         return templates.TemplateResponse(request, "banco.html", {
             "user": user,
-            "tabelas": inventario(db),
-            "capacidade": diagnostico(db.bind),
+            "tabelas": inventario(db, diag),
+            "capacidade": diag,
             "limite_padrao": LIMITE_PADRAO,
             "limite_maximo": LIMITE_MAXIMO,
         })

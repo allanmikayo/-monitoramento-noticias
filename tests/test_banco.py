@@ -224,3 +224,85 @@ def test_tabela_desconhecida_recusada(cliente):
     c.cookies.set("session_token", _login_admin(SessionLocal))
     r = c.get("/api/banco/tabela?tabela=users", follow_redirects=False)
     assert r.status_code == 400
+
+
+# ---------------------------------------------------------------------------
+# Custo do inventário — a página dava 504 em produção (20/08/2026)
+# ---------------------------------------------------------------------------
+
+def test_inventario_nao_conta_views(cliente):
+    """`COUNT(*)` numa VIEW obriga o Postgres a materializar o join inteiro.
+    `v_spread_rating` tem ~98 mil linhas; era parte do que estourava os 60s
+    de limite da função."""
+    from sqlalchemy import event
+
+    from app.db import SessionLocal, engine
+    from app.spreads import banco_routes as br
+
+    sqls = []
+    ouvinte = lambda conn, cur, sql, *a: sqls.append(sql)  # noqa: E731
+    event.listen(engine, "before_cursor_execute", ouvinte)
+    try:
+        with SessionLocal() as db:
+            # `diag` pronto: isola o custo de `inventario`. O `diagnostico`
+            # tem um COUNT(*) por tabela no ramo do SQLite (local, base
+            # pequena) -- em Postgres ele lê `pg_class` e não conta nada.
+            br.inventario(db, diag={"tabelas": []})
+    finally:
+        event.remove(engine, "before_cursor_execute", ouvinte)
+
+    for view in br.VIEWS:
+        agregados = [s for s in sqls
+                     if view in s and ("COUNT(" in s.upper() or "MIN(" in s.upper())]
+        assert not agregados, f"agregado rodado sobre a view {view}: {agregados}"
+
+
+def test_inventario_usa_catalogo_no_postgres(monkeypatch, cliente):
+    """No Postgres a contagem vem de `pg_class.reltuples`, não de COUNT(*).
+
+    Aproximado é suficiente para um inventário e é instantâneo: lê catálogo,
+    não dado. O teste finge um Postgres e confere que nenhum COUNT(*) sobra.
+    """
+    from sqlalchemy import event
+
+    from app.db import SessionLocal, engine
+    from app.spreads import banco_routes as br
+
+    monkeypatch.setattr(
+        br, "_contagens_estimadas",
+        lambda db: {t: 123 for t in br.TABELAS if t not in br.VIEWS},
+    )
+
+    sqls = []
+    ouvinte = lambda conn, cur, sql, *a: sqls.append(sql)  # noqa: E731
+    event.listen(engine, "before_cursor_execute", ouvinte)
+    try:
+        with SessionLocal() as db:
+            linhas = br.inventario(db, diag={"tabelas": []})
+    finally:
+        event.remove(engine, "before_cursor_execute", ouvinte)
+
+    assert not [s for s in sqls if "COUNT(*)" in s.upper()], "sobrou COUNT(*)"
+    reais = [l for l in linhas if l["tabela"] not in br.VIEWS]
+    assert reais and all(l["linhas_aproximadas"] for l in reais)
+    assert all(l["linhas"] is None for l in linhas if l["tabela"] in br.VIEWS)
+
+
+def test_diagnostico_calculado_uma_vez_por_pagina(cliente, monkeypatch):
+    """Era chamado na rota E dentro de `inventario` — a consulta de catálogo
+    mais cara da tela, feita em dobro."""
+    from app.spreads import banco_routes as br
+
+    chamadas = {"n": 0}
+    original = br.diagnostico
+
+    def contando(*a, **k):
+        chamadas["n"] += 1
+        return original(*a, **k)
+
+    monkeypatch.setattr(br, "diagnostico", contando)
+    c, SessionLocal = cliente
+    c.cookies.set("session_token", _login_admin(SessionLocal))
+    r = c.get("/banco", follow_redirects=False)
+    assert r.status_code == 200
+    assert chamadas["n"] == 1, f"diagnostico chamado {chamadas['n']}x"

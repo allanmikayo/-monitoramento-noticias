@@ -49,7 +49,17 @@
       {% for t in tabelas %}
       <tr data-tabela="{{ t.tabela }}" data-coluna="{{ t.coluna_data or '' }}">
         <td><code>{{ t.tabela }}</code></td>
-        <td class="num">{{ '{:,}'.format(t.linhas).replace(',', '.') }}</td>
+        {# `linhas` pode vir None (views, que não são contadas -- contar
+           custaria materializar o join inteiro) e vem APROXIMADO nas tabelas
+           reais do Postgres, lido do catálogo em vez de COUNT(*). O til
+           deixa isso explícito em vez de fingir precisão que não existe. #}
+        <td class="num" {% if t.linhas_aproximadas %}title="Estimativa do catálogo do Postgres (reltuples), atualizada pelo autovacuum. Contagem exata varreria a tabela inteira."{% endif %}>
+          {%- if t.linhas is none -%}
+            <span class="muted" title="View: contar exigiria materializar o join inteiro">—</span>
+          {%- else -%}
+            {% if t.linhas_aproximadas %}~{% endif %}{{ '{:,}'.format(t.linhas).replace(',', '.') }}
+          {%- endif -%}
+        </td>
         <td class="muted small">
           {% if t.periodo %}{{ t.periodo.de }} a {{ t.periodo.ate }}{% else %}—{% endif %}
         </td>
