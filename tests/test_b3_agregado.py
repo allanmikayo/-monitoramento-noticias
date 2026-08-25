@@ -451,3 +451,49 @@ def test_fechar_b3_cria_tabelas_num_banco_novo(tmp_path, monkeypatch):
     assert r.returncode == 0, r.stderr[-2000:]
     assert "no such table" not in (r.stdout + r.stderr)
     assert "fechamento concluído" in (r.stdout + r.stderr)
+
+
+def test_dedupe_por_data_nao_por_lista_gigante(db):
+    """`save_negocios_b3` deve consultar o já-existente FILTRANDO POR DATA.
+
+    A versão anterior montava `trade_code IN (...)` com o lote inteiro. Como
+    a B3 devolve o dia todo a cada consulta e o job roda de 15 em 15 min, no
+    fim do pregão era um IN com ~17 mil literais, 30+ vezes por dia. O
+    dedupe continua sendo por `trade_code`; só a forma de buscar mudou.
+    """
+    from sqlalchemy import event
+
+    from app.spreads import persist
+
+    # O engine é o DA SESSÃO deste arquivo (`db` cria o seu próprio, em
+    # memória), não o `app.db.engine` -- escutar o global não capturaria
+    # nada e o teste passaria vazio.
+    engine = db.get_bind()
+    dia = date(2026, 8, 20)
+    db.add(NegocioB3(trade_code="#ja-existe", codigo="AAAA11", data_negocio=dia,
+                     instrument_type="DEB", volume=1000.0, taxa=10.0))
+    db.commit()
+
+    lote = [
+        {"trade_code": "#ja-existe", "codigo": "AAAA11", "data_negocio": dia,
+         "instrument_type": "DEB", "volume": 1000.0, "taxa": 10.0},
+        {"trade_code": "#novo", "codigo": "AAAA11", "data_negocio": dia,
+         "instrument_type": "DEB", "volume": 2000.0, "taxa": 11.0},
+    ]
+
+    sqls = []
+    ouvinte = lambda conn, cur, sql, *a: sqls.append(sql)  # noqa: E731
+    event.listen(engine, "before_cursor_execute", ouvinte)
+    try:
+        novos = persist.save_negocios_b3(db, lote)
+    finally:
+        event.remove(engine, "before_cursor_execute", ouvinte)
+
+    assert novos == 1, "só o negócio inédito pode ser gravado"
+    assert db.query(NegocioB3).count() == 2
+
+    selects = [s for s in sqls if "trade_code" in s and "SELECT" in s.upper()]
+    assert selects, "deveria consultar o que já existe"
+    assert not [s for s in selects if "trade_code IN" in s.replace("\n", " ")], (
+        "voltou a filtrar por lista de trade_code em vez de por data"
+    )

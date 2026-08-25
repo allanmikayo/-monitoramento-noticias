@@ -328,3 +328,29 @@ def test_pagina_sobrevive_a_inventario_quebrado(cliente, monkeypatch):
     assert r.status_code == 200, "a página não pode cair junto com o inventário"
     assert "boom no catalogo" in r.text, "o erro precisa aparecer na tela"
     assert "SELECT" in r.text, "a área de consulta tem que continuar lá"
+
+
+def test_banco_fora_do_ar_vira_503_explicativo(cliente, monkeypatch):
+    """Falha ao CONECTAR não pode virar "Internal Server Error" mudo.
+
+    Erro real de produção (20/08/2026): a conexão com o Supabase estourava a
+    autenticação em 15s dentro do `current_user`, ou seja numa dependência
+    comum a todas as rotas. O usuário via só 500, sem pista de que o
+    problema era o banco.
+    """
+    from sqlalchemy.exc import OperationalError
+
+    from app import auth
+
+    def sem_banco(*a, **k):
+        raise OperationalError("select pg_catalog.version()", {},
+                               Exception("authentication did not complete"))
+
+    monkeypatch.setattr(auth, "get_valid_session", sem_banco)
+    c, SessionLocal = cliente
+    c.cookies.set("session_token", "qualquer-coisa")
+    r = c.get("/banco", follow_redirects=False)
+
+    assert r.status_code == 503, f"esperava 503, veio {r.status_code}"
+    assert "Banco de dados indisponível" in r.text
+    assert "Disk IO" in r.text, "a tela precisa apontar onde investigar"

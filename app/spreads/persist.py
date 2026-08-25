@@ -152,12 +152,39 @@ def save_negocios_b3(db: Session, trades: list[dict]) -> int:
     por_trade_code = {t["trade_code"]: t for t in trades}  # último ganha se repetir no lote
     trades_unicos = list(por_trade_code.values())
 
-    existentes = {
-        row[0]
-        for row in db.query(NegocioB3.trade_code)
-        .filter(NegocioB3.trade_code.in_(por_trade_code.keys()))
-        .all()
-    }
+    # DEDUPE POR FAIXA DE DATA, NÃO POR LISTA DE trade_code (20/08/2026).
+    #
+    # A versão anterior montava `trade_code IN (...)` com TODOS os códigos do
+    # lote. Como `fetch_trades` devolve o dia inteiro a cada consulta e o job
+    # roda de 15 em 15 min, no fim do pregão isso virava um IN com ~17 mil
+    # literais, mais de 30 vezes por dia -- consulta gigante de montar, de
+    # trafegar e de planejar.
+    #
+    # Filtrar por `data_negocio` faz o mesmo trabalho com uma varredura de
+    # índice por faixa: o índice `ix_negocio_data` já existe, o resultado é
+    # do mesmo tamanho e o SQL é minúsculo. O `trade_code` continua sendo a
+    # chave do dedupe, só que comparado em Python.
+    #
+    # Motivo: o Disk IO do Supabase estava cravado em 100% (CPU em 18%),
+    # com o banco ocupando só 176 MB -- ou seja, saturação de operações, não
+    # de espaço.
+    datas = {t["data_negocio"] for t in trades_unicos if t.get("data_negocio")}
+    if datas:
+        existentes = {
+            row[0]
+            for row in db.query(NegocioB3.trade_code)
+            .filter(NegocioB3.data_negocio.in_(datas))
+            .all()
+        }
+    else:
+        # Sem data no lote (não deveria acontecer): cai no comportamento
+        # antigo em vez de arriscar gravar duplicado.
+        existentes = {
+            row[0]
+            for row in db.query(NegocioB3.trade_code)
+            .filter(NegocioB3.trade_code.in_(por_trade_code.keys()))
+            .all()
+        }
     novos = [t for t in trades_unicos if t["trade_code"] not in existentes]
     # Spread em bps (pedido do Allan, 27/07/2026) calculado aqui, na hora
     # de gravar -- não em `fetch_trades` (que fica só a captura crua da
