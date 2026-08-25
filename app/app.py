@@ -86,8 +86,23 @@ def _iso_utc(dt: datetime | None) -> str | None:
 
 @app.on_event("startup")
 def _on_startup():
-    Base.metadata.create_all(engine)
-    run_migrations()
+    # DDL NO BOOT SÓ FORA DA VERCEL (20/08/2026).
+    #
+    # `create_all` confere 29 tabelas uma a uma e `run_migrations` dispara 13
+    # ALTERs -- 42 idas e voltas até o Supabase, em TODO cold start. Como a
+    # função roda em iad1 (EUA) e o banco está em sa-east-1 (São Paulo), cada
+    # ida e volta custa ~200ms: medi 45 SEGUNDOS no primeiro acesso depois de
+    # a função dormir, contra ~2,4s nos acessos seguintes.
+    #
+    # `scripts/init_db.py` existe justamente para fazer esse DDL uma vez, da
+    # máquina do Allan, por conexão direta e sem limite de tempo. Ele foi
+    # criado em 13/08 para resolver os 504 de boot, mas a chamada aqui nunca
+    # foi removida -- então o custo continuava sendo pago a cada cold start.
+    #
+    # DEPOIS DE MUDAR models.py, rode: python -m scripts.init_db
+    if not IS_VERCEL:
+        Base.metadata.create_all(engine)
+        run_migrations()
     # Modo nuvem (config.CLOUD_MODE): quem roda o robô de coleta é o GitHub
     # Actions (.github/workflows/scrape.yml), não este processo -- rodar o
     # agendador em processo aqui não funcionaria mesmo (Playwright não roda

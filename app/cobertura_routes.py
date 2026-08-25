@@ -301,8 +301,16 @@ def register_cobertura_routes(current_user) -> APIRouter:
         melhorar o casamento aqui e no monitor de notícias ao mesmo tempo."""
         if not INGEST_TOKEN or x_ingest_token != INGEST_TOKEN:
             raise HTTPException(status_code=401, detail="Token de ingestão inválido.")
+        # selectinload obrigatório: sem ele, `c.aliases` dispara uma consulta
+        # POR EMPRESA. São ~96 empresas, ou seja 97 idas e voltas até o
+        # Supabase em vez de 2 -- e a função roda longe do banco. Mesmo
+        # motivo do selectinload em `store.list_articles` e na listagem de
+        # relatórios logo acima. (20/08/2026)
         termos = []
-        for c in db.scalars(select(Company).where(Company.active.is_(True))).all():
+        consulta = (select(Company)
+                    .options(selectinload(Company.aliases))
+                    .where(Company.active.is_(True)))
+        for c in db.scalars(consulta).all():
             termos.append({"empresa": c.name, "termos": [c.name] + [a.alias for a in c.aliases]})
         return JSONResponse({"termos": termos}, headers=_cors(origin))
 
