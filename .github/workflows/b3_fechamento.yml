@@ -1,0 +1,68 @@
+name: Balcão B3 — fechamento diário
+
+# A PEÇA QUE FALTAVA (20/08/2026).
+#
+# `b3_trades.yml` CAPTURA o negócio a negócio de 15 em 15 min durante o
+# pregão, e isso sempre funcionou. O que nunca teve workflow foi o
+# FECHAMENTO: consolidar o dia em `negocios_b3_diario` e podar o bruto além
+# de 5 dias. Essa etapa só existia dentro de `scripts/rodada_noturna.py`,
+# que também não tinha workflow -- então `negocios_b3` cresceu sem limite
+# desde julho e o Supabase passou a alertar estouro de Disk IO Budget
+# (13/08 e 20/08). Também é por isso que a aba Balcão B3 abria vazia: os
+# blocos históricos leem o agregado, que nunca era escrito.
+#
+# Sem dependência de nenhum outro job: o spread de cada negócio já é
+# calculado na hora da gravação (`b3_trades.compute_trade_spreads`), então
+# aqui só se soma o que já está no banco. Não precisa da curva de NTN-B nem
+# de esperar o job de debêntures.
+
+on:
+  schedule:
+    # 01h30 UTC = 22h30 BRT. Depois do fim do pregão de renda fixa (18h BRT)
+    # e da última captura de fallback do b3_trades.yml (21h UTC), e afastado
+    # dos outros jobs noturnos para não disputar IO num banco que já estava
+    # no limite:
+    #   00h00 UTC  spreads_daily
+    #   00h30 UTC  securitizados_daily
+    #   01h00 UTC  spreads_verify
+    #   01h30 UTC  este
+    - cron: "30 1 * * *"
+  workflow_dispatch:
+    inputs:
+      sem_poda:
+        description: "Marque para só agregar, sem apagar o bruto antigo"
+        required: false
+        type: boolean
+        default: false
+
+concurrency:
+  group: b3_fechamento
+  cancel-in-progress: false
+
+jobs:
+  fechar:
+    runs-on: ubuntu-latest
+    # A PRIMEIRA execução tem muito mais trabalho que as seguintes: agrega e
+    # poda todo o bruto acumulado desde que o b3_trades.yml entrou no ar.
+    # Depois disso são 5 dias por vez.
+    timeout-minutes: 30
+    steps:
+      - name: Baixar o codigo
+        uses: actions/checkout@v4
+
+      - name: Preparar Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Instalar dependencias
+        run: pip install -r requirements.txt
+
+      - name: Fechar o dia
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: |
+          ARGS=""
+          if [ "${{ github.event.inputs.sem_poda }}" = "true" ]; then ARGS="--sem-poda"; fi
+          python -m scripts.fechar_b3 $ARGS

@@ -13,16 +13,17 @@ name: Spreads de debêntures (diário)
 # horário de pico) é preciso o suficiente pra rodar "em algum momento
 # perto de 21h" uma vez por dia.
 on:
-  # AGENDAMENTO DESLIGADO em 20/08/2026. A etapa `debentures` da
-  # `rodada_noturna.yml` roda exatamente este mesmo script, no mesmo
-  # horário (00h UTC). Manter os dois agendados era captura dobrada --
-  # duas passadas pela API da Anbima e duas escritas no Postgres por dia,
-  # justamente quando o projeto está estourando o Disk IO Budget do
-  # Supabase (alertas de 13/08 e 20/08).
+  # AGENDAMENTO RESTAURADO em 20/08/2026, a pedido do Allan: *"separe em
+  # actions individuais, assim se um der erro não quebra o fluxo inteiro"*.
   #
-  # O `workflow_dispatch` fica: continua servindo para backfill pontual
-  # de um intervalo específico, que a rodada noturna não faz.
-  #
+  # Ficou desligado por algumas horas nesse mesmo dia, quando a
+  # `rodada_noturna.yml` foi ligada e passou a rodar este script também.
+  # A troca resolvia o problema real (o fechamento diário da B3, que não
+  # tinha workflow nenhum), mas junto desligava dois jobs que funcionavam
+  # -- mudança maior que o necessário. Agora cada peça tem seu próprio
+  # workflow e uma falha isolada não leva as outras junto.
+  schedule:
+    - cron: "0 0 * * *"
   # `start`/`end` opcionais -- vazio (uso normal do dia a dia) = só o
   # último dia útil publicado, igual ao cron. Preenchidos = backfill
   # pontual disparado manualmente pelo Allan em Actions -> "Run workflow"

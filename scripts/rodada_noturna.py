@@ -93,24 +93,14 @@ def etapa_b3(db, dia: date | None) -> dict:
     aconteceu entre a criação deste script (04/08) e 20/08: não existia
     workflow chamando a rodada noturna, e o Supabase começou a alertar
     estouro de Disk IO Budget.
+
+    Desde 20/08/2026 a lógica vive em `scripts/fechar_b3.py`, que tem
+    workflow próprio (`b3_fechamento.yml`). Aqui é só delegação: uma
+    implementação só, dois pontos de entrada, nada para divergir.
     """
-    from app.spreads import b3_agregado as agg
+    from scripts.fechar_b3 import fechar
 
-    r = agg.agregar_do_banco(db)
-    logger.info("  consolidado: %d linhas em %d dias (guardado para sempre)",
-                r["linhas_agregado"], r["dias"])
-
-    # AGORA a poda roda — e é deliberada, não escondida. Desenho do Allan
-    # (12/08/2026): consolidado para sempre, negócio a negócio só nos
-    # últimos 5 dias. A ORDEM importa: agregar primeiro, podar depois, e
-    # `podar_bruto` ainda confere dia a dia se o consolidado existe antes
-    # de apagar qualquer coisa.
-    p = agg.podar_bruto(db)
-    logger.info("  negócio a negócio: %d apagados antes de %s (%s)",
-                p["apagados"], p["corte"], p["motivo"])
-    for d in p.get("dias_sem_agregado", [])[:5]:
-        logger.warning("    dia sem consolidado, NÃO apagado: %s", d)
-    return {**r, "poda": p}
+    return fechar(db)
 
 
 # RATINGS SAÍRAM DAQUI (20/08/2026, decisão do Allan)

@@ -4,6 +4,8 @@
 """
 from __future__ import annotations
 
+import os
+
 from datetime import date, timedelta
 
 import pytest
@@ -353,3 +355,99 @@ def test_upsert_compila_nos_dois_dialetos():
         sql = str(stmt.compile(dialect=dialeto))
         assert re.findall(marca, sql), f"{dialeto.name}: placeholder não renderizado"
         assert "ON CONFLICT" in sql
+
+
+# ---------------------------------------------------------------------------
+# Fechamento diário (scripts/fechar_b3.py)
+# ---------------------------------------------------------------------------
+#
+# A captura (b3_trades.yml) sempre teve workflow; o FECHAMENTO nunca teve.
+# Virou script próprio em 20/08/2026, com action individual
+# (b3_fechamento.yml), a pedido do Allan: "separe em actions individuais,
+# assim se um der erro não quebra o fluxo inteiro".
+
+def test_fechar_agrega_e_poda_na_ordem_certa(db):
+    """Agregar ANTES de podar não é detalhe: `podar_bruto` só apaga um dia
+    que já tenha consolidado. Invertida, a poda não apagaria nada."""
+    from datetime import date, timedelta
+    from scripts.fechar_b3 import fechar
+
+    hoje = date.today()
+    antigo = hoje - timedelta(days=30)
+    for i, d in enumerate((antigo, hoje)):
+        db.add(NegocioB3(trade_code=f"#f{i}", codigo="DEB99", data_negocio=d,
+                         instrument_type="DEB", volume=1000.0, taxa=10.0))
+    db.commit()
+
+    r = fechar(db)
+
+    # o dia antigo foi consolidado antes de sumir do bruto
+    datas_agregadas = {x.data for x in db.query(NegocioB3Diario).all()}
+    assert antigo in datas_agregadas
+    assert r["poda"]["apagados"] == 1
+    assert {x.data_negocio for x in db.query(NegocioB3).all()} == {hoje}
+
+
+def test_fechar_sem_poda_nao_apaga(db):
+    """A flag existe para rodar o fechamento sem risco quando se está
+    investigando algo no bruto."""
+    from datetime import date, timedelta
+    from scripts.fechar_b3 import fechar
+
+    antigo = date.today() - timedelta(days=30)
+    db.add(NegocioB3(trade_code="#sp", codigo="DEB98", data_negocio=antigo,
+                     instrument_type="DEB", volume=1000.0, taxa=10.0))
+    db.commit()
+
+    r = fechar(db, podar=False)
+    assert r["poda"]["apagados"] == 0
+    assert db.query(NegocioB3).count() == 1
+
+
+def test_rodada_noturna_delega_para_o_mesmo_codigo():
+    """Uma implementação, dois pontos de entrada. Se a etapa da rodada
+    noturna voltasse a ter lógica própria, as duas divergiriam com o tempo.
+
+    Olha o CORPO da função, sem a docstring: ela cita `podar_bruto()` ao
+    explicar o que o fechamento faz, e comparar a fonte crua acusaria isso
+    como se fosse chamada de verdade.
+    """
+    import ast
+    import inspect
+    import textwrap
+
+    from scripts import rodada_noturna
+
+    fn = ast.parse(textwrap.dedent(inspect.getsource(rodada_noturna.etapa_b3))).body[0]
+    if (fn.body and isinstance(fn.body[0], ast.Expr)
+            and isinstance(fn.body[0].value, ast.Constant)):
+        fn.body = fn.body[1:]
+    corpo = ast.unparse(fn)
+
+    assert "fechar_b3" in corpo, "etapa_b3 precisa delegar, não reimplementar"
+    for termo in ("agregar_do_banco", "podar_bruto"):
+        assert termo not in corpo, f"etapa_b3 voltou a chamar {termo} direto"
+
+
+def test_fechar_b3_cria_tabelas_num_banco_novo(tmp_path, monkeypatch):
+    """Num banco vazio o script tem que criar as tabelas antes de agregar.
+
+    BUG REAL (20/08/2026): `fechar_b3.py` importava `Base` mas não
+    `app.models`, então `Base.metadata` ficava vazio, o `create_all` não
+    criava nada e o script morria com "no such table: negocios_b3_diario".
+    Só apareceu rodando contra um SQLite limpo -- a suíte não pega, porque o
+    conftest já criou tudo antes.
+    """
+    import subprocess
+    import sys
+    from pathlib import Path
+
+    raiz = Path(__file__).resolve().parent.parent
+    r = subprocess.run(
+        [sys.executable, "-m", "scripts.fechar_b3"],
+        cwd=raiz, capture_output=True, text=True,
+        env={**os.environ, "DATABASE_URL": f"sqlite:///{tmp_path}/novo.db"},
+    )
+    assert r.returncode == 0, r.stderr[-2000:]
+    assert "no such table" not in (r.stdout + r.stderr)
+    assert "fechamento concluído" in (r.stdout + r.stderr)

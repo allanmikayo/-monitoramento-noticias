@@ -31,11 +31,20 @@ name: Rodada noturna (spreads + securitizados + B3 + ratings)
 # entra depois dos spreads do dia já gravados.
 
 on:
-  schedule:
-    # 00h UTC = 21h BRT. Mesmo horário em que o `spreads_daily.yml` rodava
-    # (o boletim da Anbima sai ~18-21h BRT). `spreads_verify.yml` continua
-    # 1h depois, às 01h UTC, conferindo se a captura realmente aconteceu.
-    - cron: "0 0 * * *"
+  # SEM AGENDAMENTO -- de propósito, desde 20/08/2026.
+  #
+  # O dia a dia roda em workflows INDIVIDUAIS (decisão do Allan: *"assim se
+  # um der erro não quebra o fluxo inteiro"*):
+  #
+  #   spreads_daily.yml       00h00 UTC
+  #   securitizados_daily.yml 00h30 UTC
+  #   spreads_verify.yml      01h00 UTC
+  #   b3_fechamento.yml       01h30 UTC
+  #
+  # Este aqui ficou como ATALHO MANUAL: roda as três etapas em sequência,
+  # respeitando a ordem de dependência, para quando você quiser um catch-up
+  # de uma data específica sem disparar três workflows na mão. Se voltasse a
+  # ter `schedule:`, faria o trabalho duas vezes por noite.
   workflow_dispatch:
     inputs:
       data:

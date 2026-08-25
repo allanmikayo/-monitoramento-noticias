@@ -169,17 +169,33 @@ períodos derivados: 0 | emissores com rating: 0
 
 ---
 
-## Ordem de dependência da rodada noturna
+## Os jobs automáticos
 
-Não é conveniência, é dependência real:
+Cada peça tem seu próprio workflow — decisão do Allan (20/08/2026): *"assim
+se um der erro não quebra o fluxo inteiro"*.
 
-```
-1. DEBÊNTURES    → busca e cacheia a curva de NTN-B
-2. SECURITIZADOS → LÊ essa curva do cache
-3. B3            → fecha o agregado do dia e poda o bruto
-```
+| Horário (UTC / BRT) | Workflow | O que faz |
+|---|---|---|
+| a cada 5 min | `scrape.yml` | varredura de notícias |
+| 15 min, no pregão | `b3_trades.yml` | **captura** do negócio a negócio |
+| 00h00 / 21h00 | `spreads_daily.yml` | spreads de debêntures + cacheia a curva de NTN-B |
+| 00h30 / 21h30 | `securitizados_daily.yml` | CRI/CRA — **lê** a curva do cache |
+| 01h00 / 22h00 | `spreads_verify.yml` | confere se a captura do dia aconteceu |
+| 01h30 / 22h30 | `b3_fechamento.yml` | **fechamento** da B3: agrega o dia e poda o bruto |
+| manual | `rodada_noturna.yml` | atalho para rodar os três diários em sequência |
 
-Uma etapa que falha não derruba as seguintes.
+**Duas dependências reais**, e elas se comportam diferente quando dão errado:
+
+- *Securitizados precisa da curva de NTN-B* que o job de debêntures cacheia.
+  Os 30 minutos de folga são folga, não garantia — mas o script **degrada**:
+  sem cache, busca ao vivo na ANBIMA. O custo de errar é uma requisição a
+  mais, não um dia perdido.
+- *O fechamento da B3 não depende de ninguém.* O spread de cada negócio já é
+  calculado na hora da gravação, então ali só se soma o que já está no banco.
+
+**`b3_fechamento.yml` é a peça que nunca existiu** e que causou o estouro de
+Disk IO: a captura sempre rodou, o fechamento nunca. Sem ele, `negocios_b3`
+cresce ~17 mil linhas por pregão e não diminui nunca.
 
 A view `v_spread_rating` era criada na antiga etapa `periodos`; passou para
 `scripts/init_db.py`. Rode `python -m scripts.init_db` depois de qualquer
