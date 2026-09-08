@@ -220,10 +220,19 @@ def save_negocios_b3(db: Session, trades: list[dict]) -> int:
     # `RETURNING id` -- ninguém aqui usa o id gerado. Os defaults de coluna
     # (captured_at) continuam sendo aplicados normalmente.
     gravados = 0
+    n_lotes = -(-len(novos) // LOTE_NEGOCIOS_B3)  # divisão para cima
     for i in range(0, len(novos), LOTE_NEGOCIOS_B3):
         lote = novos[i:i + LOTE_NEGOCIOS_B3]
         db.execute(insert(NegocioB3), lote)
         # Commit por lote: o que já entrou fica, mesmo se o próximo falhar.
         db.commit()
         gravados += len(lote)
+        # Progresso a cada 20 lotes (5 mil linhas). Sem isso, uma queda no
+        # meio da gravação -- inclusive um `Segmentation fault`, que não
+        # deixa traceback -- não diz quanto tinha entrado. Aconteceu em
+        # 08/09/2026 e a última linha do log era a da captura.
+        n_lote = i // LOTE_NEGOCIOS_B3 + 1
+        if n_lote % 20 == 0 or n_lote == n_lotes:
+            logger.info("  gravando negócios da B3: lote %d/%d (%d linha(s))",
+                        n_lote, n_lotes, gravados)
     return gravados

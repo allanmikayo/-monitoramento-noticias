@@ -14,6 +14,22 @@ on:
     - cron: "0 * * * *"
   workflow_dispatch: {}
 
+# CADÊNCIA REAL: 15 MINUTOS, não 5 (mudado em 20/08/2026).
+#
+# Quem dispara de verdade é o cron externo (cron-job.org) chamando
+# /api/cron-trigger -- o `schedule:` acima é só o fallback horário. Então
+# MUDAR AQUI NÃO BASTA: o intervalo tem que ser alterado no cron-job.org
+# também, senão continua disparando de 5 em 5 min.
+#
+# Motivo: 5 min = 288 execuções/dia, cada uma abrindo conexão e escrevendo
+# no Supabase. Em 25/08/2026 o Disk IO do projeto estava cravado em 100%
+# (com CPU em 18% e o banco ocupando só 176 MB -- saturação de operações,
+# não de espaço), e o site passou a devolver 504 e falha de autenticação
+# na conexão. 15 min corta dois terços dessa carga.
+#
+# Para monitoramento de notícias de crédito, a diferença entre saber de um
+# fato relevante em 5 ou em 15 minutos não muda decisão nenhuma.
+
 # Se uma rodada ainda estiver rodando quando a proxima do cron disparar
 # (Playwright pode demorar), a nova espera na fila em vez de rodar em cima
 # da anterior -- evita duas varreduras escrevendo no banco ao mesmo tempo.
@@ -24,6 +40,18 @@ concurrency:
 jobs:
   scrape:
     runs-on: ubuntu-latest
+    # FAULTHANDLER (08/09/2026). Duas execuções morreram com
+    # `Segmentation fault (core dumped)` -- exit 139, o processo abatido
+    # pelo sistema, sem exceção e sem traceback: a varredura de notícias e
+    # o catch-up do negócio a negócio da B3. Sem stack não há diagnóstico,
+    # só palpite.
+    #
+    # Esta variável liga o `faulthandler` da biblioteca padrão do Python:
+    # ao receber SIGSEGV, ele imprime a pilha de chamadas (inclusive a
+    # linha de código C que estourou) antes de morrer. Custo zero em
+    # execução normal.
+    env:
+      PYTHONFAULTHANDLER: "1"
     timeout-minutes: 10
     steps:
       - name: Baixar o codigo

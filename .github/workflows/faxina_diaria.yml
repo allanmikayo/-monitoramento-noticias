@@ -44,6 +44,18 @@ concurrency:
 jobs:
   faxina:
     runs-on: ubuntu-latest
+    # FAULTHANDLER (08/09/2026). Duas execuções morreram com
+    # `Segmentation fault (core dumped)` -- exit 139, o processo abatido
+    # pelo sistema, sem exceção e sem traceback: a varredura de notícias e
+    # o catch-up do negócio a negócio da B3. Sem stack não há diagnóstico,
+    # só palpite.
+    #
+    # Esta variável liga o `faulthandler` da biblioteca padrão do Python:
+    # ao receber SIGSEGV, ele imprime a pilha de chamadas (inclusive a
+    # linha de código C que estourou) antes de morrer. Custo zero em
+    # execução normal.
+    env:
+      PYTHONFAULTHANDLER: "1"
     # A PRIMEIRA execução tem mais trabalho que as seguintes: limpa tudo o
     # que passou da janela desde que a limpeza saiu da varredura.
     timeout-minutes: 15
