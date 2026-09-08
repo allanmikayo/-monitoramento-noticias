@@ -65,7 +65,17 @@ jobs:
     # execução normal.
     env:
       PYTHONFAULTHANDLER: "1"
-    timeout-minutes: 10
+    # 25 min, não 10 (08/09/2026). O uso do dia a dia é UM pregão e leva
+    # cerca de um minuto -- este teto é para o backfill manual, que agora
+    # roda dia a dia (ver scripts/fetch_b3_trades.py) e portanto soma o
+    # tempo de todos os dias do intervalo. O catch-up de 03/09 a 08/09
+    # gastou 8m30s só na captura das 84 páginas, com o teto de 10 min em
+    # cima -- margem nenhuma.
+    #
+    # Prender o job por mais tempo não atropela o dia a dia: o
+    # `concurrency` acima põe a próxima execução na fila em vez de rodar
+    # em cima desta.
+    timeout-minutes: 25
     steps:
       - name: Baixar o codigo
         uses: actions/checkout@v4
