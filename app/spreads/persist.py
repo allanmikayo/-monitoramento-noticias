@@ -8,9 +8,29 @@ import json
 import logging
 from datetime import date, datetime, timezone
 
+from sqlalchemy import insert
 from sqlalchemy.orm import Session
 
 from ..models import Debenture, DebentureSpread, NegocioB3, NtnbReferencia
+
+# Tamanho do lote de inserção do negócio a negócio da B3.
+#
+# BUG REAL (08/09/2026). A gravação era `db.add(NegocioB3(**t))` num laço e
+# um `commit()` no fim. O SQLAlchemy junta isso em `insertmanyvalues` de mil
+# linhas por comando -- e, porque são objetos do ORM com chave primária
+# `id` autoincremental, cada comando ainda vem com `RETURNING id`. O
+# resultado, medido no log do Actions: UM comando de 423 KB com ~16 mil
+# parâmetros, cancelado por `statement timeout` depois da captura inteira
+# ter dado certo (5.606 negócios em 9 páginas). O job morria no último
+# passo e o dia não era gravado -- foi assim que `negocios_b3` chegou a
+# zero linha viva com o coletor "funcionando".
+#
+# 250 é pequeno o bastante para cada comando terminar bem dentro do limite,
+# e grande o bastante para não virar tráfego de rede. Com commit por lote,
+# uma falha no meio preserva o que já entrou: como o dedupe é por
+# `trade_code`, a execução seguinte continua de onde parou em vez de
+# recomeçar.
+LOTE_NEGOCIOS_B3 = 250
 from .b3_trades import compute_trade_spreads
 from .fetch import Caracteristicas, SpreadRow, compute_classe
 
@@ -186,11 +206,24 @@ def save_negocios_b3(db: Session, trades: list[dict]) -> int:
             .all()
         }
     novos = [t for t in trades_unicos if t["trade_code"] not in existentes]
+    if not novos:
+        return 0
     # Spread em bps (pedido do Allan, 27/07/2026) calculado aqui, na hora
     # de gravar -- não em `fetch_trades` (que fica só a captura crua da
     # B3) -- ver app/spreads/b3_trades.py::compute_trade_spreads.
     compute_trade_spreads(db, novos)
-    for t in novos:
-        db.add(NegocioB3(**t))
-    db.commit()
-    return len(novos)
+
+    # INSERÇÃO EM LOTES, PELO CORE (08/09/2026) -- ver LOTE_NEGOCIOS_B3.
+    #
+    # `insert(NegocioB3)` com uma lista de dicionários é executemany puro:
+    # sem objeto de ORM, sem identity map e, principalmente, SEM
+    # `RETURNING id` -- ninguém aqui usa o id gerado. Os defaults de coluna
+    # (captured_at) continuam sendo aplicados normalmente.
+    gravados = 0
+    for i in range(0, len(novos), LOTE_NEGOCIOS_B3):
+        lote = novos[i:i + LOTE_NEGOCIOS_B3]
+        db.execute(insert(NegocioB3), lote)
+        # Commit por lote: o que já entrou fica, mesmo se o próximo falhar.
+        db.commit()
+        gravados += len(lote)
+    return gravados

@@ -48,15 +48,53 @@ INDICES = [
 ]
 
 
+def _indice_existe(nome: str) -> bool:
+    with engine.connect() as conn:
+        if engine.dialect.name == "postgresql":
+            sql = "select count(*) from pg_indexes where indexname = '%s'" % nome
+        else:
+            sql = "select count(*) from sqlite_master where type='index' and name = '%s'" % nome
+        return bool(conn.exec_driver_sql(sql).scalar())
+
+
 def criar_indices() -> None:
+    """Cria os índices que faltam, com folga de tempo -- e CONFERE depois.
+
+    BUG REAL (08/09/2026, no mesmo dia em que o índice foi criado): a
+    primeira versão rodava o CREATE INDEX no limite de tempo padrão da
+    sessão e engolia a falha num "AVISO" no meio do log. Com o banco
+    saturado -- que é EXATAMENTE a situação em que o índice mais importa --
+    o comando não conseguia vez e morria por `statement timeout`. O
+    `init_db` terminava dizendo "OK", e o índice não estava no banco. Só
+    apareceu porque o `estado_dos_robos` foi conferir.
+
+    Três correções: o timeout sobe para 15 minutos DENTRO da mesma
+    transação do DDL (o pooler da Supabase é modo transação -- um `SET`
+    solto pode cair noutra conexão), o script confere no catálogo em vez de
+    confiar no "não deu erro", e a falha aparece em alto e bom som no fim.
+    """
+    houve_falha = False
     for nome, ddl in INDICES:
         try:
             with engine.connect() as conn:
+                conn.exec_driver_sql("SET statement_timeout = '15min'")
                 conn.exec_driver_sql(ddl)
                 conn.commit()
-            print(f"  {nome}: ok")
         except Exception as exc:  # noqa: BLE001
-            print(f"  {nome}: AVISO -- nao criado ({type(exc).__name__}: {exc})")
+            houve_falha = True
+            print(f"  {nome}: FALHOU -- {type(exc).__name__}: {str(exc)[:200]}")
+            continue
+        if _indice_existe(nome):
+            print(f"  {nome}: ok")
+        else:
+            houve_falha = True
+            print(f"  {nome}: FALHOU -- o comando passou mas o índice não existe")
+    if houve_falha:
+        print()
+        print("  !! ALGUM INDICE NAO FOI CRIADO -- e isso nao e detalhe: sem o")
+        print("     ix_articles_data, toda carga do dashboard varre a tabela")
+        print("     `articles` inteira. Tente de novo com o banco menos ocupado")
+        print("     (fora do horario dos jobs noturnos).")
 
 
 def main() -> int:

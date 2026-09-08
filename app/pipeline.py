@@ -139,12 +139,25 @@ def run_pipeline(triggered_by: str = "scheduler", progress_cb: ProgressCallback 
 
     total = len(sources)
     for i, source_info in enumerate(sources, start=1):
+        # LOG POR FONTE (08/09/2026). A varredura de 08/09 morreu com
+        # `Segmentation fault (core dumped)` -- exit 139, o processo inteiro
+        # abatido, sem traceback nenhum. Como o `RunLog` só é fechado no
+        # fim, uma queda dessas não deixa rastro no banco: o log do Actions
+        # é a única testemunha, e ele não dizia em qual fonte o processo
+        # estava. Uma linha por fonte resolve: a última que aparecer antes
+        # do silêncio é a culpada.
+        logger.info("[%d/%d] coletando: %s", i, total, source_info["name"])
         if progress_cb:
             try:
                 progress_cb(i, total, source_info["name"])
             except Exception:  # noqa: BLE001
                 pass
         result = _run_source(source_info, taxonomy)
+        logger.info(
+            "[%d/%d] %s: %d encontrado(s), %d da cobertura, %d novo(s)%s",
+            i, total, source_info["name"], result["found"], result["matched"],
+            result["new"], f" -- ERRO: {result['error']}" if result["error"] else "",
+        )
         summary["sources"].append(result)
         summary["n_new"] += result["new"]
         if result["error"]:

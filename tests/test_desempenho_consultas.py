@@ -29,7 +29,7 @@ import pytest
 from sqlalchemy import event
 
 from app import pipeline, store
-from app.models import Article
+from app.models import Article, NegocioB3
 
 
 @pytest.fixture()
@@ -235,3 +235,115 @@ def test_faxina_diaria_existe_e_nao_faz_ddl():
     # o próximo leitor descobre por que o DDL não está aqui.
     assert "create_all(" not in corpo
     assert "ensure_schema(" not in corpo
+
+
+# ---------------------------------------------------------------------------
+# 4. Gravação do negócio a negócio da B3
+# ---------------------------------------------------------------------------
+
+@pytest.fixture()
+def db_b3():
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import Session
+
+    from app.db import Base
+
+    eng = create_engine("sqlite://")
+    Base.metadata.create_all(eng)
+    with Session(eng) as s:
+        yield s
+
+
+def _trades_falsos(n: int) -> list[dict]:
+    from datetime import date
+
+    dia = date(2026, 9, 8)
+    return [{
+        "trade_code": f"#{1000000 + i}",
+        "data_negocio": dia,
+        "instrument_type": "DEB",
+        "emissor": "EMISSOR TESTE S.A.",
+        "codigo": f"TEST{i % 30:02d}",
+        "isin": f"BRTESTDBS{i:03d}",
+        "quantidade": 10,
+        "preco": 1000.0 + i,
+        "volume": 10000.0 + i,
+        "taxa": 8.5,
+        "origem": "Pre-registro - Voice",
+        "horario": "11:05:53",
+        "data_liquidacao": dia,
+        "situacao": "Confirmado",
+    } for i in range(n)]
+
+
+def test_gravacao_da_b3_vai_em_lotes(db_b3):
+    """Um dia inteiro não pode virar UM comando gigante.
+
+    FALHA REAL EM PRODUÇÃO (08/09/2026): a captura trouxe 5.606 negócios em
+    9 páginas, tudo certo, e o job morreu no `commit` -- um único
+    `insertmanyvalues` de 423 KB e ~16 mil parâmetros, com `RETURNING id`
+    por cima, cancelado por `statement timeout`. Nada do dia foi gravado.
+
+    O comportamento a preservar: vários comandos pequenos, sem RETURNING.
+    """
+    from app.spreads.persist import LOTE_NEGOCIOS_B3, save_negocios_b3
+
+    trades = _trades_falsos(600)
+    with _Espia(db_b3) as espia:
+        n = save_negocios_b3(db_b3, trades)
+
+    assert n == 600
+    inserts = espia.contendo("INSERT INTO negocios_b3")
+    esperado = -(-600 // LOTE_NEGOCIOS_B3)  # divisão para cima
+    assert len(inserts) == esperado, f"{len(inserts)} comando(s) de INSERT: {esperado} esperado(s)"
+    for sql in inserts:
+        assert "RETURNING" not in sql.upper(), (
+            "voltou o INSERT do ORM com RETURNING id -- ninguém usa o id gerado "
+            f"e ele encarece cada gravação: {sql[:120]}"
+        )
+
+
+def test_gravacao_da_b3_continua_idempotente(db_b3):
+    """O dedupe por `trade_code` tem que sobreviver à mudança de lote.
+
+    A B3 devolve o dia INTEIRO a cada consulta, então gravar duas vezes o
+    mesmo período é o caso normal, não a exceção.
+    """
+    from app.spreads.persist import save_negocios_b3
+
+    trades = _trades_falsos(300)
+    assert save_negocios_b3(db_b3, trades) == 300
+    assert save_negocios_b3(db_b3, trades) == 0
+    assert db_b3.query(NegocioB3).count() == 300
+
+
+def test_lote_parcial_sobrevive_a_falha_no_meio(db_b3, monkeypatch):
+    """Commit por lote: o que entrou antes do erro não se perde.
+
+    É o que faz a execução seguinte continuar de onde parou, em vez de
+    recomeçar o dia inteiro -- e foi por não ter isso que uma falha no
+    último passo apagava horas de captura.
+    """
+    from app.spreads import persist
+
+    trades = _trades_falsos(600)
+    original = persist.NegocioB3.__table__.insert
+    chamadas = {"n": 0}
+
+    real_execute = db_b3.execute
+
+    def execute_com_falha(stmt, *a, **kw):
+        texto = str(stmt).upper()
+        if texto.startswith("INSERT INTO NEGOCIOS_B3"):
+            chamadas["n"] += 1
+            if chamadas["n"] == 3:
+                raise RuntimeError("timeout simulado no terceiro lote")
+        return real_execute(stmt, *a, **kw)
+
+    monkeypatch.setattr(db_b3, "execute", execute_com_falha)
+    with pytest.raises(RuntimeError):
+        persist.save_negocios_b3(db_b3, trades)
+    monkeypatch.undo()
+
+    gravados = db_b3.query(NegocioB3).count()
+    assert gravados == 500, f"esperava os 2 primeiros lotes gravados, achei {gravados}"
