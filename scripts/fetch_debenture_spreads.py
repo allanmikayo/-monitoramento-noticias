@@ -37,7 +37,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from app.db import Base, SessionLocal, engine, run_migrations
+from app.db import Base, SessionLocal, engine, ensure_schema
 from app.spreads.fetch import (
     build_session,
     business_days,
@@ -62,8 +62,7 @@ def main() -> None:
     p.add_argument("--end", type=_parse_date, default=None, help="Data final (AAAA-MM-DD). Padrão: igual a --start.")
     args = p.parse_args()
 
-    Base.metadata.create_all(engine)
-    run_migrations()
+    ensure_schema()
 
     session = build_session()
 

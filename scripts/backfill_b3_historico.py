@@ -55,7 +55,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from sqlalchemy import func, select  # noqa: E402
 
-from app.db import Base, SessionLocal, engine, run_migrations  # noqa: E402
+from app.db import Base, SessionLocal, engine, ensure_schema  # noqa: E402
 from app.models import NegocioB3Diario  # noqa: E402
 from app.spreads import b3_agregado as agg  # noqa: E402
 from app.spreads.b3_trades import fetch_trades  # noqa: E402
@@ -167,8 +167,7 @@ def main() -> None:
     ap.add_argument("--pausa", type=float, default=PAUSA_ENTRE_DIAS)
     args = ap.parse_args()
 
-    Base.metadata.create_all(engine)
-    run_migrations()
+    ensure_schema(force=True)
 
     if args.do_banco:
         with SessionLocal() as db:

@@ -36,7 +36,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from app.db import Base, SessionLocal, engine, run_migrations
+from app.db import Base, SessionLocal, engine, ensure_schema
 from app.models import Debenture, NegocioB3
 from app.spreads.b3_trades import compute_trade_spreads
 
@@ -54,8 +54,7 @@ def main() -> None:
     )
     args = p.parse_args()
 
-    Base.metadata.create_all(engine)
-    run_migrations()
+    ensure_schema(force=True)
 
     with SessionLocal() as db:
         if args.recompute_ipca:

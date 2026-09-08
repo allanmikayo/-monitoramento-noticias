@@ -429,28 +429,73 @@ def test_rodada_noturna_delega_para_o_mesmo_codigo():
         assert termo not in corpo, f"etapa_b3 voltou a chamar {termo} direto"
 
 
-def test_fechar_b3_cria_tabelas_num_banco_novo(tmp_path, monkeypatch):
-    """Num banco vazio o script tem que criar as tabelas antes de agregar.
+def _rodar_fechar_b3(tmp_path, nome_do_banco, ddl_ligado):
+    """Roda `python -m scripts.fechar_b3` contra um SQLite vazio."""
+    import subprocess
+    import sys
+    from pathlib import Path
+
+    raiz = Path(__file__).resolve().parent.parent
+    env = {**os.environ, "DATABASE_URL": f"sqlite:///{tmp_path}/{nome_do_banco}"}
+    if ddl_ligado:
+        env["CREDIT_MONITOR_DDL"] = "1"
+    else:
+        env.pop("CREDIT_MONITOR_DDL", None)
+    return subprocess.run(
+        [sys.executable, "-m", "scripts.fechar_b3"],
+        cwd=raiz, capture_output=True, text=True, env=env,
+    )
+
+
+def test_fechar_b3_cria_tabelas_num_banco_novo_com_ddl_ligado(tmp_path):
+    """Com `CREDIT_MONITOR_DDL=1`, um banco vazio ganha as tabelas.
 
     BUG REAL (20/08/2026): `fechar_b3.py` importava `Base` mas não
     `app.models`, então `Base.metadata` ficava vazio, o `create_all` não
     criava nada e o script morria com "no such table: negocios_b3_diario".
     Só apareceu rodando contra um SQLite limpo -- a suíte não pega, porque o
     conftest já criou tudo antes.
-    """
-    import subprocess
-    import sys
-    from pathlib import Path
 
-    raiz = Path(__file__).resolve().parent.parent
-    r = subprocess.run(
-        [sys.executable, "-m", "scripts.fechar_b3"],
-        cwd=raiz, capture_output=True, text=True,
-        env={**os.environ, "DATABASE_URL": f"sqlite:///{tmp_path}/novo.db"},
-    )
+    O DDL virou condicional em 08/09/2026 (ver `app/db.py ensure_schema`),
+    mas o bug que este teste protege continua possível, então ele continua
+    aqui -- agora com o DDL ligado explicitamente. De quebra, `ensure_schema`
+    importa `app.models` por conta própria, o que torna aquele bug
+    estruturalmente impossível.
+    """
+    r = _rodar_fechar_b3(tmp_path, "com_ddl.db", ddl_ligado=True)
     assert r.returncode == 0, r.stderr[-2000:]
     assert "no such table" not in (r.stdout + r.stderr)
     assert "fechamento concluído" in (r.stdout + r.stderr)
+
+
+def test_fechar_b3_nao_faz_ddl_por_padrao(tmp_path):
+    """Sem a variável de ambiente, o script NÃO toca no esquema.
+
+    É o ponto da mudança de 08/09/2026. Todo script de coleta abria com
+    `create_all` + `run_migrations`: 29 tabelas conferidas e 15 ALTERs, ~44
+    idas e voltas até o Supabase antes de qualquer trabalho útil -- a cada
+    rodada, e a varredura de notícias roda 96 vezes por dia. Quatro desses
+    ALTERs reconstroem a chave primária de `debentures` e travam a tabela.
+
+    Num banco vazio o script até falha (não há o que agregar), e é o
+    esperado: quem cria esquema é `python -m scripts.init_db`, rodado à mão.
+    O que este teste garante é que ele falhou SEM ter criado nada.
+    """
+    import sqlite3
+
+    caminho = tmp_path / "sem_ddl.db"
+    _rodar_fechar_b3(tmp_path, "sem_ddl.db", ddl_ligado=False)
+
+    if not caminho.exists():
+        return  # nem chegou a abrir o arquivo -- também é "não criou nada"
+    with sqlite3.connect(caminho) as conn:
+        tabelas = [
+            t for (t,) in conn.execute(
+                "SELECT name FROM sqlite_master WHERE type='table' "
+                "AND name NOT LIKE 'sqlite_%'"
+            )
+        ]
+    assert tabelas == [], f"o script criou tabelas sem CREDIT_MONITOR_DDL: {tabelas}"
 
 
 def test_dedupe_por_data_nao_por_lista_gigante(db):

@@ -7,10 +7,31 @@ import json
 from datetime import datetime, timedelta, timezone
 from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
 
-from sqlalchemy import delete, exists, select
-from sqlalchemy.orm import Session, selectinload
+from sqlalchemy import delete, exists, func, select
+from sqlalchemy.orm import Session, load_only, selectinload
 
 from .models import Article, article_company, article_sector
+
+# DATA DE ORDENAÇÃO DO ARTIGO (08/09/2026).
+#
+# Um artigo é datado por `published_at`; quando a fonte não informa data de
+# publicação (acontece em RSS mal formado e em algumas páginas raspadas),
+# vale `found_at`. Antes isso era escrito como um OR de duas condições:
+#
+#     (published_at IS NOT NULL AND published_at >= corte)
+#     OR (published_at IS NULL AND found_at >= corte)
+#
+# Logicamente idêntico ao COALESCE, mas com uma diferença cara: nenhum
+# índice serve pra um OR entre duas colunas, então TODA carga do dashboard
+# varria `articles` inteira. O diagnóstico de 08/09/2026 mediu 1.840
+# varreduras completas e 8.982.042 linhas lidas sequencialmente.
+#
+# Com a expressão única existe um índice pra ela (`ix_articles_data`, ver
+# app/models.py), e ele resolve o filtro E a ordenação de uma vez.
+#
+# CUIDADO: a expressão aqui tem que continuar batendo LITERALMENTE com a do
+# índice -- é assim que o Postgres reconhece que pode usá-lo.
+DATA_ARTIGO = func.coalesce(Article.published_at, Article.found_at)
 
 TRACKING_PARAMS = {
     "utm_source", "utm_medium", "utm_campaign", "utm_term", "utm_content",
@@ -31,6 +52,41 @@ def normalize_url(url: str) -> str:
     return urlunparse((p.scheme, netloc, path, p.params, urlencode(query), p.fragment))
 
 
+def prefetch_articles(db: Session, urls: list[str]) -> dict[str, Article]:
+    """Carrega DE UMA VEZ os artigos que já existem entre `urls` (já
+    normalizadas), com empresas e setores juntos.
+
+    POR QUE EXISTE (08/09/2026). `upsert_article` fazia uma consulta por
+    URL, e logo depois `_set_companies`/`_set_sectors` tocavam
+    `art.companies` e `art.sector_tags`, cada um disparando outra consulta
+    (lazy load). Três idas ao banco por item de feed -- e como um RSS
+    devolve os MESMOS itens a cada rodada, quase tudo era trabalho
+    repetido pra redescobrir artigo que já estava lá.
+
+    O diagnóstico do Supabase de 08/09/2026 mediu o estrago em ~55 dias:
+
+        articles_url_key      2.109.272 usos
+        article_company_pkey  2.098.103 usos
+        article_sector_pkey   1.783.325 usos
+
+    Os três praticamente iguais -- a assinatura exata de um N+1. Isso, e
+    não o tamanho do banco (111 MB, 100% de cache), é o que esgotava a
+    instância: o Postgres não estava lendo disco, estava atendendo milhões
+    de consultas minúsculas.
+
+    Com o prefetch, uma fonte de 30 itens sai de ~90 consultas para 2 (esta
+    e as duas do selectinload).
+    """
+    if not urls:
+        return {}
+    stmt = (
+        select(Article)
+        .options(selectinload(Article.companies), selectinload(Article.sector_tags))
+        .where(Article.url.in_(set(urls)))
+    )
+    return {a.url: a for a in db.scalars(stmt).unique()}
+
+
 def upsert_article(
     db: Session,
     *,
@@ -46,13 +102,24 @@ def upsert_article(
     company_ids: list[int],
     sector_ids: list[int] | None = None,
     is_covered: bool = True,
+    existing_map: dict[str, Article] | None = None,
 ) -> bool:
     """Insere se novo; se já existir, atualiza campos (mantendo o corpo mais
     longo) e garante que as empresas/setores casados estejam associados.
-    Retorna True se o artigo era novo."""
+    Retorna True se o artigo era novo.
+
+    `existing_map` é o resultado de `prefetch_articles` para as URLs desta
+    rodada (ver o porquê lá). Quando informado, a busca por URL sai do
+    banco e vira uma consulta de dicionário, e as coleções já vêm
+    carregadas -- nenhuma das três consultas por artigo acontece. Sem ele,
+    o comportamento é o antigo, uma consulta por artigo: os chamadores
+    antigos e os testes continuam funcionando sem mudança."""
     sector_ids = sector_ids or []
     norm_url = normalize_url(url)
-    existing = db.scalar(select(Article).where(Article.url == norm_url))
+    if existing_map is not None:
+        existing = existing_map.get(norm_url)
+    else:
+        existing = db.scalar(select(Article).where(Article.url == norm_url))
 
     if existing is None:
         art = Article(
@@ -70,6 +137,13 @@ def upsert_article(
         )
         db.add(art)
         db.flush()
+        # O mesmo link pode vir DUAS VEZES no mesmo feed (paginação que
+        # repete item, home que lista a mesma matéria em duas seções).
+        # Registrar o recém-criado no mapa faz a segunda ocorrência cair no
+        # caminho de atualização em vez de tentar inserir a mesma URL de
+        # novo e estourar a unicidade.
+        if existing_map is not None:
+            existing_map[norm_url] = art
         _set_companies(db, art, company_ids)
         _set_sectors(db, art, sector_ids)
         return True
@@ -169,13 +243,24 @@ def list_articles(
     # rede e estourava o timeout de 10s da funcao serverless. selectinload
     # busca tudo em poucas consultas agrupadas, independente de quantos
     # artigos/empresas existam.
+    # NÃO CARREGA `body` (08/09/2026). A listagem nunca mostra o corpo do
+    # artigo -- `/api/articles` devolve título, resumo e vínculos, nada
+    # mais. Mesmo assim o `select(Article)` trazia a coluna inteira: são 27
+    # MB de texto em `articles`, arrastados do banco a cada carga da tela
+    # pra serem descartados no serializador. `load_only` corta isso.
+    #
+    # `body` e `matched_keywords` continuam acessíveis (o SQLAlchemy busca
+    # sob demanda se alguém ler), então nada quebra -- só deixa de vir de
+    # graça em quem não usa.
     stmt = select(Article).options(
+        load_only(
+            Article.id, Article.url, Article.domain, Article.source_name,
+            Article.article_type, Article.title, Article.snippet,
+            Article.published_at, Article.found_at, Article.is_covered,
+        ),
         selectinload(Article.companies).selectinload(Company.sector),
         selectinload(Article.sector_tags),
-    ).where(
-        ((Article.published_at.is_not(None)) & (Article.published_at >= cutoff))
-        | ((Article.published_at.is_(None)) & (Article.found_at >= cutoff))
-    )
+    ).where(DATA_ARTIGO >= cutoff)
     if source_domain:
         stmt = stmt.where(Article.domain == source_domain)
     if source_names:
@@ -217,26 +302,41 @@ def list_articles(
             article_sector.c.sector_id.in_(sector_ids),
         )
         stmt = stmt.where(empresa_do_setor | tag_de_setor)
-    stmt = stmt.order_by(Article.published_at.desc().nullslast(), Article.found_at.desc()).limit(limit)
+    # ORDENAÇÃO PELA MESMA EXPRESSÃO DO FILTRO -- é o que deixa o índice
+    # `ix_articles_data` resolver filtro e ordem numa passada só.
+    #
+    # MUDANÇA VISÍVEL (08/09/2026): antes era `published_at DESC NULLS LAST,
+    # found_at DESC`, o que empurrava todo artigo SEM data de publicação
+    # pro fim da lista, por mais recente que fosse. Agora ele entra na
+    # posição da data em que foi capturado. Na prática a lista fica mais
+    # correta (uma matéria de hoje sem `published_at` aparece hoje, não no
+    # rodapé); se algum dia isso incomodar, é esta linha.
+    stmt = stmt.order_by(DATA_ARTIGO.desc()).limit(limit)
     return list(db.scalars(stmt).unique())
 
 
 def cleanup_old_articles(db: Session, max_age_hours: int) -> int:
+    """Apaga artigos além da janela de retenção.
+
+    NÃO CHAMAR NA VARREDURA (08/09/2026). Isto rodava ao fim de CADA
+    rodada do pipeline -- 96 vezes por dia -- e cada execução varria
+    `articles` inteira só pra descobrir que, na imensa maioria das vezes,
+    não havia nada pra apagar. Passou pra `scripts/faxina_diaria.py`, que
+    roda uma vez por dia.
+
+    Também não traz mais os ids pro Python. A versão anterior carregava
+    todos os ids antigos numa lista e montava três `IN (...)` com eles --
+    numa limpeza acumulada isso vira uma consulta com milhares de literais.
+    Agora o filtro é uma subconsulta e o banco resolve tudo por lá.
+    """
     cutoff = datetime.now(timezone.utc) - timedelta(hours=max_age_hours)
-    where_antigo = (
-        (Article.published_at.is_not(None) & (Article.published_at < cutoff))
-        | (Article.published_at.is_(None) & (Article.found_at < cutoff))
-    )
-    old_ids = [row[0] for row in db.execute(select(Article.id).where(where_antigo)).all()]
-    if not old_ids:
-        return 0
-    # BUG CORRIGIDO (17/07/2026): apagar o artigo direto sem antes limpar as
-    # linhas dele em article_company/article_sector quebrava no Postgres
-    # (ForeignKeyViolation -- "still referenced from table article_sector").
-    # No SQLite local nunca deu erro porque o SQLite não aplica chave
-    # estrangeira por padrão nesse projeto (o problema ficava escondido,
-    # só deixava linha órfã pra trás em vez de travar).
-    db.execute(article_company.delete().where(article_company.c.article_id.in_(old_ids)))
-    db.execute(article_sector.delete().where(article_sector.c.article_id.in_(old_ids)))
-    result = db.execute(delete(Article).where(Article.id.in_(old_ids)))
+    antigos = select(Article.id).where(DATA_ARTIGO < cutoff).scalar_subquery()
+    # ORDEM IMPORTA (bug corrigido em 17/07/2026): apagar o artigo antes de
+    # limpar as linhas dele em article_company/article_sector quebra no
+    # Postgres (ForeignKeyViolation -- "still referenced from table
+    # article_sector"). No SQLite o problema ficava escondido, porque as
+    # chaves estrangeiras não são aplicadas por padrão neste projeto.
+    db.execute(article_company.delete().where(article_company.c.article_id.in_(antigos)))
+    db.execute(article_sector.delete().where(article_sector.c.article_id.in_(antigos)))
+    result = db.execute(delete(Article).where(DATA_ARTIGO < cutoff))
     return result.rowcount or 0

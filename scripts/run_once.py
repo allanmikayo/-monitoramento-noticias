@@ -15,7 +15,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from app.db import Base, SessionLocal, engine, run_migrations
+from app.db import Base, SessionLocal, engine, ensure_schema
 from app.pipeline import run_pipeline
 from app.seed_sources import sync_known_sources
 
@@ -27,8 +27,7 @@ def main() -> None:
     # algum motivo esta for a primeira coisa a tocar o banco (normalmente
     # quem cria o schema é o `python -m scripts.seed` rodado uma vez do
     # computador local apontando pro Supabase, ver CLAUDE.md).
-    Base.metadata.create_all(engine)
-    run_migrations()
+    ensure_schema()
 
     # Sincroniza fontes novas do config.py automaticamente (17/07/2026) --
     # antes só o seed manual local fazia isso, então cadastrar uma fonte

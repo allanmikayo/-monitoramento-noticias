@@ -20,6 +20,7 @@ from sqlalchemy import (
     Text,
     UniqueConstraint,
     Column,
+    func,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -171,6 +172,27 @@ class Article(Base):
 
     companies: Mapped[list["Company"]] = relationship(secondary=article_company)
     sector_tags: Mapped[list["Sector"]] = relationship(secondary=article_sector)
+
+
+# ÍNDICE DE TEMPO DA TABELA `articles` (08/09/2026).
+#
+# `articles` não tinha nenhum índice além da chave primária e da unicidade
+# de URL -- e TODA consulta do dashboard filtra por janela de tempo e ordena
+# por data. Resultado medido no diagnóstico do Supabase: 1.840 varreduras
+# completas da tabela, 8.982.042 linhas lidas sequencialmente.
+#
+# É um índice sobre EXPRESSÃO, não sobre coluna, porque a data que importa é
+# `published_at` quando existe e `found_at` quando não existe -- ver
+# `store.DATA_ARTIGO`, que precisa continuar escrevendo a expressão do mesmo
+# jeito, senão o Postgres não reconhece que este índice serve.
+#
+# DESC porque a tela sempre mostra do mais novo pro mais antigo: assim o
+# índice entrega o filtro e a ordenação na mesma passada, sem sort.
+#
+# Declarado depois da classe (mesmo padrão de `ix_reports_published_at`).
+# Em banco que já existe ele NÃO nasce sozinho -- rode `python -m
+# scripts.init_db`, que é onde mora o DDL desde 13/08/2026.
+Index("ix_articles_data", func.coalesce(Article.published_at, Article.found_at).desc())
 
 
 # ---------------------------------------------------------------------------

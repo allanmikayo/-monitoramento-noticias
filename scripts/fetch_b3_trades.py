@@ -28,7 +28,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from app.db import Base, SessionLocal, engine, run_migrations
+from app.db import Base, SessionLocal, engine, ensure_schema
 from app.spreads.b3_trades import fetch_trades
 from app.spreads.persist import save_negocios_b3
 
@@ -40,8 +40,7 @@ def _parse_date(s: str) -> date:
 
 
 def run(start: date, end: date) -> dict:
-    Base.metadata.create_all(engine)
-    run_migrations()
+    ensure_schema()
 
     trades = fetch_trades(start, end)
     with SessionLocal() as db:

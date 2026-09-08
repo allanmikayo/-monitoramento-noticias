@@ -29,7 +29,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from app.db import Base, SessionLocal, engine, run_migrations  # noqa: E402
+from app.db import Base, SessionLocal, engine, ensure_schema  # noqa: E402
 # Sem este import o `Base.metadata` fica VAZIO e o `create_all` abaixo não
 # cria nada -- num banco novo o script morre com "no such table:
 # negocios_b3_diario". Mesma armadilha que `scripts/init_db.py` já
@@ -69,8 +69,7 @@ def main() -> int:
     logging.basicConfig(level=logging.INFO,
                         format="%(asctime)s %(levelname)s %(message)s")
 
-    Base.metadata.create_all(engine)
-    run_migrations()
+    ensure_schema()
 
     db = SessionLocal()
     try:

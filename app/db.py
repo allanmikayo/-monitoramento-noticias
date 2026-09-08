@@ -51,7 +51,18 @@ else:
     # com prepare_threshold=None, o psycopg nunca tenta preparar do lado
     # do servidor -- funciona certinho com pooler em modo transação (é
     # a recomendação oficial pra esse cenário).
-    connect_args = {"prepare_threshold": None}
+    # `connect_timeout` (segundos) -- ADICIONADO 20/08/2026. Sem ele, quando
+    # o Supabase fica sobrecarregado a conexão fica pendurada até a função da
+    # Vercel morrer aos 60s, e o usuário encara uma aba girando por um minuto
+    # antes de um 504. Com 8s, a falha acontece rápido e o app consegue
+    # mostrar uma página dizendo o que houve (ver o handler de
+    # OperationalError em app.py).
+    #
+    # O erro real observado em produção era justamente na conexão, não numa
+    # consulta:
+    #   psycopg.errors.ConnectionFailure: Failed to connect to database:
+    #   authentication did not complete within 15000ms
+    connect_args = {"prepare_threshold": None, "connect_timeout": 8}
 engine_kwargs: dict = {"connect_args": connect_args, "future": True}
 if not _IS_SQLITE:
     # Serverless (Vercel) roda vários containers curtos em paralelo -- ter
@@ -77,6 +88,41 @@ def get_db():
         yield db
     finally:
         db.close()
+
+
+def ensure_schema(force: bool = False) -> None:
+    """`create_all` + `run_migrations` -- mas SÓ quando explicitamente pedido.
+
+    POR QUE (08/09/2026). Todo script de coleta abria com essas duas
+    chamadas. Juntas são 29 tabelas conferidas uma a uma e 15 ALTERs: ~44
+    idas e voltas até o Supabase ANTES de o script fazer qualquer trabalho
+    útil -- a cada rodada, e a varredura de notícias roda 96 vezes por dia.
+
+    O custo não é só latência. Quatro dos ALTERs são `ALTER COLUMN ... TYPE`
+    em `debentures`. Mesmo quando o tipo já está certo e o Postgres não
+    precisa reescrever a tabela, ele **reconstrói os índices da coluna** e
+    pega ACCESS EXCLUSIVE nela. Como `codigo` é a chave primária, o coletor
+    de NOTÍCIAS estava reconstruindo a PK da tabela de DEBÊNTURES de 15 em
+    15 minutos, travando quem estivesse lendo a aba Spreads naquele
+    instante.
+
+    O DDL já tinha saído do boot da Vercel em 20/08/2026 pelo mesmo motivo
+    (45 segundos no primeiro acesso depois de a função dormir). Faltava
+    tirar dos scripts.
+
+    ONDE O DDL MORA AGORA: `python -m scripts.init_db`, rodado da máquina do
+    Allan, por conexão direta e sem limite de tempo. Rode depois de QUALQUER
+    mudança em models.py -- inclusive índice novo.
+
+    Para forçar numa execução isolada (banco novo, ambiente de teste), sem
+    mexer em código: variável de ambiente `CREDIT_MONITOR_DDL=1`.
+    """
+    if not force and os.getenv("CREDIT_MONITOR_DDL", "").strip().lower() not in ("1", "true", "sim"):
+        return
+    from . import models  # noqa: F401 -- popula Base.metadata antes do create_all
+
+    Base.metadata.create_all(engine)
+    run_migrations()
 
 
 def run_migrations() -> None:

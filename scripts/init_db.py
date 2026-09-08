@@ -24,8 +24,39 @@ from __future__ import annotations
 
 import sys
 
-from app.db import Base, engine, run_migrations
+from app.db import Base, engine, ensure_schema
 from app import models  # noqa: F401 — precisa importar pro metadata registrar tudo
+
+# ÍNDICES QUE PRECISAM DE DDL EXPLÍCITO (08/09/2026).
+#
+# `Base.metadata.create_all` só cria TABELA que não existe -- ele nem olha
+# os índices de uma tabela que já está lá. Então índice novo em tabela
+# antiga não nasce sozinho em produção: tem que vir por aqui.
+#
+# Sem CONCURRENTLY de propósito: a conexão do projeto é o pooler da Supabase
+# em MODO TRANSAÇÃO (porta 6543), e `CREATE INDEX CONCURRENTLY` usa várias
+# transações internas na mesma sessão -- justamente o que um pooler de
+# transação não garante. Em `articles` (37 MB, 33 mil linhas) o índice sai
+# em poucos segundos de lock, o que é aceitável; num banco grande, valeria
+# rodar pela conexão direta com CONCURRENTLY.
+INDICES = [
+    (
+        "ix_articles_data",
+        "CREATE INDEX IF NOT EXISTS ix_articles_data "
+        "ON articles (coalesce(published_at, found_at) DESC)",
+    ),
+]
+
+
+def criar_indices() -> None:
+    for nome, ddl in INDICES:
+        try:
+            with engine.connect() as conn:
+                conn.exec_driver_sql(ddl)
+                conn.commit()
+            print(f"  {nome}: ok")
+        except Exception as exc:  # noqa: BLE001
+            print(f"  {nome}: AVISO -- nao criado ({type(exc).__name__}: {exc})")
 
 
 def main() -> int:
@@ -37,14 +68,15 @@ def main() -> int:
     antes = set(inspect(engine).get_table_names())
 
     print("Criando o que falta...")
-    Base.metadata.create_all(engine)
+    ensure_schema(force=True)
 
     depois = set(inspect(engine).get_table_names())
     novas = sorted(depois - antes)
     print(f"  criadas agora: {', '.join(novas) if novas else '(nenhuma, já estava tudo lá)'}")
 
-    print("Rodando migrações de coluna...")
-    run_migrations()
+    # (as migrações de coluna já rodaram dentro do ensure_schema acima)
+    print("Criando índices que faltam...")
+    criar_indices()
 
     # A view `v_spread_rating` era criada dentro da etapa `periodos` da
     # rodada noturna. Essa etapa saiu em 20/08/2026 junto com o pipeline de

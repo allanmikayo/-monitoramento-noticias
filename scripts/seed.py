@@ -18,7 +18,7 @@ import openpyxl
 from app.auth import hash_password
 
 from app import config
-from app.db import Base, SessionLocal, engine, run_migrations
+from app.db import Base, SessionLocal, engine, ensure_schema
 from app.models import AppSetting, Company, CompanyAlias, Sector, Source, User
 from app.seed_sources import sync_known_sources
 
@@ -98,8 +98,7 @@ def _sector_name(raw: str) -> str:
 
 
 def run() -> None:
-    Base.metadata.create_all(engine)
-    run_migrations()
+    ensure_schema(force=True)
     db = SessionLocal()
     try:
         # --- setores/empresas a partir da planilha -------------------------

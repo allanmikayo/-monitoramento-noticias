@@ -43,7 +43,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from app.db import Base, SessionLocal, engine, run_migrations  # noqa: E402
+from app.db import Base, SessionLocal, engine, ensure_schema  # noqa: E402
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 logger = logging.getLogger("rodada_noturna")
@@ -143,8 +143,7 @@ def main() -> None:
 
     dia = datetime.strptime(args.data, "%Y-%m-%d").date() if args.data else None
 
-    Base.metadata.create_all(engine)
-    run_migrations()
+    ensure_schema()
     db = SessionLocal()
 
     falhas = []

@@ -37,7 +37,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from app.db import Base, SessionLocal, engine, run_migrations  # noqa: E402
+from app.db import Base, SessionLocal, engine, ensure_schema  # noqa: E402
 from app.models import NtnbReferencia  # noqa: E402
 from app.spreads import securitizados as sec  # noqa: E402
 from app.spreads import persist_securitizados as psec  # noqa: E402
@@ -128,8 +128,7 @@ def main() -> None:
     ap.add_argument("--seed-json", type=Path, help="carga inicial de um JSON, sem rede")
     args = ap.parse_args()
 
-    Base.metadata.create_all(engine)
-    run_migrations()
+    ensure_schema()
     db = SessionLocal()
     try:
         if args.seed_json:

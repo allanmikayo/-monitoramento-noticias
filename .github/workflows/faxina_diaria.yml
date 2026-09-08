@@ -1,0 +1,69 @@
+name: Faxina diária do banco
+
+# A PEÇA QUE FALTAVA DO OUTRO LADO (08/09/2026).
+#
+# A limpeza de artigos antigos vivia dentro da varredura de notícias, ou
+# seja, rodava 96 vezes por dia e varria `articles` inteira em todas elas
+# para, quase sempre, não apagar nada (a retenção é de 45 dias). Era uma
+# das fontes do estouro de Disk IO do Supabase -- que nunca foi falta de
+# espaço: o banco tem 111 MB e 100% de cache. Era volume de operação.
+#
+# Aqui a mesma limpeza roda uma vez por dia, e por subconsulta, sem trazer
+# id nenhum para o Python.
+#
+# HORÁRIO: 02h00 UTC = 23h00 BRT. Depois dos quatro jobs da noite, para não
+# disputar IO com eles:
+#   00h00 UTC  spreads_daily
+#   00h30 UTC  securitizados_daily
+#   01h00 UTC  spreads_verify
+#   01h30 UTC  b3_fechamento
+#   02h00 UTC  este
+#
+# Brasil não tem horário de verão desde 2019 (fuso fixo -3), o cron não
+# precisa de ajuste sazonal.
+#
+# NÃO apaga dado de mercado. Spread, securitizado e o agregado da B3 são
+# para sempre; a poda do negócio a negócio bruto continua sendo do
+# `b3_fechamento.yml`, que confere se o dia já tem agregado antes de apagar.
+
+on:
+  schedule:
+    - cron: "0 2 * * *"
+  workflow_dispatch:
+    inputs:
+      simular:
+        description: "Marque para só CONTAR o que seria apagado, sem apagar"
+        required: false
+        type: boolean
+        default: false
+
+concurrency:
+  group: faxina_diaria
+  cancel-in-progress: false
+
+jobs:
+  faxina:
+    runs-on: ubuntu-latest
+    # A PRIMEIRA execução tem mais trabalho que as seguintes: limpa tudo o
+    # que passou da janela desde que a limpeza saiu da varredura.
+    timeout-minutes: 15
+    steps:
+      - name: Baixar o codigo
+        uses: actions/checkout@v4
+
+      - name: Preparar Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Instalar dependencias
+        run: pip install -r requirements.txt
+
+      - name: Rodar a faxina
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: |
+          ARGS=""
+          if [ "${{ github.event.inputs.simular }}" = "true" ]; then ARGS="--simular"; fi
+          python -m scripts.faxina_diaria $ARGS

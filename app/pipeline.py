@@ -8,7 +8,7 @@ import logging
 from datetime import datetime, timezone
 from typing import Callable
 
-from . import config, store
+from . import store  # `config` saiu junto com a limpeza (08/09/2026)
 from .db import SessionLocal
 from .filter import match_keywords
 from .models import RunLog, Source
@@ -57,6 +57,14 @@ def _run_source(source_info: dict, taxonomy) -> dict:
         n_new = 0
         n_matched = 0
         with SessionLocal() as db:
+            # UMA CONSULTA PRA FONTE INTEIRA, não uma por artigo
+            # (08/09/2026) -- ver `store.prefetch_articles` pro diagnóstico
+            # completo. Resumo: um feed devolve os mesmos ~30 itens a cada
+            # rodada, e cada item custava três idas ao banco (busca por URL
+            # + dois lazy loads de vínculo) só pra concluir que já estava
+            # lá. Numa fonte de 30 itens são ~90 consultas que viram 2.
+            urls = [store.normalize_url(raw.url) for raw in raw_articles]
+            existentes = store.prefetch_articles(db, urls)
             for raw in raw_articles:
                 haystack = f"{raw.title}\n{raw.snippet}"
                 matched = match_keywords(haystack, taxonomy.all_keywords, taxonomy.sector_only_keywords)
@@ -90,6 +98,7 @@ def _run_source(source_info: dict, taxonomy) -> dict:
                     company_ids=sorted(company_ids),
                     sector_ids=sorted(sector_ids),
                     is_covered=is_covered,
+                    existing_map=existentes,
                 )
                 if is_new:
                     n_new += 1
@@ -141,11 +150,20 @@ def run_pipeline(triggered_by: str = "scheduler", progress_cb: ProgressCallback 
         if result["error"]:
             summary["errors"].append(f"{result['name']}: {result['error']}")
 
-    with SessionLocal() as db:
-        removed = store.cleanup_old_articles(db, config.CLEANUP_MAX_AGE_HOURS)
-        db.commit()
-        summary["cleaned_up"] = removed
+    # A LIMPEZA DE ARTIGOS ANTIGOS SAIU DAQUI (08/09/2026).
+    #
+    # Ela rodava ao fim de toda varredura -- 96 vezes por dia -- e cada
+    # execução varria `articles` inteira pra, quase sempre, não apagar
+    # nada: a janela de retenção é de 45 dias, então só há o que apagar
+    # algumas vezes por dia, no máximo.
+    #
+    # Agora é `scripts/faxina_diaria.py`, com workflow próprio
+    # (`faxina_diaria.yml`, 23h BRT). `summary["cleaned_up"]` continua
+    # existindo, sempre 0, pra não quebrar quem lê o resumo (o painel de
+    # diagnóstico do dashboard e os testes).
+    summary["cleaned_up"] = 0
 
+    with SessionLocal() as db:
         log = db.get(RunLog, run_log_id)
         if log:
             log.finished_at = datetime.now(timezone.utc)
