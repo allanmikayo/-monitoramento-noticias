@@ -56,6 +56,12 @@ jobs:
     # execução normal.
     env:
       PYTHONFAULTHANDLER: "1"
+      # Implementacao do psycopg: `python` usa a libpq do sistema em vez do
+      # wheel binario -- ver o passo "Instalar dependencias". Explicito de
+      # proposito: se um dia a libpq sumir do runner, o job falha na hora,
+      # com mensagem clara, em vez de voltar em silencio pro binario que
+      # causava o segfault.
+      PSYCOPG_IMPL: python
     # A PRIMEIRA execução tem mais trabalho que as seguintes: limpa tudo o
     # que passou da janela desde que a limpeza saiu da varredura.
     timeout-minutes: 15
@@ -70,7 +76,33 @@ jobs:
           cache: "pip"
 
       - name: Instalar dependencias
-        run: pip install -r requirements.txt
+        # SEM O WHEEL BINARIO DO PSYCOPG (08/09/2026).
+        #
+        # CAUSA RAIZ, achada com o faulthandler ligado neste mesmo dia. O
+        # processo morria com `Segmentation fault` (exit 139) e a pilha
+        # apontou para dentro do psycopg_binary, executando `SELECT
+        # version()` -- a consulta que o SQLAlchemy faz UMA vez, ao abrir a
+        # primeira conexao. Ou seja: nao era volume de dado, nao era o
+        # INSERT, nao era o Playwright. Era a conexao em si.
+        #
+        # `psycopg[binary]` traz a propria libpq E o proprio OpenSSL dentro
+        # do wheel. No mesmo processo ja existe outro OpenSSL, o do Python
+        # (usado por requests/urllib3 e, na varredura, pelo curl_cffi). Dois
+        # OpenSSL carregados juntos e uma fonte classica de segfault durante
+        # o handshake TLS -- e a conexao com o Supabase e TLS.
+        #
+        # Tirando o wheel binario, o psycopg passa a usar a libpq do sistema
+        # (que o runner ja tem) e o OpenSSL do sistema. Um so, sem conflito.
+        #
+        # requirements.txt continua pedindo `psycopg[binary]` de proposito:
+        # no Windows do Allan nao ha libpq do sistema, e la o wheel binario e
+        # a unica opcao que funciona. A troca vale so aqui, no runner Linux.
+        run: |
+          pip install -r requirements.txt
+          pip uninstall -y psycopg-binary || true
+          python -c "import psycopg" \
+            || (sudo apt-get update -qq && sudo apt-get install -y -qq libpq5)
+          python -c "import psycopg; print('psycopg impl:', psycopg.pq.__impl__, '| libpq', psycopg.pq.version())"
 
       - name: Rodar a faxina
         env:
