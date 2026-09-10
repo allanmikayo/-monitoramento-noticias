@@ -391,6 +391,22 @@ class Debenture(Base):
     # `indexador`/`classe`) pra `compute_trade_spreads` conseguir consultar
     # sem precisar rebuscar o boletim inteiro da Anbima.
     referencia_ntnb: Mapped[str | None] = mapped_column(String(20))
+    # TAXONOMIA POR TICKER (09/09/2026, pedido do Allan).
+    #
+    # Setor, subsetor e grupo econômico vêm da aba "Tickers" do
+    # `Taxonomia_Emissores.xlsx` -- 1.581 tickers, contra 1.365 debêntures na
+    # base, então a cobertura é praticamente total. Carregado por
+    # `scripts/importar_taxonomia.py`.
+    #
+    # POR QUE AQUI E NÃO EM `issuers`: a planilha classifica por TICKER, não
+    # por emissor, e é por ticker que as consultas agregam. Guardar aqui
+    # torna o join desnecessário no caminho quente (a tabela de spread por
+    # setor é a mais consultada da Visão Geral) e evita reviver a máquina de
+    # `issuers`, que está dormente desde 20/08. Um mesmo emissor PODE ter
+    # tickers em subsetores diferentes, e assim isso é representável.
+    setor: Mapped[str | None] = mapped_column(String(80))
+    subsetor: Mapped[str | None] = mapped_column(String(80))
+    grupo_economico: Mapped[str | None] = mapped_column(String(120))
     # Ligação com o cadastro de empresas do monitoramento de notícias (pedido
     # do Allan, 24/07/2026 -- aba "Marcação Emissores"): permite mostrar
     # notícias da empresa ao lado do gráfico de spread dela e agregar todos
@@ -417,6 +433,12 @@ class Debenture(Base):
     history: Mapped[list["DebentureSpread"]] = relationship(
         back_populates="debenture", cascade="all, delete-orphan"
     )
+
+
+# Agregação por setor da Visão Geral (09/09/2026): filtra por `classe` e
+# agrupa por setor/subsetor. Sem isto é varredura em `debentures` a cada
+# carga da aba.
+Index("ix_debenture_taxonomia", Debenture.classe, Debenture.setor, Debenture.subsetor)
 
 
 class DebentureSpread(Base):
@@ -543,6 +565,22 @@ class Securitizado(Base):
     # porque as três primeiras classes NÃO são comparáveis entre si.
     indexador: Mapped[str | None] = mapped_column(String(20))
     referencia_ntnb: Mapped[str | None] = mapped_column(String(20))
+    # TAXONOMIA POR TICKER (09/09/2026, pedido do Allan).
+    #
+    # Setor, subsetor e grupo econômico vêm da aba "Tickers" do
+    # `Taxonomia_Emissores.xlsx` -- 1.581 tickers, contra 1.365 debêntures na
+    # base, então a cobertura é praticamente total. Carregado por
+    # `scripts/importar_taxonomia.py`.
+    #
+    # POR QUE AQUI E NÃO EM `issuers`: a planilha classifica por TICKER, não
+    # por emissor, e é por ticker que as consultas agregam. Guardar aqui
+    # torna o join desnecessário no caminho quente (a tabela de spread por
+    # setor é a mais consultada da Visão Geral) e evita reviver a máquina de
+    # `issuers`, que está dormente desde 20/08. Um mesmo emissor PODE ter
+    # tickers em subsetores diferentes, e assim isso é representável.
+    setor: Mapped[str | None] = mapped_column(String(80))
+    subsetor: Mapped[str | None] = mapped_column(String(80))
+    grupo_economico: Mapped[str | None] = mapped_column(String(120))
     # Emissor canônico resolvido a partir do ORIGINADOR (não do emissor).
     issuer_id: Mapped[int | None] = mapped_column(ForeignKey("issuers.id"))
 

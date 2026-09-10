@@ -128,6 +128,7 @@ def kpi_summary(
             "spread_medio_fallback": False,
             "variacao_bps": None, "n_ativos": 0, "duration_media_ponderada": None,
             "duration_ponderada_fallback": False,
+            "estoque_total": None, "estoque_cobertura": 0,
         }
     anterior = _index_from(dates_desc, hoje, dias_comparacao)
     excluidos = tickers_excluidos_spread(db)
@@ -162,6 +163,22 @@ def kpi_summary(
 
     duration_pond, fallback = _weighted_avg_duration(db, classe, hoje, excluidos)
 
+    # Estoque total e quantos ativos têm estoque cruzado -- a cobertura de
+    # debentures.com.br é esparsa em datas antigas (ver fetch.py), então o
+    # total só é interpretável junto com a contagem que o compõe.
+    q_est = (
+        db.query(func.sum(DebentureSpread.estoque), func.count(DebentureSpread.estoque))
+        .join(Debenture, Debenture.codigo == DebentureSpread.codigo)
+        .filter(
+            Debenture.classe == classe,
+            DebentureSpread.data == hoje,
+            DebentureSpread.estoque.isnot(None),
+        )
+    )
+    if excluidos:
+        q_est = q_est.filter(DebentureSpread.codigo.notin_(excluidos))
+    estoque_total, n_com_estoque = q_est.one()
+
     return {
         "data_referencia": hoje.isoformat(),
         "data_comparacao": anterior.isoformat() if anterior else None,
@@ -176,6 +193,12 @@ def kpi_summary(
         "n_ativos": n_hoje or 0,
         "duration_media_ponderada": round(duration_pond, 2) if duration_pond is not None else None,
         "duration_ponderada_fallback": fallback,
+        # Estoque total da classe na data, em R$ milhões (o campo já vem
+        # convertido de R$ mil na captura -- ver fetch.py). É o mesmo peso
+        # que pondera o spread médio logo acima; mostrar o total deixa
+        # explícito sobre que base a média foi calculada.
+        "estoque_total": round(estoque_total, 1) if estoque_total is not None else None,
+        "estoque_cobertura": n_com_estoque,
     }
 
 
@@ -1134,4 +1157,134 @@ def bond_detail(db: Session, codigo: str) -> dict | None:
         "classe": deb.classe,
         "incentivada": deb.incentivada,
         "cnpj": deb.cnpj,
+    }
+
+
+# ---------------------------------------------------------------------------
+# Spread por setor, com drill-down (09/09/2026, pedido do Allan)
+#
+# Três níveis, sempre a MESMA função: setor -> subsetor -> ticker. O último
+# responde a pergunta que o analista faz quando vê um setor abrindo -- "quem
+# puxou isso?" -- sem sair da tela.
+#
+# A taxonomia vem de `Debenture.setor/subsetor/grupo_economico`, carregada da
+# planilha do Allan por `scripts/importar_taxonomia.py`.
+#
+# PONDERAÇÃO POR ESTOQUE, igual ao resto do dashboard (`_weighted_avg_spread`,
+# `emissor_taxas`, `kpi_summary`): papel com estoque maior pesa mais. Não é
+# preferência estética -- é a metodologia do relatório semanal, e misturar as
+# duas faria o mesmo número dar valores diferentes em telas diferentes.
+#
+# Papel sem taxonomia entra como "Sem classificação" em vez de sumir: uma
+# linha visível é auditável, um papel omitido da soma não é.
+# ---------------------------------------------------------------------------
+
+SEM_CLASSIFICACAO = "Sem classificação"
+
+
+def _ponderar(linhas: list[tuple]) -> tuple[float | None, bool]:
+    """(spread, usou_fallback) a partir de [(spread, estoque), ...]."""
+    if not linhas:
+        return None, False
+    com_estoque = [(sp, es) for sp, es in linhas if es is not None and es > 0]
+    if com_estoque:
+        peso = sum(es for _, es in com_estoque)
+        if peso:
+            return sum(sp * es for sp, es in com_estoque) / peso, False
+    valores = [sp for sp, _ in linhas]
+    return (sum(valores) / len(valores) if valores else None), True
+
+
+def spread_por_setor(
+    db: Session,
+    classe: str,
+    dias_comparacao: int = 5,
+    data_referencia: date | None = None,
+    nivel: str = "setor",
+    setor: str | None = None,
+    subsetor: str | None = None,
+) -> dict:
+    """Agrega spread e estoque por setor / subsetor / ticker.
+
+    `nivel`:
+      - "setor"    -> uma linha por setor
+      - "subsetor" -> uma linha por subsetor DENTRO de `setor`
+      - "ticker"   -> uma linha por papel dentro de `setor`+`subsetor`
+
+    Cada linha traz o spread ponderado de hoje, o da data de comparação e a
+    variação em bps entre os dois -- é a variação que ordena a tabela, porque
+    é ela que responde "o que se moveu".
+    """
+    dates_desc = distinct_dates(db, classe)
+    hoje = _resolve_hoje(dates_desc, data_referencia)
+    vazio = {"data_referencia": None, "data_comparacao": None, "nivel": nivel,
+             "setor": setor, "subsetor": subsetor, "linhas": []}
+    if hoje is None:
+        return vazio
+    anterior = _index_from(dates_desc, hoje, dias_comparacao)
+    excluidos = tickers_excluidos_spread(db)
+
+    if nivel == "ticker":
+        chave = Debenture.codigo
+    elif nivel == "subsetor":
+        chave = Debenture.subsetor
+    else:
+        chave = Debenture.setor
+
+    def _coletar(data: date) -> dict[str, list[tuple]]:
+        q = (
+            db.query(chave, DebentureSpread.spread, DebentureSpread.estoque,
+                     Debenture.nome, Debenture.grupo_economico)
+            .join(Debenture, Debenture.codigo == DebentureSpread.codigo)
+            .filter(Debenture.classe == classe,
+                    DebentureSpread.data == data,
+                    DebentureSpread.spread.isnot(None))
+        )
+        if excluidos:
+            q = q.filter(DebentureSpread.codigo.notin_(excluidos))
+        if nivel in ("subsetor", "ticker"):
+            q = (q.filter(Debenture.setor == setor) if setor != SEM_CLASSIFICACAO
+                 else q.filter(Debenture.setor.is_(None)))
+        if nivel == "ticker":
+            q = (q.filter(Debenture.subsetor == subsetor) if subsetor != SEM_CLASSIFICACAO
+                 else q.filter(Debenture.subsetor.is_(None)))
+        agrupado: dict[str, list[tuple]] = {}
+        for valor, spread, estoque, nome, grupo in q.all():
+            rotulo = valor or SEM_CLASSIFICACAO
+            agrupado.setdefault(rotulo, []).append((spread, estoque, nome, grupo))
+        return agrupado
+
+    grupos_hoje = _coletar(hoje)
+    grupos_antes = _coletar(anterior) if anterior is not None else {}
+
+    linhas = []
+    for rotulo, itens in grupos_hoje.items():
+        pares = [(sp, es) for sp, es, _n, _g in itens]
+        spread_hoje, fallback = _ponderar(pares)
+        spread_antes, _ = _ponderar([(sp, es) for sp, es, _n, _g in grupos_antes.get(rotulo, [])])
+        variacao = (spread_hoje - spread_antes
+                    if spread_hoje is not None and spread_antes is not None else None)
+        estoques = [es for _sp, es, _n, _g in itens if es is not None]
+        linhas.append({
+            "rotulo": rotulo,
+            # No nível de ticker o rótulo é o código; o nome e o grupo dão
+            # contexto sem exigir outra consulta.
+            "nome": itens[0][2] if nivel == "ticker" else None,
+            "grupo_economico": itens[0][3] if nivel == "ticker" else None,
+            "n_ativos": len(itens),
+            "estoque": round(sum(estoques), 1) if estoques else None,
+            "spread_medio": round(spread_hoje, 1) if spread_hoje is not None else None,
+            "spread_anterior": round(spread_antes, 1) if spread_antes is not None else None,
+            "variacao_bps": round(variacao, 1) if variacao is not None else None,
+            "ponderacao_fallback": fallback,
+        })
+
+    # Maior abertura primeiro; quem não tem comparação vai para o fim (não
+    # é "variação zero", é ausência de base).
+    linhas.sort(key=lambda l: (l["variacao_bps"] is None, -(l["variacao_bps"] or 0)))
+    return {
+        "data_referencia": hoje.isoformat(),
+        "data_comparacao": anterior.isoformat() if anterior else None,
+        "nivel": nivel, "setor": setor, "subsetor": subsetor,
+        "linhas": linhas,
     }

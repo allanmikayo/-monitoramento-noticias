@@ -59,6 +59,7 @@ from app.db import Base, SessionLocal, engine, ensure_schema  # noqa: E402
 from app.models import NegocioB3Diario  # noqa: E402
 from app.spreads import b3_agregado as agg  # noqa: E402
 from app.spreads.b3_trades import fetch_trades  # noqa: E402
+from app.spreads.b3_trades import compute_trade_spreads  # noqa: E402
 from app.spreads.persist import save_negocios_b3  # noqa: E402
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
@@ -118,10 +119,28 @@ def rodar(inicio: date, fim: date, *, manter_bruto: bool, refazer: bool,
                 time.sleep(pausa)
                 continue
 
+            # SPREAD ANTES DE AGREGAR (09/09/2026).
+            #
+            # BUG ENCONTRADO LENDO O CÓDIGO, não em produção: com
+            # `--so-agregado`, `save_negocios_b3` não era chamado -- e é lá
+            # dentro que `compute_trade_spreads` roda. Resultado: o agregado
+            # daqueles dias saía com `spread_medio`, `spread_min` e
+            # `spread_max` VAZIOS, e é justamente o spread que a aba Balcão
+            # B3 usa no bloco "volume x spread". O dia parecia gravado e
+            # vinha sem a métrica que importa.
+            #
+            # Calcular aqui não custa escrita nenhuma: a função só LÊ o
+            # cadastro de debêntures e a curva de NTN-B, e preenche a chave
+            # "spread" nos dicionários em memória. Fica antes do
+            # `save_negocios_b3` de propósito -- quando o bruto também é
+            # guardado, ele apenas recalcula o mesmo valor, sem prejuízo.
+            dicts = [_como_dict(n) for n in negocios]
+            compute_trade_spreads(db, dicts)
+
             if manter_bruto:
                 save_negocios_b3(db, negocios)
 
-            linhas = agg.agregar_linhas([_como_dict(n) for n in negocios])
+            linhas = agg.agregar_linhas(dicts)
             agg.gravar_agregado(db, linhas)
 
             processados += 1

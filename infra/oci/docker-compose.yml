@@ -1,0 +1,81 @@
+# Postgres do Hub Credit Research na VM Always Free da OCI.
+#
+# DESENHO: o Postgres escuta SÓ em 127.0.0.1. Quem fala com a internet é o
+# PgBouncer, instalado na própria VM (não em contêiner) e terminando TLS --
+# ver ../pgbouncer/pgbouncer.ini. Assim a porta 5432 nunca fica exposta, e a
+# única coisa que um scanner encontra é o 6432 pedindo certificado.
+#
+# Por que o PgBouncer não está aqui: a VM é ARM64, e a imagem mais usada
+# (bitnami/pgbouncer) virou `bitnamilegacy` na mudança de catálogo da
+# Bitnami. Instalar por apt tira essa dependência do caminho e põe a
+# configuração em /etc/pgbouncer, que é onde todo tutorial (e toda IA)
+# espera encontrar.
+
+services:
+  postgres:
+    image: postgres:17
+    container_name: credit_pg
+    restart: unless-stopped
+    # 127.0.0.1 no bind é a linha mais importante deste arquivo.
+    ports:
+      - "127.0.0.1:5432:5432"
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+      # Locale pt_BR para ordenação de texto sair como o Allan espera.
+      # COLLATION IGUAL À DA ORIGEM (10/09/2026). A primeira versão usava
+      # `--locale=en_US.UTF-8`, que é mais rápida e imune à deriva de collation do
+      # glibc (quando o sistema atualiza, a ordenação muda e índices de texto
+      # podem ficar inconsistentes em silêncio). Boa escolha em abstrato,
+      # errada aqui: o Supabase de origem é `en_US.UTF-8`, e numa MIGRAÇÃO o
+      # padrão é não mudar comportamento. Em `C.UTF-8` o Postgres ordena por
+      # byte, e "Águas do Rio" cairia depois de "Zeus" -- as listas de setor e
+      # emissor mudariam de ordem sem ninguém ter pedido.
+      #
+      # Medido nos dois lados antes de decidir:
+      #   origem  (Supabase 17.6)  datcollate = en_US.UTF-8
+      #   destino (primeira tentativa) datcollate = C.UTF-8
+      LANG: en_US.utf8
+      POSTGRES_INITDB_ARGS: "--encoding=UTF8 --locale=C.UTF-8"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      # PG_CONF troca a configuracao sem editar este arquivo:
+      #   postgresql.conf       -> Ampere A1, 12 GB (padrao)
+      #   postgresql-micro.conf -> E2.1.Micro, 1 GB (plano B de capacidade)
+      - ./postgres/${PG_CONF:-postgresql.conf}:/etc/postgresql/postgresql.conf:ro
+      # Roda só na primeira subida (volume vazio) -- cria a extensão
+      # pg_stat_statements. Ver o comentário dentro do arquivo.
+      - ./postgres/initdb:/docker-entrypoint-initdb.d:ro
+    command: postgres -c config_file=/etc/postgresql/postgresql.conf
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "5" }
+
+  # Editor SQL e visualizador de tabelas -- o que se perde ao sair do
+  # Supabase. Fica em 127.0.0.1: você chega nele por túnel SSH
+  # (ver README, "Editor SQL"), não pela internet aberta.
+  adminer:
+    image: adminer:5
+    container_name: credit_adminer
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8080:8080"
+    environment:
+      ADMINER_DEFAULT_SERVER: postgres
+      ADMINER_DESIGN: dracula
+    depends_on:
+      postgres:
+        condition: service_healthy
+    logging:
+      driver: json-file
+      options: { max-size: "5m", max-file: "3" }
+
+volumes:
+  pgdata:
+    driver: local

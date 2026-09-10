@@ -116,7 +116,6 @@
     // disponível de verdade); se já tem uma data escolhida, a resposta
     // reflete ESSA data, não a mais recente, então não mexe no max.
     if (!visaoDataInput.value && data.data_referencia) visaoDataInput.max = data.data_referencia;
-    document.getElementById("kpi-data-ref").textContent = fmtData(data.data_referencia);
     document.getElementById("kpi-spread").textContent = data.spread_medio !== null ? `${data.spread_medio.toFixed(1)} bps` : "—";
     document.getElementById("kpi-spread-tag").textContent = data.spread_medio_fallback ? "sem estoque" : "pond. estoque";
     document.getElementById("kpi-n-ativos").textContent = data.n_ativos || "—";
@@ -135,8 +134,24 @@
       deltaEl.className = "kpi-delta " + (data.variacao_bps > 0.05 ? "up" : data.variacao_bps < -0.05 ? "down" : "flat");
     }
 
-    document.getElementById("nota-base-comparacao").textContent =
-      data.data_comparacao ? `Base de comparação: ${currentBase} (${fmtData(data.data_comparacao)})` : `Base de comparação: ${currentBase} — sem histórico suficiente ainda.`;
+    // ESTOQUE (09/09/2026). Vem em R$ milhões da captura; acima de mil vira
+    // bilhão, porque "1.347,2 mi" é mais difícil de ler do que "R$ 1,35 bi"
+    // num cartão que se lê de relance.
+    const est = data.estoque_total;
+    document.getElementById("kpi-estoque").textContent =
+      est === null || est === undefined ? "—"
+      : est >= 1000 ? `R$ ${(est / 1000).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} bi`
+      : `R$ ${est.toLocaleString("pt-BR", { maximumFractionDigits: 0 })} mi`;
+    document.getElementById("kpi-estoque-cobertura").textContent = data.estoque_cobertura || 0;
+
+    // A linha de contexto que sobrou no lugar dos textos que saíram: diz a
+    // data-base e contra o que se está comparando, e nada além disso.
+    document.getElementById("nota-base").textContent =
+      data.data_referencia
+        ? `Boletim de ${fmtData(data.data_referencia)}` +
+          (data.data_comparacao ? ` · comparado com ${fmtData(data.data_comparacao)} (${currentBase})`
+                                : ` · ${currentBase} sem histórico suficiente para comparar`)
+        : "Sem dado para a data selecionada.";
   }
 
   // ------------------------------------------------------------------
@@ -176,52 +191,19 @@
   // Gráfico 2 -- Variação de spreads (bps) x Duration, com aberturas/
   // fechamentos destacados (réplica do gráfico do relatório semanal)
   // ------------------------------------------------------------------
-  async function loadMoversAndScatter() {
-    const data = await fetchJSON("/api/spreads/movers", { classe: currentClasse, base: currentBase, top: 10, data: visaoDataInput.value || undefined });
-    const sub = `Variação de ${fmtData(data.data_comparacao)} até ${fmtData(data.data_referencia)} (${currentBase}) · Fonte: Anbima e Debentures.com`;
-    document.getElementById("scatter-sub").textContent = sub;
+  // ------------------------------------------------------------------
+  // Top 20 aberturas e fechamentos.
+  //
+  // O gráfico de dispersão (variação x duration) saiu em 09/09/2026 junto
+  // com o resto da simplificação -- as duas tabelas respondem a mesma
+  // pergunta de forma direta, e o `scatter` do payload deixou de ser lido
+  // (a rota continua devolvendo, sem custo extra de consulta).
+  // ------------------------------------------------------------------
+  async function loadMovers() {
+    const data = await fetchJSON("/api/spreads/movers", { classe: currentClasse, base: currentBase, top: 20, data: visaoDataInput.value || undefined });
+    const sub = `Variação de ${fmtData(data.data_comparacao)} a ${fmtData(data.data_referencia)} (${currentBase}) · Fonte: ANBIMA e Debentures.com`;
     document.getElementById("aberturas-sub").textContent = sub;
     document.getElementById("fechamentos-sub").textContent = sub;
-
-    const codigosAbertura = new Set((data.aberturas || []).map((r) => r.codigo));
-    const codigosFechamento = new Set((data.fechamentos || []).map((r) => r.codigo));
-
-    const pontosResto = [], pontosAbertura = [], pontosFechamento = [];
-    (data.scatter || []).forEach((r) => {
-      const ponto = { x: r.duration, y: r.variacao_bps, codigo: r.codigo, nome: r.nome };
-      if (codigosAbertura.has(r.codigo)) pontosAbertura.push(ponto);
-      else if (codigosFechamento.has(r.codigo)) pontosFechamento.push(ponto);
-      else pontosResto.push(ponto);
-    });
-
-    destroyChart("scatter");
-    const ctx = document.getElementById("chart-scatter").getContext("2d");
-    charts.scatter = new Chart(ctx, {
-      type: "scatter",
-      data: {
-        datasets: [
-          { label: "Demais ativos", data: pontosResto, backgroundColor: "rgba(150,150,150,0.35)", pointRadius: 3 },
-          { label: "Maiores fechamentos", data: pontosFechamento, backgroundColor: "#000000", pointRadius: 5 },
-          { label: "Maiores aberturas", data: pontosAbertura, backgroundColor: "#FF6200", pointRadius: 5 },
-        ],
-      },
-      options: {
-        responsive: true,
-        plugins: {
-          legend: { display: true, position: "bottom" },
-          tooltip: {
-            callbacks: {
-              label: (item) => `${item.raw.codigo} (${item.raw.nome || "sem nome"}): ${fmtBps(item.raw.y)}, duration ${item.raw.x?.toFixed(1)}a`,
-            },
-          },
-        },
-        scales: {
-          x: { title: { display: true, text: "Duration (anos)" }, grid: { color: "#eee" } },
-          y: { title: { display: true, text: "Variação (bps)" }, grid: { color: "#eee" } },
-        },
-      },
-    });
-
     renderMoversTable("tabela-aberturas", data.aberturas || [], "cell-abertura");
     renderMoversTable("tabela-fechamentos", data.fechamentos || [], "cell-fechamento");
   }
@@ -230,7 +212,7 @@
     const tbody = document.querySelector(`#${tableId} tbody`);
     tbody.innerHTML = "";
     if (rows.length === 0) {
-      tbody.innerHTML = '<tr><td colspan="5" class="muted">Sem dado suficiente pra esse período ainda.</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="4" class="muted">Sem dado suficiente para esse período ainda.</td></tr>';
       return;
     }
     rows.forEach((r) => {
@@ -240,9 +222,8 @@
       tr.innerHTML = `
         <td><strong>${r.codigo}</strong></td>
         <td>${r.nome || "—"}</td>
-        <td>${r.spread.toFixed(1)}</td>
-        <td class="${cellClass}">${fmtBps(r.variacao_bps)}</td>
-        <td>${r.duration !== null ? r.duration.toFixed(1) + "a" : "—"}</td>
+        <td style="text-align:right;">${r.spread.toFixed(1)}</td>
+        <td class="${cellClass}" style="text-align:right;">${fmtBps(r.variacao_bps)}</td>
       `;
       tr.addEventListener("click", () => openDrilldown(r.codigo, r.nome));
       tbody.appendChild(tr);
@@ -250,82 +231,92 @@
   }
 
   // ------------------------------------------------------------------
-  // Gráfico 3 -- Evolução da variação de spreads (% da base, barras
-  // empilhadas). O STEP entre as barras é a própria base de comparação
-  // selecionada (d-1 = últimos 5 dias, MoM = últimos 5 meses etc.) --
-  // pedido do Allan, 24/07/2026.
+  // Spread por setor, com drill-down (09/09/2026)
+  //
+  // Três níveis na MESMA tabela: setor -> subsetor -> ticker. O estado do
+  // drill-down vive aqui em `setorNivel/setorAtual/subsetorAtual`, não na
+  // URL: é navegação dentro de uma tela, e voltar para "todos os setores"
+  // tem que ser um clique, não um recarregamento.
+  //
+  // A ordenação vem pronta do servidor (maior abertura primeiro) -- é a
+  // ordem que responde "o que se moveu", que é a pergunta que traz alguém
+  // a esta tabela.
   // ------------------------------------------------------------------
-  async function loadDistributionChart() {
-    const { snapshots } = await fetchJSON("/api/spreads/movement-distribution", { classe: currentClasse, base: currentBase, data: visaoDataInput.value || undefined });
-    document.getElementById("dist-sub").textContent =
-      `Composição da base por faixa de variação, últimos ${snapshots.length || 5} períodos em base ${currentBase} · Fonte: Anbima e Debentures.com`;
-    destroyChart("distribution");
-    const ctx = document.getElementById("chart-distribution").getContext("2d");
-    if (!snapshots.length) {
-      charts.distribution = null;
-      ctx.canvas.parentElement.querySelector(".muted-msg")?.remove();
-      const msg = document.createElement("p");
-      msg.className = "muted small muted-msg";
-      msg.textContent = "Histórico ainda curto demais pra essa base de comparação (precisa de mais dias capturados).";
-      ctx.canvas.after(msg);
+  let setorNivel = "setor";
+  let setorAtual = null;
+  let subsetorAtual = null;
+
+  function renderTrilhaSetor() {
+    const trilha = document.getElementById("setor-trilha");
+    const col = document.getElementById("setor-col-rotulo");
+    if (setorNivel === "setor") {
+      trilha.innerHTML = "";
+      col.textContent = "Setor";
       return;
     }
-    document.querySelector(".muted-msg")?.remove();
-    const labels = Object.keys(snapshots[0]).filter((k) => k !== "data" && k !== "data_comparacao" && k !== "n_ativos");
-    const cores = ["#1a7f4e", "#8fd4b0", "#ffd9b8", "#a4302a"]; // tightening forte -> widening forte
-    charts.distribution = new Chart(ctx, {
-      type: "bar",
-      data: {
-        labels: snapshots.map((s) => fmtData(s.data)),
-        datasets: labels.map((label, i) => ({
-          label,
-          data: snapshots.map((s) => s[label]),
-          backgroundColor: cores[i] || "#999",
-        })),
-      },
-      options: {
-        responsive: true,
-        plugins: { legend: { display: true, position: "bottom" } },
-        scales: {
-          x: { stacked: true, grid: { display: false } },
-          y: { stacked: true, title: { display: true, text: "% da base de ativos" }, grid: { color: "#eee" } },
-        },
-      },
+    const partes = ['<a href="#" data-nivel="setor">Todos os setores</a>'];
+    if (setorNivel === "ticker") {
+      partes.push(`<a href="#" data-nivel="subsetor">${setorAtual}</a>`);
+      partes.push(`<b>${subsetorAtual}</b>`);
+      col.textContent = "Ticker";
+    } else {
+      partes.push(`<b>${setorAtual}</b>`);
+      col.textContent = "Subsetor";
+    }
+    trilha.innerHTML = "› " + partes.join(" › ");
+    trilha.querySelectorAll("a").forEach((a) => {
+      a.addEventListener("click", (ev) => {
+        ev.preventDefault();
+        const destino = a.dataset.nivel;
+        if (destino === "setor") { setorNivel = "setor"; setorAtual = null; subsetorAtual = null; }
+        else { setorNivel = "subsetor"; subsetorAtual = null; }
+        loadSetor();
+      });
     });
   }
 
-  // ------------------------------------------------------------------
-  // Busca + drill-down de um ativo específico
-  // ------------------------------------------------------------------
-  let buscaTimer = null;
-  buscaInput.addEventListener("input", () => {
-    clearTimeout(buscaTimer);
-    const q = buscaInput.value.trim();
-    if (!q) {
-      buscaResultados.style.display = "none";
-      return;
-    }
-    buscaTimer = setTimeout(async () => {
-      const { results } = await fetchJSON("/api/spreads/search", { q, classe: currentClasse });
-      buscaResultados.innerHTML = "";
-      if (results.length === 0) {
-        buscaResultados.innerHTML = '<div class="search-item muted">Nada encontrado nesta classe.</div>';
+  async function loadSetor() {
+    const data = await fetchJSON("/api/spreads/por-setor", {
+      classe: currentClasse, base: currentBase, data: visaoDataInput.value || undefined,
+      nivel: setorNivel, setor: setorAtual || undefined, subsetor: subsetorAtual || undefined,
+    });
+    renderTrilhaSetor();
+
+    const tbody = document.querySelector("#tabela-setor tbody");
+    const vazio = document.getElementById("setor-vazio");
+    tbody.innerHTML = "";
+    const linhas = data.linhas || [];
+    vazio.style.display = linhas.length ? "none" : "";
+
+    linhas.forEach((l) => {
+      const tr = document.createElement("tr");
+      const podeDescer = setorNivel !== "ticker";
+      if (podeDescer) {
+        tr.style.cursor = "pointer";
+        tr.title = setorNivel === "setor" ? "Abrir os subsetores" : "Ver os tickers";
       } else {
-        results.forEach((r) => {
-          const div = document.createElement("div");
-          div.className = "search-item";
-          div.innerHTML = `<span><strong>${r.codigo}</strong></span><span class="nome">${r.nome || ""}</span>`;
-          div.addEventListener("click", () => {
-            openDrilldown(r.codigo, r.nome);
-            buscaResultados.style.display = "none";
-            buscaInput.value = "";
-          });
-          buscaResultados.appendChild(div);
-        });
+        tr.style.cursor = "pointer";
+        tr.title = "Ver a série histórica deste papel";
       }
-      buscaResultados.style.display = "block";
-    }, 300);
-  });
+      const varCls = l.variacao_bps === null ? "" : l.variacao_bps > 0 ? "cell-abertura" : l.variacao_bps < 0 ? "cell-fechamento" : "";
+      const rotulo = setorNivel === "ticker"
+        ? `<strong>${l.rotulo}</strong>${l.nome ? ` <span class="muted">${l.nome}</span>` : ""}`
+        : l.rotulo + (podeDescer ? ' <span class="muted">›</span>' : "");
+      tr.innerHTML = `
+        <td>${rotulo}</td>
+        <td style="text-align:right;">${l.n_ativos}</td>
+        <td style="text-align:right;">${l.estoque !== null ? l.estoque.toLocaleString("pt-BR", { maximumFractionDigits: 0 }) : "—"}</td>
+        <td style="text-align:right;">${l.spread_medio !== null ? l.spread_medio.toFixed(1) : "—"}</td>
+        <td class="${varCls}" style="text-align:right;">${l.variacao_bps !== null ? fmtBps(l.variacao_bps) : "—"}</td>
+      `;
+      tr.addEventListener("click", () => {
+        if (setorNivel === "setor") { setorAtual = l.rotulo; setorNivel = "subsetor"; loadSetor(); }
+        else if (setorNivel === "subsetor") { subsetorAtual = l.rotulo; setorNivel = "ticker"; loadSetor(); }
+        else { openDrilldown(l.rotulo, l.nome); }
+      });
+      tbody.appendChild(tr);
+    });
+  }
 
   async function openDrilldown(codigo, nome) {
     currentDrilldownCodigo = codigo;
@@ -455,7 +446,7 @@
   // Orquestração / eventos dos toggles da Visão Geral
   // ------------------------------------------------------------------
   async function reloadAll() {
-    await Promise.all([loadKPI(), loadSeriesChart(), loadMoversAndScatter(), loadDistributionChart()]);
+    await Promise.all([loadKPI(), loadSeriesChart(), loadSetor(), loadMovers()]);
   }
 
   classeTabs.forEach((btn) => {
@@ -463,6 +454,11 @@
       classeTabs.forEach((b) => b.classList.remove("active"));
       btn.classList.add("active");
       currentClasse = btn.dataset.classe;
+      // Trocar de classe volta o drill-down para o topo: os setores de
+      // "IPCA + Incentivadas" e "CDI + Tradicionais" não são os mesmos, e
+      // ficar dentro de um subsetor que não existe na outra classe daria
+      // tabela vazia sem explicação.
+      setorNivel = "setor"; setorAtual = null; subsetorAtual = null;
       drilldownWrap.style.display = "none";
       destroyChart("drilldown");
       reloadAll();
@@ -475,19 +471,19 @@
       btn.classList.add("active");
       currentBase = btn.dataset.base;
       loadKPI();
-      loadMoversAndScatter();
-      loadDistributionChart();
+      loadSetor();
+      loadMovers();
     });
   });
 
   // Campo de data da Visão Geral (pedido do Allan, 27/07/2026) -- não mexe
-  // no gráfico "Evolução do Spread Médio" (linha de tendência mostra o
-  // histórico inteiro de qualquer forma), só nos KPIs/movers/distribuição,
-  // que passam a olhar "como se hoje fosse" a data escolhida.
+  // no gráfico de evolução (a linha mostra o histórico inteiro de qualquer
+  // forma), só nos cartões, na tabela de setor e nos movers, que passam a
+  // olhar "como se hoje fosse" a data escolhida.
   visaoDataInput.addEventListener("change", () => {
     loadKPI();
-    loadMoversAndScatter();
-    loadDistributionChart();
+    loadSetor();
+    loadMovers();
   });
 
   reloadAll();
@@ -507,9 +503,6 @@
   const emissorNivelTabs = document.querySelectorAll("#emissor-nivel-tabs .win-btn");
   const emissorVazio = document.getElementById("emissor-vazio");
   const emissorConteudo = document.getElementById("emissor-conteudo");
-  const emissorRankingWrap = document.getElementById("emissor-ranking-wrap");
-  const emissorRankingDataInput = document.getElementById("emissor-ranking-data");
-  const emissorRankingDadosAte = document.getElementById("emissor-ranking-dados-ate");
 
   let emissoresDisponiveis = [];
   let currentEmissores = []; // selecao multipla, pedido do Allan 24/07/2026
@@ -526,9 +519,6 @@
       painelEmissores.style.display = secao === "emissores" ? "block" : "none";
       if (secao === "emissores" && !emissoresCarregados) {
         carregarListaEmissores();
-      }
-      if (secao === "emissores" && !currentEmissores.length) {
-        loadEmissorRanking();
       }
     });
   });
@@ -562,12 +552,10 @@
   function atualizarPainelEmissor() {
     if (!currentEmissores.length) {
       emissorVazio.style.display = "block";
-      emissorRankingWrap.style.display = "block";
       emissorConteudo.style.display = "none";
       return;
     }
     emissorVazio.style.display = "none";
-    emissorRankingWrap.style.display = "none";
     emissorConteudo.style.display = "block";
     reloadEmissor();
   }
@@ -581,39 +569,11 @@
     return v !== null && v !== undefined ? v.toLocaleString("pt-BR", { minimumFractionDigits: 1, maximumFractionDigits: 1 }) : "—";
   }
 
-  function renderRankingTabela(tableId, rows, cellClass) {
-    const tbody = document.querySelector(`#${tableId} tbody`);
-    tbody.innerHTML = "";
-    if (!rows.length) {
-      tbody.innerHTML = '<tr><td colspan="4" class="muted">Sem emissor com negócio B3 recente o bastante nessa classe.</td></tr>';
-      return;
-    }
-    rows.forEach((r) => {
-      const tr = document.createElement("tr");
-      tr.innerHTML = `
-        <td><strong>${r.emissor}</strong></td>
-        <td>${fmtBpsSimples(r.anbima_spread)}</td>
-        <td>${fmtBpsSimples(r.b3_spread_7d)}</td>
-        <td class="${cellClass}">${fmtBps(r.variacao_bps)}</td>
-      `;
-      tbody.appendChild(tr);
-    });
-  }
+  // `loadEmissorRanking` e `renderRankingTabela` saíram em 09/09/2026 junto
+  // com o bloco de ranking B3 x Anbima da tela inicial -- ver o comentário
+  // no template. A rota e a consulta continuam existindo; o que deixou de
+  // acontecer é a chamada automática ao abrir a aba.
 
-  async function loadEmissorRanking() {
-    const data = await fetchJSON("/api/spreads/emissor/ranking-diferencas", {
-      classe: currentEmissorClasse, top: 15, data: emissorRankingDataInput.value || undefined,
-    });
-    renderRankingTabela("tabela-ranking-aberturas", data.aberturas || [], "cell-abertura");
-    renderRankingTabela("tabela-ranking-fechamentos", data.fechamentos || [], "cell-fechamento");
-    emissorRankingDadosAte.textContent = `Dados até: ${fmtData(data.data_referencia)}`;
-    // Trava o campo pra não deixar escolher além do que existe -- só
-    // quando ainda vazio (mesma lógica do campo "Data analisada" da
-    // Visão Geral, ver loadKPI()).
-    if (!emissorRankingDataInput.value && data.data_referencia) emissorRankingDataInput.max = data.data_referencia;
-  }
-
-  emissorRankingDataInput.addEventListener("change", loadEmissorRanking);
 
   emissorBusca.addEventListener("input", () => {
     const q = emissorBusca.value.trim().toLowerCase();
@@ -663,8 +623,6 @@
         // por classe (bug corrigido, ver loadEmissorNegociacoes), então
         // precisa recarregar ao trocar de classe igual aos outros dois.
         loadEmissorNegociacoes();
-      } else {
-        loadEmissorRanking();
       }
     });
   });

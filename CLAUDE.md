@@ -11,8 +11,8 @@ usuário/senha, cadastro com confirmação por e-mail, painel administrativo
 (usuários/sessões), varredura automática a cada 5 minutos + botão de forçar
 atualização, filtros por janela de tempo (24h / 5 dias / 1 mês).
 
-Inspirado no projeto **clipinator** (equity research de S&M/P&P/Cimento do
-Itaú BBA), mas generalizado: em vez de keywords fixas por fonte, aqui a
+Inspirado no projeto **clipinator** (equity research de S&M/P&P/Cimento),
+mas generalizado: em vez de keywords fixas por fonte, aqui a
 cobertura é **setor → empresas → keywords/aliases**, e qualquer fonte pode
 mencionar qualquer empresa coberta — o motor de relevância é sempre "essa
 notícia menciona uma empresa/termo que cobrimos?", não "essa fonte é sobre
@@ -2196,8 +2196,8 @@ a correção.
 
 ### O que o relatório semanal do Allan tem que este dashboard NÃO cobre
 
-Allan é analista do time de Renda Fixa do Itaú BBA e anexou o relatório
-semanal do time (`RENDA FIXA — 20/07/2026`) como referência visual. Vários
+Allan é analista de Renda Fixa e anexou o relatório semanal do time
+(`RENDA FIXA — 20/07/2026`) como referência visual. Vários
 gráficos de lá **não são cobertos** por este módulo porque dependem de
 fontes de dado completamente diferentes das 4 que o script original usa:
 - **Spread médio por RATING** (AAA / Total ex-AAA / Total) — precisaria de

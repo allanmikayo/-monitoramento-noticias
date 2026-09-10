@@ -22,10 +22,25 @@ vez que adicionar tabela ou coluna nova em models.py.
 """
 from __future__ import annotations
 
+import faulthandler
+import io
 import sys
+import traceback
+from datetime import datetime
+from pathlib import Path
 
-from app.db import Base, engine, ensure_schema
+from app.db import Base, criar_engine_manutencao, ensure_schema
 from app import models  # noqa: F401 — precisa importar pro metadata registrar tudo
+
+# NÃO usar o `engine` de `app.db`: aquele é o da Vercel (pooler em modo
+# TRANSAÇÃO, porta 6543, NullPool, 8s de connect_timeout). Em 09/09/2026 foi
+# ele que fez este script morrer em
+#     (ECHECKOUTTIMEOUT) unable to check out connection from the pool
+#     after 15000ms in Transaction mode
+# antes de chegar em qualquer migração -- enquanto a MESMA execução, com
+# `:5432` forçado na variável de ambiente, conectava e rodava o DDL inteiro.
+# `criar_engine_manutencao` faz essa troca para o pooler de SESSÃO sozinha.
+engine = criar_engine_manutencao()
 
 # ÍNDICES QUE PRECISAM DE DDL EXPLÍCITO (08/09/2026).
 #
@@ -45,6 +60,11 @@ INDICES = [
         "CREATE INDEX IF NOT EXISTS ix_articles_data "
         "ON articles (coalesce(published_at, found_at) DESC)",
     ),
+    (
+        "ix_debenture_taxonomia",
+        "CREATE INDEX IF NOT EXISTS ix_debenture_taxonomia "
+        "ON debentures (classe, setor, subsetor)",
+    ),
 ]
 
 
@@ -55,6 +75,63 @@ def _indice_existe(nome: str) -> bool:
         else:
             sql = "select count(*) from sqlite_master where type='index' and name = '%s'" % nome
         return bool(conn.exec_driver_sql(sql).scalar())
+
+
+def conferir_colunas() -> list[str]:
+    """Compara as colunas do MODELO com as que existem no banco de verdade.
+
+    POR QUE (09/09/2026). O `init_db` de hoje disse "OK" com três colunas
+    faltando -- `run_migrations` tinha engolido a falha, e o problema só
+    apareceu depois, na criação de um índice que dependia delas. A mensagem
+    apontava para o índice, não para a causa.
+
+    UMA CONSULTA, NÃO 29 (mesma data, mais tarde). A primeira versão usava
+    `inspect(engine).get_columns(nome)` numa volta por tabela -- 29 idas ao
+    banco, cada uma reflexão completa do SQLAlchemy. Num banco saturado isso
+    é 29 chances de estourar o tempo. `_catalogo_colunas` responde tudo de
+    uma vez, e é o mesmo mapa que as migrações já usam.
+    """
+    from app.db import _catalogo_colunas
+
+    nomes = list(Base.metadata.tables)
+    catalogo = _catalogo_colunas(engine, nomes)
+    if catalogo is None:  # SQLite -- cai na reflexão, que lá é barata
+        from sqlalchemy import inspect
+
+        inspetor = inspect(engine)
+        catalogo = {n: {c["name"]: None for c in inspetor.get_columns(n)}
+                    for n in inspetor.get_table_names()}
+
+    faltando: list[str] = []
+    for nome, tabela in Base.metadata.tables.items():
+        no_banco = catalogo.get(nome)
+        if no_banco is None:
+            continue  # tabela inexistente já é reportada em outro lugar
+        faltando.extend(
+            f"{nome}.{coluna.name}" for coluna in tabela.columns
+            if coluna.name not in no_banco
+        )
+    return faltando
+
+
+def _colunas_sem_migracao(faltando: list[str]) -> set[str]:
+    """Quais das colunas ausentes nem sequer tem um ALTER escrito.
+
+    Distingue "o comando falhou" de "o comando nao existe" -- que pedem
+    reacoes opostas: tentar de novo, ou escrever a migracao.
+    """
+    import inspect as _inspect
+    import re
+
+    from app import db as _db
+
+    fonte = _inspect.getsource(_db.run_migrations)
+    previstas = set()
+    for comando in re.findall(r'^\s+"(ALTER TABLE [^"]+)"', fonte, re.M):
+        m = _db._RE_ADD.match(comando)
+        if m:
+            previstas.add(f"{m.group(1)}.{m.group(2)}")
+    return {c for c in faltando if c not in previstas}
 
 
 def criar_indices() -> None:
@@ -77,7 +154,10 @@ def criar_indices() -> None:
     for nome, ddl in INDICES:
         try:
             with engine.connect() as conn:
-                conn.exec_driver_sql("SET statement_timeout = '15min'")
+                # `SET statement_timeout` é do Postgres; no SQLite local o
+                # comando nem existe (e não há limite de tempo pra estourar).
+                if engine.dialect.name == "postgresql":
+                    conn.exec_driver_sql("SET statement_timeout = '15min'")
                 conn.exec_driver_sql(ddl)
                 conn.commit()
         except Exception as exc:  # noqa: BLE001
@@ -97,42 +177,217 @@ def criar_indices() -> None:
         print("     (fora do horario dos jobs noturnos).")
 
 
+def conferir_conexao() -> bool:
+    """Uma conexão de teste antes de qualquer trabalho.
+
+    POR QUE. Sem isto, um banco fora do ar vira um traceback de noventa
+    linhas cujo topo diz `select pg_catalog.version()` -- o que faz procurar
+    defeito no script. A pergunta que interessa ("o banco atendeu?") tem que
+    ser respondida na primeira linha da saída.
+    """
+    try:
+        with engine.connect() as conn:
+            versao = conn.exec_driver_sql("select version()").scalar()
+    except Exception as exc:  # noqa: BLE001
+        texto = str(exc)
+        print("  NAO CONECTOU.")
+        print(f"  {type(exc).__name__}: {texto.splitlines()[0][:180]}")
+        if "ECHECKOUTTIMEOUT" in texto:
+            print("     O pooler nao tinha conexao livre para dar. E saturacao do")
+            print("     projeto, nao problema do script. Espere alguns minutos,")
+            print("     ou pause os jobs do cron-job.org, e rode de novo.")
+        elif "authentication did not complete" in texto:
+            print("     A conexao abriu mas o handshake nao terminou -- a instancia")
+            print("     esta sem folga de CPU. Mesma receita: esperar ou aliviar a carga.")
+        elif "password" in texto.lower() or "role" in texto.lower():
+            print("     Parece credencial. Confira o DATABASE_URL do .env.")
+        return False
+    print(f"  ok -- {str(versao).split(' on ')[0]}")
+    return True
+
+
+def dropar_views() -> None:
+    """Tira as views da frente antes do DDL nas tabelas de base.
+
+    POR QUE (09/09/2026). Uma view guarda dependência nas COLUNAS que ela
+    seleciona, e o Postgres recusa mexer no tipo de qualquer uma delas:
+
+        cannot alter type of a column used by a view or rule
+        DETAIL: rule _RETURN on view v_spread_rating depends on column "codigo"
+
+    Os `ALTER COLUMN ... TYPE` de `debentures` batiam nisso desde que a
+    view nasceu (04/08/2026) -- em silêncio, porque `run_migrations`
+    engolia exceção. Hoje o catálogo faz esses comandos nem saírem quando
+    a coluna já está larga, que é o caso normal; este drop é para o dia em
+    que o alargamento for de verdade necessário.
+
+    É seguro porque `criar_views` é DROP + CREATE (idempotente) e roda no
+    `finally` do `main`, então a view volta mesmo se o DDL do meio falhar.
+    """
+    from app.spreads.views import VIEWS
+
+    with engine.connect() as conn:
+        for nome in VIEWS:
+            conn.exec_driver_sql(f"DROP VIEW IF EXISTS {nome}")
+            conn.commit()
+    print(f"  removidas: {', '.join(VIEWS)}")
+
+
+def recriar_views() -> None:
+    """Recria as views. Nunca levanta -- ela roda no `finally`, e uma
+    exceção aqui esconderia a falha de verdade que trouxe o script até
+    aqui. Se falhar, grita, porque a aba Banco de Dados e o
+    `app/spreads/analitico.py` leem `v_spread_rating`."""
+    try:
+        from app.spreads.views import criar_views
+
+        criadas = criar_views(engine)
+        print(f"  recriadas: {', '.join(criadas)}")
+    except Exception as exc:  # noqa: BLE001
+        print(f"  !! FALHOU ao recriar as views -- {type(exc).__name__}: {str(exc)[:200]}")
+        print("     `v_spread_rating` NAO esta no banco. Rode de novo; a aba")
+        print("     Banco de Dados e o analitico dependem dela.")
+
+
 def main() -> int:
     destino = str(engine.url).split("@")[-1]  # sem usuário/senha no log
     print(f"Banco: ...@{destino}")
+    from app.db import DATABASE_URL, PORTA_POOLER_SESSAO, PORTA_POOLER_TRANSACAO
+
+    if f":{PORTA_POOLER_TRANSACAO}/" in DATABASE_URL and engine.url.port == PORTA_POOLER_SESSAO:
+        print(f"  (o .env aponta para {PORTA_POOLER_TRANSACAO}, o pooler de transacao;")
+        print(f"   DDL vai pelo de sessao, {PORTA_POOLER_SESSAO} -- ver criar_engine_manutencao)")
     print(f"Tabelas registradas no modelo: {len(Base.metadata.tables)}")
+
+    print("Conferindo a conexao...")
+    if not conferir_conexao():
+        return 1
 
     from sqlalchemy import inspect
     antes = set(inspect(engine).get_table_names())
 
-    print("Criando o que falta...")
-    ensure_schema(force=True)
+    # A view `v_spread_rating` mora aqui desde 20/08/2026 (a etapa `periodos`
+    # da rodada noturna, onde ela era criada, saiu junto com o pipeline de
+    # ratings). Como ela trava `ALTER COLUMN` nas tabelas de base, sai antes
+    # do DDL e volta no `finally` -- ver dropar_views().
+    print("Removendo views (elas travam ALTER COLUMN nas tabelas de base)...")
+    dropar_views()
 
-    depois = set(inspect(engine).get_table_names())
-    novas = sorted(depois - antes)
-    print(f"  criadas agora: {', '.join(novas) if novas else '(nenhuma, já estava tudo lá)'}")
+    faltando: list[str] = []
+    depois = antes  # se o DDL abaixo explodir, o `finally` ainda precisa rodar
+    try:
+        print("Criando o que falta...")
+        ensure_schema(force=True, eng=engine)
 
-    # (as migrações de coluna já rodaram dentro do ensure_schema acima)
-    print("Criando índices que faltam...")
-    criar_indices()
+        depois = set(inspect(engine).get_table_names())
+        novas = sorted(depois - antes)
+        print(f"  criadas agora: {', '.join(novas) if novas else '(nenhuma, já estava tudo lá)'}")
 
-    # A view `v_spread_rating` era criada dentro da etapa `periodos` da
-    # rodada noturna. Essa etapa saiu em 20/08/2026 junto com o pipeline de
-    # ratings, então a criação da view mudou de lugar para cá -- é aqui que
-    # mora o resto do DDL. A view continua sendo lida por
-    # app/spreads/analitico.py e pela aba Banco de Dados; ela funciona com a
-    # tabela de ratings vazia (as colunas de rating só ficam nulas).
-    print("Criando/atualizando views...")
-    from app.spreads.views import criar_views
-    criar_views(engine)
+        # (as migrações de coluna já rodaram dentro do ensure_schema acima)
+        print("Conferindo colunas do modelo contra o banco...")
+        faltando = conferir_colunas()
+        if faltando:
+            print(f"  !! {len(faltando)} coluna(s) do models.py NÃO existem no banco:")
+            # DUAS CAUSAS DIFERENTES, e a diferença é tudo (09/09/2026).
+            #
+            # A mensagem antiga dizia sempre "rode de novo com o banco
+            # respondendo". Numa execução em que o banco respondia
+            # perfeitamente e faltavam `securitizados.setor/subsetor/
+            # grupo_economico`, isso mandou o Allan para o lado errado: não
+            # havia ALTER nenhum para aquelas três colunas. Nenhuma
+            # quantidade de tentar de novo cria o que ninguém pediu.
+            sem_migracao = _colunas_sem_migracao(faltando)
+            for item in faltando:
+                marca = "   <-- NAO HA MIGRACAO PARA ESTA" if item in sem_migracao else ""
+                print(f"     - {item}{marca}")
+            print("     Índices e consultas que dependem delas vão falhar.")
+            if sem_migracao:
+                print()
+                print("     As marcadas acima estao no models.py e NAO tem ALTER em")
+                print("     app/db.py::run_migrations. Rodar de novo nao resolve --")
+                print("     o comando que as criaria nao existe. Falta acrescentar la:")
+                for item in sorted(sem_migracao):
+                    tabela, coluna = item.split(".", 1)
+                    print(f'       "ALTER TABLE {tabela} ADD COLUMN {coluna} <TIPO>",')
+            if set(faltando) - sem_migracao:
+                print("     As demais tem migracao: o comando saiu e nao pegou.")
+                print("     Rode de novo com o banco menos ocupado.")
+        else:
+            print("  todas as colunas do modelo existem no banco")
 
-    faltando = sorted(set(Base.metadata.tables) - depois)
+        print("Criando índices que faltam...")
+        criar_indices()
+    finally:
+        print("Recriando views...")
+        recriar_views()
+
+    tabelas_faltando = sorted(set(Base.metadata.tables) - depois)
+    if tabelas_faltando:
+        print(f"AVISO: ainda faltam as tabelas {tabelas_faltando}")
+        return 1
     if faltando:
-        print(f"AVISO: ainda faltam {faltando}")
         return 1
     print(f"OK — {len(depois)} tabelas no banco.")
     return 0
 
 
+# ---------------------------------------------------------------------------
+# Saída em arquivo, além da tela (09/09/2026)
+#
+# POR QUE. A execução de 08/09 parou logo depois de "Tabelas registradas no
+# modelo: 29" e não deu para saber se o script morreu ali ou se só a
+# colagem da janela do PowerShell tinha sido cortada. Duas coisas muito
+# diferentes: a primeira seria o mesmo `Segmentation fault` que derrubou os
+# jobs no GitHub, agora também na máquina local; a segunda, nada.
+#
+# Agora tudo que aparece na tela vai junto para `data/init_db.txt`, com
+# flush a cada linha -- então mesmo um processo abatido no meio deixa
+# escrito até onde chegou. E o `faulthandler` aponta o mesmo arquivo: se for
+# segfault, a pilha cai lá dentro em vez de sumir com a janela.
+# ---------------------------------------------------------------------------
+
+LOG = Path(__file__).resolve().parent.parent / "data" / "init_db.txt"
+
+
+class _Tee:
+    """Escreve nos dois lugares e dá flush em cada linha."""
+
+    def __init__(self, *saidas):
+        self.saidas = saidas
+
+    def write(self, texto):
+        for saida in self.saidas:
+            try:
+                saida.write(texto)
+                saida.flush()
+            except Exception:  # noqa: BLE001 -- console do Windows com acento
+                pass
+        return len(texto)
+
+    def flush(self):
+        for saida in self.saidas:
+            try:
+                saida.flush()
+            except Exception:  # noqa: BLE001
+                pass
+
+
 if __name__ == "__main__":
-    sys.exit(main())
+    LOG.parent.mkdir(parents=True, exist_ok=True)
+    with io.open(LOG, "w", encoding="utf-8") as arquivo:
+        # O faulthandler precisa de um arquivo próprio aberto o tempo todo:
+        # ele escreve a pilha SEM passar pelo Python, direto no descritor.
+        faulthandler.enable(file=arquivo)
+        original = sys.stdout
+        sys.stdout = _Tee(original, arquivo)
+        try:
+            arquivo.write(f"init_db -- {datetime.now().astimezone():%d/%m/%Y %H:%M:%S}\n")
+            codigo = main()
+        except Exception:
+            traceback.print_exc(file=arquivo)
+            traceback.print_exc(file=original)
+            codigo = 1
+        finally:
+            sys.stdout = original
+            print(f"\n(relatorio completo em {LOG})")
+    sys.exit(codigo)

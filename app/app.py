@@ -13,6 +13,7 @@ from fastapi import Cookie, Depends, FastAPI, Form, Header, HTTPException, Query
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
+from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session, selectinload
 
 from . import auth, config, refresh_state, store
@@ -178,6 +179,43 @@ app.include_router(register_cobertura_routes(current_user))
 from .spreads.banco_routes import registrar_rotas as _registrar_banco  # noqa: E402
 
 _registrar_banco(app, require_admin, templates)
+
+
+@app.exception_handler(OperationalError)
+async def _banco_indisponivel(request: Request, exc: OperationalError):
+    """Banco fora do ar vira uma página explicando, não Internal Server Error.
+
+    ERRO REAL (20/08/2026, log da Vercel):
+
+        psycopg.errors.ConnectionFailure: Failed to connect to database:
+        authentication did not complete within 15000ms
+        [SQL: select pg_catalog.version()]
+
+    Ou seja, falhava ao ABRIR a conexão -- antes de qualquer consulta da
+    aplicação, dentro do `current_user`. Como isso sobe de uma dependência
+    do FastAPI, todas as rotas caem juntas e o usuário via só "Internal
+    Server Error", sem nenhuma pista de que o problema era o Supabase.
+
+    Causa provável: o Disk IO Budget do projeto no Supabase esgotado -- o
+    próprio alerta deles avisa que "your instance may become unresponsive".
+    """
+    logging.getLogger(__name__).error(
+        "banco indisponível em %s: %s", request.url.path, exc)
+    return HTMLResponse(
+        """<!doctype html><html lang="pt-BR"><head><meta charset="utf-8">
+        <title>Banco indisponível</title>
+        <link rel="stylesheet" href="/static/style.css"></head><body>
+        <div style="max-width:560px;margin:80px auto;padding:0 20px;">
+          <h1 style="font-size:1.3rem;">Banco de dados indisponível</h1>
+          <p>O site não conseguiu se conectar ao banco. Isso costuma ser
+             temporário — recarregue em alguns instantes.</p>
+          <p class="muted small">Se persistir, verifique o consumo de
+             <b>Disk IO</b> no painel do Supabase: com o orçamento esgotado a
+             instância para de aceitar conexões.</p>
+          <p><a href="/">Voltar ao início</a></p>
+        </div></body></html>""",
+        status_code=503,
+    )
 
 
 @app.exception_handler(HTTPException)

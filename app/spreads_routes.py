@@ -129,6 +129,25 @@ def register_spreads_routes(require_user_dep) -> APIRouter:
             data_referencia=_parse_data(data),
         )
 
+    @router.get("/api/spreads/por-setor")
+    def api_spreads_por_setor(
+        classe: str, base: str = "WoW", data: str | None = None,
+        nivel: str = "setor", setor: str | None = None, subsetor: str | None = None,
+        user: User | None = Depends(require_user_dep), db: Session = Depends(get_db),
+    ):
+        """Spread por setor com drill-down: setor -> subsetor -> ticker.
+
+        `nivel` fora dos três valores conhecidos cai em "setor" em vez de
+        estourar -- é parâmetro de URL, e o pior que um valor errado deve
+        causar é ver a tela de cima.
+        """
+        if nivel not in ("setor", "subsetor", "ticker"):
+            nivel = "setor"
+        return queries.spread_por_setor(
+            db, _validar_classe(classe), dias_comparacao=_validar_base(base),
+            data_referencia=_parse_data(data), nivel=nivel, setor=setor, subsetor=subsetor,
+        )
+
     @router.get("/api/spreads/movement-distribution")
     def api_spreads_movement_distribution(
         classe: str, base: str = "WoW", data: str | None = None,

@@ -1,0 +1,14 @@
+-- Roda UMA vez, na primeira inicialização do contêiner (volume vazio).
+--
+-- POR QUE ISTO EXISTE. `shared_preload_libraries = 'pg_stat_statements'` no
+-- postgresql.conf carrega a BIBLIOTECA, mas não cria a EXTENSÃO dentro do
+-- banco -- são duas coisas diferentes, e a segunda não acontece sozinha.
+--
+-- Descoberto testando: o servidor subiu limpo, sem um aviso sequer no log, e
+-- `SELECT ... FROM pg_stat_statements` respondeu "relation does not exist".
+-- No Supabase a extensão já vinha criada, então `scripts/diagnostico_banco.py`
+-- e `scripts/estado_dos_robos.py` funcionavam sem ninguém pensar nisso. Sem
+-- esta linha, os dois quebrariam no servidor novo -- e só na hora em que você
+-- fosse investigar um problema, que é o pior momento possível para descobrir
+-- que a ferramenta de investigação não funciona.
+CREATE EXTENSION IF NOT EXISTS pg_stat_statements;

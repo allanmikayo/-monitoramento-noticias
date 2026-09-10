@@ -347,3 +347,121 @@ def test_lote_parcial_sobrevive_a_falha_no_meio(db_b3, monkeypatch):
 
     gravados = db_b3.query(NegocioB3).count()
     assert gravados == 500, f"esperava os 2 primeiros lotes gravados, achei {gravados}"
+
+
+# ---------------------------------------------------------------------------
+# 5. Spread por setor com drill-down (09/09/2026)
+# ---------------------------------------------------------------------------
+
+@pytest.fixture()
+def db_setor():
+    from datetime import date
+
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import Session
+
+    from app.db import Base
+    from app.models import Debenture, DebentureSpread
+
+    eng = create_engine("sqlite://")
+    Base.metadata.create_all(eng)
+    classe = "IPCA + Incentivadas"
+    hoje, antes = date(2026, 9, 8), date(2026, 9, 1)
+    dados = [
+        ("SANE11", "Saneamento", "Saneamento", "AEGEA", 500.0, 210.0, 180.0),
+        ("SANE12", "Saneamento", "Saneamento", "IGUA", 100.0, 250.0, 245.0),
+        ("ENER11", "Energia Elétrica", "Transmissão", "ISA", 800.0, 150.0, 155.0),
+        ("ENER12", "Energia Elétrica", "Geração", "AES", 200.0, 190.0, 170.0),
+        ("SEMTX9", None, None, None, 50.0, 300.0, 300.0),
+    ]
+    with Session(eng) as s:
+        for cod, setor, sub, grupo, est, sp_h, sp_a in dados:
+            s.add(Debenture(codigo=cod, nome=f"Papel {cod}", classe=classe,
+                            setor=setor, subsetor=sub, grupo_economico=grupo))
+            s.add(DebentureSpread(codigo=cod, data=hoje, spread=sp_h, estoque=est))
+            s.add(DebentureSpread(codigo=cod, data=antes, spread=sp_a, estoque=est))
+        s.commit()
+        yield s
+
+
+def test_setor_pondera_por_estoque_nao_media_simples(db_setor):
+    """Metodologia do relatório semanal: papel com estoque maior pesa mais.
+
+    Saneamento tem 210 bps com 500 de estoque e 250 com 100. A média simples
+    daria 230; a ponderada dá 216,7. Se este teste começar a ver 230, alguém
+    trocou a ponderação e os números da tela deixaram de bater com os do
+    Allan.
+    """
+    from app.spreads import queries
+
+    r = queries.spread_por_setor(db_setor, "IPCA + Incentivadas",
+                                 dias_comparacao=1, nivel="setor")
+    saneamento = next(l for l in r["linhas"] if l["rotulo"] == "Saneamento")
+    assert saneamento["spread_medio"] == 216.7
+    assert saneamento["estoque"] == 600.0
+    assert saneamento["n_ativos"] == 2
+
+
+def test_setor_ordena_por_maior_abertura(db_setor):
+    from app.spreads import queries
+
+    r = queries.spread_por_setor(db_setor, "IPCA + Incentivadas",
+                                 dias_comparacao=1, nivel="setor")
+    assert r["linhas"][0]["rotulo"] == "Saneamento", "a maior abertura tem que vir primeiro"
+    assert r["linhas"][0]["variacao_bps"] > 0
+
+
+def test_drill_down_revela_movimento_que_o_setor_esconde(db_setor):
+    """É o caso de uso que justifica o drill-down.
+
+    Energia Elétrica fecha em +0,0 bps no agregado -- parece parado. Um nível
+    abaixo, Geração abriu 20 e Transmissão fechou 5: o setor estava imóvel na
+    média e em movimento por dentro.
+    """
+    from app.spreads import queries
+
+    setor = queries.spread_por_setor(db_setor, "IPCA + Incentivadas",
+                                     dias_comparacao=1, nivel="setor")
+    energia = next(l for l in setor["linhas"] if l["rotulo"] == "Energia Elétrica")
+    assert energia["variacao_bps"] == 0.0
+
+    sub = queries.spread_por_setor(db_setor, "IPCA + Incentivadas", dias_comparacao=1,
+                                   nivel="subsetor", setor="Energia Elétrica")
+    por_nome = {l["rotulo"]: l["variacao_bps"] for l in sub["linhas"]}
+    assert por_nome == {"Geração": 20.0, "Transmissão": -5.0}
+
+
+def test_drill_down_ate_o_ticker_traz_nome_e_grupo(db_setor):
+    from app.spreads import queries
+
+    r = queries.spread_por_setor(db_setor, "IPCA + Incentivadas", dias_comparacao=1,
+                                 nivel="ticker", setor="Energia Elétrica", subsetor="Geração")
+    assert len(r["linhas"]) == 1
+    linha = r["linhas"][0]
+    assert linha["rotulo"] == "ENER12"
+    assert linha["grupo_economico"] == "AES"
+
+
+def test_papel_sem_taxonomia_aparece_em_vez_de_sumir(db_setor):
+    """Um papel omitido da soma é um erro silencioso; uma linha visível não."""
+    from app.spreads import queries
+    from app.spreads.queries import SEM_CLASSIFICACAO
+
+    r = queries.spread_por_setor(db_setor, "IPCA + Incentivadas",
+                                 dias_comparacao=1, nivel="setor")
+    rotulos = [l["rotulo"] for l in r["linhas"]]
+    assert SEM_CLASSIFICACAO in rotulos
+
+    # e o drill-down até ele também funciona
+    r = queries.spread_por_setor(db_setor, "IPCA + Incentivadas", dias_comparacao=1,
+                                 nivel="ticker", setor=SEM_CLASSIFICACAO,
+                                 subsetor=SEM_CLASSIFICACAO)
+    assert [l["rotulo"] for l in r["linhas"]] == ["SEMTX9"]
+
+
+def test_kpi_traz_estoque_total(db_setor):
+    from app.spreads import queries
+
+    k = queries.kpi_summary(db_setor, "IPCA + Incentivadas", dias_comparacao=1)
+    assert k["estoque_total"] == 1650.0
+    assert k["estoque_cobertura"] == 5

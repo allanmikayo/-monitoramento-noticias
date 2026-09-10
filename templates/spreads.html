@@ -65,260 +65,99 @@
 </div>
 <div id="busca-resultados" class="search-results" style="display:none;"></div>
 
-{# Navegação por âncora, não por abas: os quatro blocos são um raciocínio
-   em sequência: quem pula pro "onde está o valor" sem ver o nível não
-   sabe se o valor que achou é do papel ou do mercado inteiro. As âncoras
-   deixam navegar sem esconder a ordem. #}
-<nav class="bloco-nav">
-  <a href="#bloco-nivel"><b>1.</b> Nível</a>
-  <a href="#bloco-movimento"><b>2.</b> Movimento</a>
-  <a href="#bloco-valor"><b>3.</b> Valor relativo</a>
-  <a href="#bloco-detalhe"><b>4.</b> Detalhe</a>
-</nav>
+{# TELA ENXUTA (09/09/2026, pedido do Allan).
 
-<p class="muted small" id="classe-aviso">
-  "IPCA + Incentivadas" e "CDI + Tradicionais" usam referências diferentes (NTN-B vs DI) e não são comparáveis entre si — os gráficos abaixo trocam inteiramente ao alternar a classe acima.
-</p>
-<p class="muted small" id="nota-base-comparacao">Base de comparação: —</p>
+   Saiu: a navegação em quatro blocos, os textos que "guiavam a análise", e
+   os blocos de rating (curva, dispersão, resumo, compressão), percentil
+   histórico e valor relativo. Os de rating saíam vazios desde que o
+   pipeline de rating foi removido em 20/08, e cada um deles era uma
+   consulta pesada por carga de página.
 
+   O texto que fica descreve o indicador, a base e a fonte -- não o
+   raciocínio. Nas palavras dele: "essas instruções já estão na cabeça do
+   analista".
 
-<!-- ==================================================================
-     BLOCO 1 — ONDE O MERCADO ESTÁ
-     ================================================================== -->
-<h2 class="bloco-titulo" id="bloco-nivel">
-  <span class="bloco-num">1</span> Onde o mercado está
-  <small>Nível de spread, contexto histórico e o preço do risco e do prazo</small>
-</h2>
+   Consequência técnica: `spreads_analitico.js` não é mais carregado nesta
+   aba (ver o fim do arquivo) -- eram seis chamadas de API por carga que
+   deixaram de existir. #}
+
+<p class="muted small" id="nota-base">—</p>
 
 <div class="kpi-row" id="kpi-row">
   <div class="kpi-card kpi-highlight">
-    <span class="kpi-label">SPREAD MÉDIO <span id="kpi-data-ref" class="kpi-tag"></span> <span class="kpi-tag" id="kpi-spread-tag"></span></span>
+    <span class="kpi-label">SPREAD MÉDIO <span class="kpi-tag" id="kpi-spread-tag"></span></span>
     <span class="kpi-value" id="kpi-spread">—</span>
     <span class="kpi-delta" id="kpi-variacao">—</span>
-  </div>
-  {# O card que a tela antiga não tinha e que mais muda a leitura: 38 bps
-     é caro ou barato? Sozinho, não dá pra saber. No percentil 51 de dois
-     anos, é neutro; no percentil 1, é o mais apertado do período. #}
-  <div class="kpi-card" title="Posição do spread médio de hoje na distribuição dos últimos 2 anos.">
-    <span class="kpi-label">PERCENTIL HISTÓRICO <span class="kpi-tag">2 anos</span></span>
-    <span class="kpi-value" id="kpi-percentil">—</span>
-    <span class="kpi-delta muted" id="kpi-percentil-sub">—</span>
   </div>
   <div class="kpi-card">
     <span class="kpi-label">DURATION MÉDIA <span class="kpi-tag" id="kpi-duration-tag"></span></span>
     <span class="kpi-value" id="kpi-duration" style="font-size:1.5rem;">—</span>
-    <span class="kpi-delta muted" id="kpi-rolldown">—</span>
+    <span class="kpi-delta muted">anos</span>
+  </div>
+  <div class="kpi-card">
+    <span class="kpi-label">ATIVOS PRECIFICADOS</span>
+    <span class="kpi-value" id="kpi-n-ativos" style="font-size:1.5rem;">—</span>
+    <span class="kpi-delta muted">com spread na data</span>
   </div>
   <div class="kpi-card">
     <span class="kpi-label">ESTOQUE NA BASE</span>
     <span class="kpi-value" id="kpi-estoque" style="font-size:1.5rem;">—</span>
-    <span class="kpi-delta muted"><span id="kpi-n-ativos">—</span> ativos</span>
+    <span class="kpi-delta muted"><span id="kpi-estoque-cobertura">—</span> ativos com estoque</span>
   </div>
 </div>
+<p class="muted small" id="kpi-nota">Médias ponderadas por estoque · Fonte: ANBIMA e Debentures.com</p>
 
-<div class="chart-grid">
-  <div class="chart-card">
-    <h2 style="margin:0;">Curva de crédito por rating</h2>
-    <p class="muted small">
-      Spread × duration, com reta robusta (Theil-Sen) por faixa de rating. A distância
-      entre as retas é o preço do <b>risco</b>; a inclinação é o preço do <b>prazo</b>
-      — e é o roll-down: quanto o papel ganha de spread só por envelhecer um ano.
-      · Fonte: Anbima e Debentures.com
-    </p>
-    <canvas id="chart-curva" height="120"></canvas>
-    <p class="muted small" id="curva-legenda">—</p>
-  </div>
-
-  <div class="chart-card">
-    <h2 style="margin:0;">Dispersão dentro de cada rating</h2>
-    <p class="muted small">
-      Faixa p10–p90 e mediana por rating. Faixa estreita = mercado comprando o bucket;
-      faixa larga = mercado precificando caso a caso, e aí <b>seleção paga</b>.
-      · Fonte: Anbima e Debentures.com
-    </p>
-    <canvas id="chart-dispersao" height="120"></canvas>
-  </div>
+<div class="chart-card">
+  <h2 style="margin:0;">Evolução do spread médio</h2>
+  <p class="muted small">Spread médio ponderado por estoque, em bps, por data de boletim · Fonte: ANBIMA</p>
+  <canvas id="chart-series" height="110"></canvas>
 </div>
 
 <div class="chart-card">
-  <div class="chart-card-head">
-    <div>
-      <h2 style="margin:0;">Resumo por rating</h2>
-      <p class="muted small">
-        Ponderado por estoque, com a mediana ao lado: quando as duas divergem muito,
-        a faixa está dominada por um emissor grande — o que é informação, não defeito.
-        · Fonte: Anbima e Debentures.com
-      </p>
-    </div>
+  <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;">
+    <h2 style="margin:0;">Spread por setor</h2>
+    <span class="muted small" id="setor-trilha"></span>
   </div>
-  <table class="table" id="tabela-por-rating">
+  <p class="muted small" id="setor-sub">bps, ponderado por estoque · clique numa linha para abrir o nível seguinte · Fonte: ANBIMA e taxonomia interna</p>
+  <table class="table" id="tabela-setor">
     <thead>
       <tr>
-        <th>Rating</th><th>Ativos</th><th>Spread pond. (bps)</th><th>Mediana (bps)</th>
-        <th>Duration</th><th>Estoque (R$ mm)</th><th>% do estoque</th>
+        <th id="setor-col-rotulo">Setor</th>
+        <th style="text-align:right;">Ativos</th>
+        <th style="text-align:right;">Estoque (R$ mi)</th>
+        <th style="text-align:right;">Spread (bps)</th>
+        <th style="text-align:right;">Variação (bps)</th>
       </tr>
     </thead>
     <tbody></tbody>
   </table>
-</div>
-
-
-<!-- ==================================================================
-     BLOCO 2 — COMO CHEGAMOS AQUI
-     ================================================================== -->
-<h2 class="bloco-titulo" id="bloco-movimento">
-  <span class="bloco-num">2</span> Como chegamos aqui
-  <small>Trajetória do nível, ciclo de crédito e quem se moveu</small>
-</h2>
-
-<div class="chart-grid">
-  <div class="chart-card">
-    <h2 style="margin:0;">Evolução do Spread Médio (bps)</h2>
-    <p class="muted small">Spread médio diário da classe selecionada · Fonte: Anbima e Debentures.com</p>
-    <canvas id="chart-series" height="110"></canvas>
-  </div>
-
-  {# A análise de movimento que faltava. A evolução acima diz se o mercado
-     abriu ou fechou; esta diz se abriu IGUAL PRA TODO MUNDO. São coisas
-     diferentes, e a segunda é a que antecipa virada de ciclo. #}
-  <div class="chart-card">
-    <h2 style="margin:0;">Compressão entre ratings</h2>
-    <p class="muted small">
-      Diferencial de spread mediano entre faixas, mensal. <b>Caindo</b> = apetite por
-      risco subindo, prêmio de crédito sumindo. <b>Subindo</b> = mercado voltando a
-      cobrar por risco. · Fonte: Anbima e Debentures.com
-    </p>
-    <canvas id="chart-compressao" height="110"></canvas>
-  </div>
-</div>
-
-<div class="chart-grid">
-  <div class="chart-card">
-    <h2 style="margin:0;">Evolução da Variação de Spreads (% da base de ativos)</h2>
-    <p class="muted small" id="dist-sub">Como a base de ativos se moveu no período selecionado, por faixa de variação · Fonte: Anbima e Debentures.com</p>
-    <canvas id="chart-distribution" height="120"></canvas>
-  </div>
-
-  <div class="chart-card">
-    <h2 style="margin:0;">Variação de Spreads (bps) x Duration</h2>
-    <p class="muted small" id="scatter-sub">Cada ponto é um ativo · variação vs. período selecionado · Fonte: Anbima e Debentures.com</p>
-    <canvas id="chart-scatter" height="120"></canvas>
-  </div>
+  <p class="muted small" id="setor-vazio" style="display:none;">Sem dado para a data selecionada.</p>
 </div>
 
 <div class="movers-grid">
   <div class="chart-card">
-    <h2 style="margin:0;">Maiores Aberturas</h2>
-    <p class="muted small" id="aberturas-sub">Fonte: Anbima e Debentures.com</p>
+    <h2 style="margin:0;">Top 20 aberturas</h2>
+    <p class="muted small" id="aberturas-sub">Fonte: ANBIMA e Debentures.com</p>
     <table class="table" id="tabela-aberturas">
-      <thead><tr><th>Código</th><th>Nome</th><th>Spread (bps)</th><th>Variação (bps)</th><th>Duration</th></tr></thead>
+      <thead><tr><th>Código</th><th>Emissor</th><th style="text-align:right;">Spread (bps)</th><th style="text-align:right;">Variação (bps)</th></tr></thead>
       <tbody></tbody>
     </table>
   </div>
   <div class="chart-card">
-    <h2 style="margin:0;">Maiores Fechamentos</h2>
-    <p class="muted small" id="fechamentos-sub">Fonte: Anbima e Debentures.com</p>
+    <h2 style="margin:0;">Top 20 fechamentos</h2>
+    <p class="muted small" id="fechamentos-sub">Fonte: ANBIMA e Debentures.com</p>
     <table class="table" id="tabela-fechamentos">
-      <thead><tr><th>Código</th><th>Nome</th><th>Spread (bps)</th><th>Variação (bps)</th><th>Duration</th></tr></thead>
+      <thead><tr><th>Código</th><th>Emissor</th><th style="text-align:right;">Spread (bps)</th><th style="text-align:right;">Variação (bps)</th></tr></thead>
       <tbody></tbody>
     </table>
   </div>
 </div>
-
-
-<!-- ==================================================================
-     BLOCO 3 — ONDE ESTÁ O VALOR  (o bloco que não existia)
-     ================================================================== -->
-<h2 class="bloco-titulo" id="bloco-valor">
-  <span class="bloco-num">3</span> Onde está o valor
-  <small>O que sobra do spread depois de tirar rating, prazo e setor</small>
-</h2>
-
-<div class="chart-card">
-  <div class="chart-card-head">
-    <div>
-      <h2 style="margin:0;">Quanto cada camada explica do spread</h2>
-      <p class="muted small">
-        Redução de variância ao tirar, em sequência, a curva do rating e o prêmio do
-        setor. O que sobra é a parte que <b>nenhuma classificação captura</b> — e é
-        a única que representa uma opinião de crédito.
-      </p>
-    </div>
-  </div>
-  <div class="explica-barra" id="explica-barra">
-    <div class="explica-seg seg-rating"  id="seg-rating"><span></span></div>
-    <div class="explica-seg seg-setor"   id="seg-setor"><span></span></div>
-    <div class="explica-seg seg-idio"    id="seg-idio"><span></span></div>
-  </div>
-  <p class="muted small" id="explica-texto">—</p>
-</div>
-
-<div class="chart-grid">
-  <div class="chart-card">
-    <h2 style="margin:0;">Prêmio por setor</h2>
-    <p class="muted small">
-      Mediana do resíduo depois de tirar rating e duration — ou seja, quanto o setor
-      paga <b>além</b> do que o rating dos seus emissores justificaria.
-      · Fonte: Anbima e Debentures.com
-    </p>
-    <canvas id="chart-setor" height="130"></canvas>
-  </div>
-
-  <div class="chart-card">
-    <h2 style="margin:0;">Para revisar</h2>
-    <p class="muted small" id="revisar-sub">
-      Papéis longe demais da curva do próprio grupo para serem oportunidade —
-      quase sempre é estresse conhecido ou taxa encalhada por falta de negócio.
-      Entram aqui em vez das listas abaixo, para não contaminá-las.
-    </p>
-    <table class="table" id="tabela-revisar">
-      <thead><tr><th>Código</th><th>Emissor</th><th>Rating</th><th>Spread</th><th>Esperado</th><th>Desvio</th></tr></thead>
-      <tbody></tbody>
-    </table>
-    <p class="muted small" id="revisar-vazio" style="display:none;">Nenhum papel fora da faixa hoje.</p>
-  </div>
-</div>
-
-<div class="movers-grid">
-  <div class="chart-card">
-    <h2 style="margin:0;">Pagando acima dos pares</h2>
-    <p class="muted small">
-      Spread acima do que rating, duration e setor explicam. Normalizado pela dispersão
-      do próprio rating — 80 bps acima da curva significa coisas muito diferentes em
-      AAA e em A+. · Fonte: Anbima e Debentures.com
-    </p>
-    <table class="table" id="tabela-baratos">
-      <thead><tr><th>Código</th><th>Emissor</th><th>Rating</th><th>Setor</th><th>Spread</th><th>Esperado</th><th>Excesso</th></tr></thead>
-      <tbody></tbody>
-    </table>
-  </div>
-  <div class="chart-card">
-    <h2 style="margin:0;">Pagando abaixo dos pares</h2>
-    <p class="muted small">
-      O outro lado da mesma conta — onde o mercado está cobrando caro pelo risco que
-      entrega. · Fonte: Anbima e Debentures.com
-    </p>
-    <table class="table" id="tabela-caros">
-      <thead><tr><th>Código</th><th>Emissor</th><th>Rating</th><th>Setor</th><th>Spread</th><th>Esperado</th><th>Excesso</th></tr></thead>
-      <tbody></tbody>
-    </table>
-  </div>
-</div>
-
-
-<!-- ==================================================================
-     BLOCO 4 — DETALHE
-     ================================================================== -->
-<h2 class="bloco-titulo" id="bloco-detalhe">
-  <span class="bloco-num">4</span> Detalhe
-  <small>O dado cru por trás de tudo acima</small>
-</h2>
 
 <div id="drilldown-wrap" class="chart-card" style="display:none;">
-  <div class="chart-card-head">
+  <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;">
     <div>
       <h2 style="margin:0;">Série histórica — <span id="drilldown-titulo"></span></h2>
-      <p class="muted small" id="drilldown-sub">Spread (bps) ao longo do tempo · Fonte: Anbima e Debentures.com</p>
+      <p class="muted small">Spread em bps por data de boletim · Fonte: ANBIMA</p>
     </div>
     <button class="btn-small" id="btn-fechar-drilldown">Fechar ✕</button>
   </div>
@@ -326,19 +165,17 @@
 </div>
 
 <div id="detalhes-wrap" class="chart-card" style="display:none;">
-  <div class="chart-card-head">
+  <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;">
     <div>
-      <h2 style="margin:0;">Detalhes — dado granular (Código+Data)</h2>
-      <p class="muted small">Uma linha por Código+Data, sem agregação — o mesmo nível de dado que alimenta os gráficos acima.</p>
+      <h2 style="margin:0;">Detalhes — dado granular (Código + Data)</h2>
+      <p class="muted small">Uma linha por papel na data selecionada · Fonte: ANBIMA e Debentures.com</p>
     </div>
     <button class="btn-small" id="btn-fechar-detalhes">Fechar ✕</button>
   </div>
-
-  <div class="filters-bar" style="margin-top:10px;">
+  <div class="filters-bar" style="margin:10px 0;">
     <div class="window-tabs" id="detalhes-classe-tabs">
-      <button data-classe="" class="win-btn active">Todos</button>
       {% for c in classes %}
-      <button data-classe="{{ c }}" class="win-btn">{{ c }}</button>
+      <button data-classe="{{ c }}" class="win-btn{% if loop.first %} active{% endif %}">{{ c }}</button>
       {% endfor %}
     </div>
     <label class="muted small" style="display:flex;align-items:center;gap:6px;">
@@ -347,25 +184,20 @@
     </label>
     <a class="btn-small" id="btn-exportar-detalhes" href="#" target="_blank" rel="noopener" style="margin-left:auto;text-decoration:none;">Exportar CSV</a>
   </div>
-
   <p class="muted small" id="detalhes-contagem">—</p>
-
   <div style="overflow-x:auto;">
     <table class="table" id="tabela-detalhes">
       <thead>
         <tr>
-          <th>Ticker</th><th>Taxa</th><th>% PU Par</th><th>PU</th><th>Data Referência</th>
-          <th>Indexador</th><th>Deb Incentivada</th><th>Spread</th><th>Estoque (R$ mm)</th><th>Duration</th>
+          <th>Código</th><th>Nome</th><th>Classe</th><th>Indexador</th>
+          <th style="text-align:right;">Taxa</th><th style="text-align:right;">Spread</th>
+          <th style="text-align:right;">Duration</th><th style="text-align:right;">Estoque</th>
         </tr>
       </thead>
       <tbody></tbody>
     </table>
   </div>
 </div>
-
-<p class="muted small" id="detalhe-dica">
-  Clique em <b>Detalhes</b> na barra de filtros no topo para abrir a tabela granular e exportar em CSV.
-</p>
 </div>
 
 <div id="painel-emissores" style="display:none;">
@@ -391,40 +223,14 @@
 
   <div id="emissor-vazio" class="muted small" style="padding:24px 0 12px 0;">Busque e selecione um ou mais emissores acima pra ver os tickers de dívida e a série de spread.</div>
 
-  <!-- Ranking B3 vs. Anbima, tela inicial (pedido do Allan, 27/07/2026):
-       enquanto nenhum emissor está selecionado, mostra quem mais destoa
-       entre o boletim Anbima e o negociado na B3, pra classe inteira --
-       ver queries.emissor_ranking_diferencas pro desenho (janela B3 de
-       7 dias ancorada na própria data do boletim Anbima de cada
-       emissor). Só entram emissores com negócio B3 recente o bastante
-       pra calcular os dois lados -- a maioria não vai aparecer. -->
-  <div id="emissor-ranking-wrap">
-    <div class="filters-bar" style="margin-bottom:10px;">
-      <label class="muted small" style="display:flex;align-items:center;gap:6px;" title="Analisa a base Anbima como se essa fosse a data de hoje — em branco, usa sempre a última data disponível de cada ticker.">
-        Data analisada
-        <input type="date" id="emissor-ranking-data">
-      </label>
-      <span class="muted small" id="emissor-ranking-dados-ate">Dados até: —</span>
-    </div>
-    <div class="movers-grid">
-      <div class="chart-card">
-        <h2 style="margin:0;">Maiores Prêmios sobre a Anbima</h2>
-        <p class="muted small">B3 negociando com spread MAIOR que o boletim Anbima · Fonte: Anbima e B3</p>
-        <table class="table" id="tabela-ranking-aberturas">
-          <thead><tr><th>Emissor</th><th>Anbima (bps)</th><th>B3 · 7d (bps)</th><th>Diferença</th></tr></thead>
-          <tbody></tbody>
-        </table>
-      </div>
-      <div class="chart-card">
-        <h2 style="margin:0;">Maiores Descontos sobre a Anbima</h2>
-        <p class="muted small">B3 negociando com spread MENOR que o boletim Anbima · Fonte: Anbima e B3</p>
-        <table class="table" id="tabela-ranking-fechamentos">
-          <thead><tr><th>Emissor</th><th>Anbima (bps)</th><th>B3 · 7d (bps)</th><th>Diferença</th></tr></thead>
-          <tbody></tbody>
-        </table>
-      </div>
-    </div>
-  </div>
+  {# O ranking B3 x Anbima saiu da tela inicial (09/09/2026, pedido do
+     Allan): "coloque apenas a mensagem para selecionar os emissores".
+     Ele custava duas consultas pesadas (`emissor_ranking_diferencas`
+     cruza o boletim com uma janela de 7 dias da B3, para a classe
+     inteira) toda vez que alguém abria a aba -- inclusive quando a
+     pessoa vinha para olhar um emissor específico, que é o caso normal.
+     A função em queries.py continua lá, e a rota também: nada foi
+     apagado, só deixou de ser o cartão de visita da aba. #}
 
   <div id="emissor-conteudo" style="display:none;">
     <div class="kpi-row" id="emissor-taxas-row" style="margin-bottom:16px;">
@@ -476,5 +282,10 @@
 
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
 <script src="/static/spreads.js"></script>
-<script src="/static/spreads_analitico.js"></script>
+{# `spreads_analitico.js` não é mais carregado (09/09/2026). Ele desenhava a
+   curva por rating, a dispersão intra-rating, a compressão entre ratings, o
+   percentil histórico e o valor relativo -- todos removidos da tela. Os de
+   rating saíam vazios desde 20/08 (tabela de rating zerada) e cada bloco era
+   uma consulta analítica pesada por carga de página. O arquivo continua no
+   repositório, intacto, para quando o assunto rating voltar. #}
 {% endblock %}

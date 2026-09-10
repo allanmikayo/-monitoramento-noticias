@@ -342,29 +342,68 @@ def test_rota_exige_login(banco, rota):
     assert r.status_code in (302, 303, 401, 403), r.status_code
 
 
-def test_pagina_spreads_traz_os_quatro_blocos(cliente):
-    """A ordem dos blocos é a tese da tela — se um sumir do template, a
-    tela continua funcionando e a leitura quebra em silêncio."""
+def test_visao_geral_tem_o_que_ficou(cliente):
+    """A Visão Geral enxuta (09/09/2026): quatro cartões, evolução, setor
+    e os dois top 20. Se um sumir do template, a tela continua carregando
+    e o conteúdo some em silêncio -- que é o modo de falha caro aqui."""
     r = cliente.get("/spreads")
     assert r.status_code == 200
     for termo in (
-        "Onde o mercado está", "Como chegamos aqui", "Onde está o valor", "Detalhe",
-        "Curva de crédito por rating", "Compressão entre ratings",
-        "Quanto cada camada explica", "spreads_analitico.js",
+        "SPREAD MÉDIO", "DURATION MÉDIA", "ATIVOS PRECIFICADOS", "ESTOQUE NA BASE",
+        "Evolução do spread médio", "Spread por setor",
+        "Top 20 aberturas", "Top 20 fechamentos",
     ):
-        assert termo in r.text, f"faltou '{termo}' na página"
+        assert termo in r.text, f"faltou '{termo}' na Visão Geral"
 
 
-def test_pagina_mantem_os_ids_que_o_spreads_js_usa(cliente):
-    """O spreads.js antigo (887 linhas, validado e em uso) referencia
-    estes IDs por `getElementById`. Se a reorganização derrubar um, a
-    parte antiga da tela para sem erro visível."""
+def test_visao_geral_nao_traz_de_volta_o_que_saiu(cliente):
+    """Guarda a REMOÇÃO, não só o que ficou.
+
+    Os blocos de rating (curva, dispersão, resumo, compressão), o percentil
+    histórico e o valor relativo saíram em 09/09/2026: saíam vazios desde
+    que o pipeline de rating foi removido (20/08) e cada um custava uma
+    consulta analítica pesada por carga de página. `spreads_analitico.js`
+    deixou de ser carregado junto -- seis chamadas de API a menos.
+
+    Sem este teste, "voltar a incluir o script" é a regressão mais fácil de
+    cometer sem perceber: a tela continua funcionando, só fica lenta de novo.
+    """
     r = cliente.get("/spreads")
-    for elemento_id in (
-        "dados-ate", "classe-tabs", "base-tabs", "visao-data", "busca-ativo",
-        "busca-resultados", "kpi-spread", "kpi-variacao", "kpi-n-ativos",
-        "kpi-duration", "chart-series", "chart-scatter", "chart-distribution",
-        "tabela-aberturas", "tabela-fechamentos", "detalhes-wrap", "drilldown-wrap",
-        "painel-visao-geral", "painel-emissores", "secao-tabs",
+    for termo in (
+        "spreads_analitico.js",
+        "Curva de crédito por rating", "Dispersão dentro de cada rating",
+        "Compressão entre ratings", "Resumo por rating",
+        "PERCENTIL HISTÓRICO", "Quanto cada camada explica",
+        "Onde o mercado está", "Como chegamos aqui", "Onde está o valor",
     ):
-        assert f'id="{elemento_id}"' in r.text, f"sumiu o id '{elemento_id}'"
+        assert termo not in r.text, (
+            f"'{termo}' voltou para a página -- foi removido de propósito, "
+            "ver o comentário no topo de templates/spreads.html"
+        )
+
+
+def test_todo_id_que_o_javascript_procura_existe_no_html(cliente):
+    """Deriva a lista do PRÓPRIO spreads.js em vez de repetir os ids à mão.
+
+    A versão anterior deste teste tinha uma lista fixa -- que envelhece junto
+    com a tela e, pior, passa a proteger o desenho antigo. Lendo o
+    JavaScript, o teste continua valendo depois de qualquer reorganização: o
+    que ele garante é a invariante de verdade -- todo `getElementById` do
+    script encontra alguém. Um id que some não dá erro no navegador, só faz
+    um pedaço da tela parar de atualizar em silêncio.
+    """
+    import re as _re
+    from pathlib import Path
+
+    js = (Path(__file__).resolve().parent.parent / "static" / "spreads.js").read_text(encoding="utf-8")
+    procurados = set(_re.findall(r'getElementById\("([^"]+)"\)', js))
+    procurados |= set(_re.findall(r'querySelector\(`#([a-z0-9-]+)', js))
+    procurados |= set(_re.findall(r'querySelectorAll\("#([a-z0-9-]+)', js))
+    assert procurados, "não achei nenhum id no spreads.js -- o teste perdeu o alvo"
+
+    html = cliente.get("/spreads").text
+    presentes = set(_re.findall(r'id="([^"]+)"', html))
+    faltando = sorted(procurados - presentes)
+    assert not faltando, f"o spreads.js procura ids que o template não tem: {faltando}"
+
+
