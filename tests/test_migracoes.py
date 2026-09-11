@@ -530,3 +530,92 @@ def test_o_engine_de_manutencao_tambem(monkeypatch):
         "postgresql+psycopg://u:s@credit-research-dashboard.duckdns.org:6432/x?sslmode=verify-full"
     )
     assert "sslrootcert" in capturado["connect_args"]
+
+
+# --------------------------------------------------------------------------
+# 8. O mesmo conceito tem a mesma largura em toda tabela
+# --------------------------------------------------------------------------
+
+# CONTEXTO (11/09/2026). A revisão do modelo achou `setor` com três larguras:
+# VARCHAR(120) em `issuers`, VARCHAR(80) em `debentures` e `securitizados`.
+# Idem `grupo_economico` (200 contra 120) e `indexador` (30 contra 20).
+#
+# Não é só redundância. É um valor que cabe numa coluna e não cabe na outra:
+# copiar de `issuers` para `debentures` faria o Postgres recusar a linha com
+#     value too long for type character varying(80)
+# e o erro apareceria no coletor, longe de qualquer decisão de modelagem.
+#
+# Este teste não guarda as oito correções — guarda a REGRA, para a próxima
+# coluna nascer certa.
+
+# Colunas que nomeiam o mesmo conceito onde quer que apareçam. `sub_setor`
+# (com underscore, em `issuers`) e `subsetor` são o mesmo conceito escrito de
+# dois jeitos -- a diferença de nome é outra dívida, anotada mas não corrigida
+# aqui, porque renomear coluna mexe na view e no código que a lê.
+CONCEITOS = {
+    "setor": "setor",
+    "subsetor": "subsetor",
+    "sub_setor": "subsetor",
+    "grupo_economico": "grupo_economico",
+    "indexador": "indexador",
+    "emissor": "emissor",
+}
+
+
+def _larguras_por_conceito():
+    from app import models  # noqa: F401
+    from app.db import Base
+    from sqlalchemy import String
+
+    achados: dict[str, dict[str, int]] = {}
+    for nome, tabela in Base.metadata.tables.items():
+        for coluna in tabela.columns:
+            conceito = CONCEITOS.get(coluna.name)
+            if conceito is None or not isinstance(coluna.type, String):
+                continue
+            if coluna.type.length is None:
+                continue
+            achados.setdefault(conceito, {})[f"{nome}.{coluna.name}"] = coluna.type.length
+    return achados
+
+
+def test_conceito_igual_tem_largura_igual():
+    divergentes = {}
+    for conceito, onde in _larguras_por_conceito().items():
+        if len(set(onde.values())) > 1:
+            divergentes[conceito] = onde
+    assert divergentes == {}, (
+        "mesmo conceito com larguras diferentes — um valor que cabe numa tabela "
+        f"não caberia na outra: {divergentes}"
+    )
+
+
+def test_o_alargamento_tem_migracao_correspondente():
+    """models.py alargado sem ALTER na lista deixa o banco de produção para
+    trás — e o `create_all` não alarga coluna de tabela que já existe."""
+    import inspect as _inspect
+    import re
+
+    fonte = _inspect.getsource(db.run_migrations)
+    alters = {
+        (m.group(1), m.group(2)): int(m.group(3))
+        for m in (db._RE_TIPO.match(c) for c in
+                  re.findall(r'^\s+"(ALTER TABLE [^"]+)"', fonte, re.M))
+        if m
+    }
+    from app import models  # noqa: F401
+    from app.db import Base
+    from sqlalchemy import String
+
+    faltando = []
+    for conceito, onde in _larguras_por_conceito().items():
+        for caminho, largura in onde.items():
+            tabela, coluna = caminho.split(".")
+            declarada = Base.metadata.tables[tabela].columns[coluna]
+            if not isinstance(declarada.type, String):
+                continue
+            # só exigimos ALTER onde a lista já cuida daquela tabela
+            tabelas_migradas = {t for t, _ in alters}
+            if tabela in tabelas_migradas and alters.get((tabela, coluna), largura) != largura:
+                faltando.append(f"{caminho}: modelo={largura}, migração={alters[(tabela, coluna)]}")
+    assert faltando == [], f"models.py e run_migrations discordam: {faltando}"

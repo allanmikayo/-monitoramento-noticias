@@ -394,3 +394,29 @@ h2 { font-size: 1.05rem; margin: 20px 0 8px; color: var(--header); font-weight: 
 .seg-idio   { background: var(--accent); }
 
 .table td.num, .table th.num { text-align: right; }
+
+/* Tabela de dívidas da aba Emissores, agrupada por classe (11/09/2026).
+   A quebra de grupo precisa ser visível sem virar mais um card: uma faixa
+   discreta para o cabeçalho e uma linha de total com régua em cima, que é
+   a convenção de planilha que o Allan já lê todo dia. */
+#tabela-emissor-tickers tr.grupo-classe td {
+  background: #f2f2f2;
+  border-bottom: 1px solid var(--border);
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+  padding-top: 14px;
+}
+#tabela-emissor-tickers tr.grupo-classe:first-child td { padding-top: 8px; }
+#tabela-emissor-tickers tr.total-classe td {
+  border-top: 2px solid var(--border);
+  border-bottom: none;
+  background: #fbfbfb;
+}
+#tabela-emissor-tickers td:nth-child(5),
+#tabela-emissor-tickers td:nth-child(6),
+#tabela-emissor-tickers td:nth-child(7),
+#tabela-emissor-tickers tr.total-classe td {
+  font-variant-numeric: tabular-nums;
+}

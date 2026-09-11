@@ -129,25 +129,6 @@ def register_spreads_routes(require_user_dep) -> APIRouter:
             data_referencia=_parse_data(data),
         )
 
-    @router.get("/api/spreads/por-setor")
-    def api_spreads_por_setor(
-        classe: str, base: str = "WoW", data: str | None = None,
-        nivel: str = "setor", setor: str | None = None, subsetor: str | None = None,
-        user: User | None = Depends(require_user_dep), db: Session = Depends(get_db),
-    ):
-        """Spread por setor com drill-down: setor -> subsetor -> ticker.
-
-        `nivel` fora dos três valores conhecidos cai em "setor" em vez de
-        estourar -- é parâmetro de URL, e o pior que um valor errado deve
-        causar é ver a tela de cima.
-        """
-        if nivel not in ("setor", "subsetor", "ticker"):
-            nivel = "setor"
-        return queries.spread_por_setor(
-            db, _validar_classe(classe), dias_comparacao=_validar_base(base),
-            data_referencia=_parse_data(data), nivel=nivel, setor=setor, subsetor=subsetor,
-        )
-
     @router.get("/api/spreads/movement-distribution")
     def api_spreads_movement_distribution(
         classe: str, base: str = "WoW", data: str | None = None,
@@ -273,10 +254,10 @@ def register_spreads_routes(require_user_dep) -> APIRouter:
         """Tabela de tickers dos emissores selecionados + empresa da
         cobertura ligada a cada um (quando já casada, ver
         scripts/match_debenture_issuers.py)."""
-        tickers = queries.emissor_tickers(db, nome)
-        if not tickers:
+        dados = queries.emissor_tickers(db, nome)
+        if not dados["tickers"]:
             raise HTTPException(status_code=404, detail="Emissor não encontrado")
-        return {"tickers": tickers, "empresas": queries.companies_for_emissores(db, nome)}
+        return {**dados, "empresas": queries.companies_for_emissores(db, nome)}
 
     @router.get("/api/spreads/emissor/series")
     def api_spreads_emissor_series(
