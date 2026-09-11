@@ -300,6 +300,7 @@ def parse_html_listing(
     article_type: str = "news",
     base_url: str | None = None,
     min_title_len: int = 8,
+    renderizado: bool = False,
 ) -> list[RawArticle]:
     """Varre uma página de listagem HTML "de verdade" (sem JS, sem RSS) --
     para sites que publicam pouco e não têm feed, mas têm uma página de
@@ -310,8 +311,17 @@ def parse_html_listing(
 
     from bs4 import BeautifulSoup
 
-    resp = get(url)
-    soup = BeautifulSoup(resp.content, "lxml")
+    # `renderizado=True` troca o GET por um Chromium de verdade
+    # (`fetch_rendered_html`). ADICIONADO 11/09/2026 para o CanalEnergia,
+    # que passou a devolver HTTP 403 mesmo com o `curl_cffi` imitando o
+    # fingerprint TLS do Chrome -- o bloqueio olha mais do que o handshake.
+    # Um navegador real passa; é o mesmo caminho que a S&P já usa. Custa
+    # alguns segundos, então continua sendo exceção, não o padrão.
+    if renderizado:
+        soup = BeautifulSoup(fetch_rendered_html(url), "lxml")
+    else:
+        resp = get(url)
+        soup = BeautifulSoup(resp.content, "lxml")
     pat = _re.compile(href_pattern)
 
     out: list[RawArticle] = []

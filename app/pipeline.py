@@ -2,9 +2,13 @@
 grava só o que é novo/relevante, registra estatísticas de execução."""
 from __future__ import annotations
 
+import contextlib
 import importlib
 import json
 import logging
+import os
+import signal
+import threading
 from datetime import datetime, timezone
 from typing import Callable
 
@@ -23,6 +27,67 @@ _TYPE_BY_CATEGORY = {
 }
 
 ProgressCallback = Callable[[int, int, str], None]
+
+# TETO DE TEMPO POR FONTE (11/09/2026).
+#
+# BUG REAL. A varredura das 14:54 morreu com "The operation was canceled":
+# o job do GitHub Actions bateu em `timeout-minutes: 20`. O preparo levou 57
+# segundos; a fonte 23 de 24 (Vórtx) começou às 14:58:05 e nunca terminou.
+#
+# Não era travamento, era volume: `vortx.fetch` busca no site DE CADA NOME
+# da cobertura -- empresas mais apelidos, algo como duas centenas e meia de
+# buscas HTTP em sequência -- antes de abrir o navegador. A ~2 segundos por
+# busca, são os ~16 minutos que sobraram do orçamento do job. E como isso
+# roda a cada 15 minutos, nunca houve chance de terminar.
+#
+# O estrago não fica na fonte lenta: o job morre, a fonte 24 nunca roda, o
+# `RunLog` nunca fecha e o resumo nunca é impresso. Tudo que veio ANTES já
+# estava salvo (cada fonte grava na hora), mas a execução aparece como
+# falha e o painel não registra nada.
+#
+# Este teto é a defesa GERAL -- não é sobre a Vórtx. Qualquer fonte que
+# passe do limite é interrompida, registra o erro como qualquer outra falha
+# e a varredura segue para a próxima. Um site lento deixa de ser capaz de
+# derrubar a coleta inteira.
+TEMPO_MAXIMO_POR_FONTE = int(os.getenv("SCRAPE_TIMEOUT_FONTE", "180"))
+
+
+@contextlib.contextmanager
+def _teto_de_tempo(segundos: int, nome: str):
+    """Interrompe o bloco se ele passar de `segundos`.
+
+    Usa `SIGALRM`, que só existe em Unix e só pode ser armado na thread
+    principal. Fora dessas condições -- o Windows do Allan, e a varredura
+    disparada pelo botão do dashboard, que roda numa thread de fundo (ver
+    app/scheduler.py) -- o teto simplesmente não se aplica, em vez de
+    quebrar. Quem precisa dele é o GitHub Actions, que é Linux e chama
+    `scripts/run_once.py` direto na thread principal.
+
+    O sinal só é entregue entre instruções do interpretador: uma chamada
+    que fique presa dentro de código C pode demorar a ceder. Na prática as
+    fontes passam o tempo em rede e em laços de Python, que cedem.
+    """
+    if (
+        segundos <= 0
+        or not hasattr(signal, "SIGALRM")
+        or threading.current_thread() is not threading.main_thread()
+    ):
+        yield
+        return
+
+    def _estourou(signum, frame):  # noqa: ANN001
+        raise TimeoutError(
+            f"a fonte passou de {segundos}s e foi interrompida para não "
+            f"consumir o tempo das outras"
+        )
+
+    anterior = signal.signal(signal.SIGALRM, _estourou)
+    signal.setitimer(signal.ITIMER_REAL, segundos)
+    try:
+        yield
+    finally:
+        signal.setitimer(signal.ITIMER_REAL, 0)
+        signal.signal(signal.SIGALRM, anterior)
 
 
 def _run_source(source_info: dict, taxonomy) -> dict:
@@ -45,7 +110,8 @@ def _run_source(source_info: dict, taxonomy) -> dict:
         return result
 
     try:
-        raw_articles = module.fetch(source_info["url"])
+        with _teto_de_tempo(TEMPO_MAXIMO_POR_FONTE, source_info["name"]):
+            raw_articles = module.fetch(source_info["url"])
     except Exception as e:  # noqa: BLE001
         logger.exception("Erro coletando %s", source_info["name"])
         result["error"] = f"{type(e).__name__}: {e}"
@@ -112,12 +178,31 @@ def _run_source(source_info: dict, taxonomy) -> dict:
     return result
 
 
-def run_pipeline(triggered_by: str = "scheduler", progress_cb: ProgressCallback | None = None) -> dict:
-    """Roda todas as fontes habilitadas. Retorna um resumo (para log/API).
+def run_pipeline(
+    triggered_by: str = "scheduler",
+    progress_cb: ProgressCallback | None = None,
+    apenas_modulos: set[str] | None = None,
+    exceto_modulos: set[str] | None = None,
+) -> dict:
+    """Roda as fontes habilitadas. Retorna um resumo (para log/API).
 
     `progress_cb(indice_atual, total, nome_da_fonte)` é chamado ANTES de
     processar cada fonte -- usado pelo endpoint de status para mostrar uma
     barra de progresso em tempo real no dashboard.
+
+    DUAS CADÊNCIAS (11/09/2026, decisão do Allan). `apenas_modulos` e
+    `exceto_modulos` filtram por `scraper_module` para que a mesma máquina
+    sirva a duas rotinas com ritmos diferentes:
+
+    - a varredura de notícias, de 15 em 15 minutos, roda tudo MENOS as
+      fontes de assembleia (`exceto_modulos=config.FONTES_LENTAS`);
+    - `scripts/rodada_assembleias.py`, 1x/dia, roda SÓ elas
+      (`apenas_modulos=config.FONTES_LENTAS`).
+
+    Por que não uma coluna nova em `sources`: a cadência é decisão de
+    CÓDIGO (depende de como o scraper é escrito), não de configuração do
+    usuário. A aba Fontes & Empresas continua mandando no `enabled` de cada
+    fonte, e uma fonte desligada lá não roda em cadência nenhuma.
     """
     started_at = datetime.now(timezone.utc)
     summary = {"started_at": started_at.isoformat(), "sources": [], "n_new": 0, "errors": []}
@@ -130,6 +215,8 @@ def run_pipeline(triggered_by: str = "scheduler", progress_cb: ProgressCallback 
                 "scraper_module": s.scraper_module, "url": s.url,
             }
             for s in db.query(Source).filter(Source.enabled.is_(True)).all()
+            if (apenas_modulos is None or s.scraper_module in apenas_modulos)
+            and (exceto_modulos is None or s.scraper_module not in exceto_modulos)
         ]
 
         run_log = RunLog(started_at=started_at, triggered_by=triggered_by)

@@ -76,6 +76,23 @@ BOOTSTRAP_ADMIN_PASSWORD = os.getenv("BOOTSTRAP_ADMIN_PASSWORD", "troque-esta-se
 # kind: rss | html | api  (usado pelo pipeline para saber como interpretar o scraper)
 # mode: all (aceita tudo, filtra só por empresa) | specific (usa keywords próprias da fonte também)
 # ---------------------------------------------------------------------------
+# FONTES QUE NÃO CABEM NUMA VARREDURA DE 15 MINUTOS (11/09/2026).
+#
+# As três buscam no site DE CADA NOME da cobertura -- empresas mais
+# apelidos, ~250 buscas HTTP em sequência -- antes de abrir o navegador.
+# Medido: a Vórtx sozinha consumiu ~16 minutos e estourou o
+# `timeout-minutes: 20` do job, matando a varredura inteira antes da última
+# fonte (ver o comentário de TEMPO_MAXIMO_POR_FONTE em app/pipeline.py).
+#
+# Assembleia de debenturistas é convocada com prazo legal de antecedência:
+# saber no mesmo dia basta, saber em 15 minutos não muda decisão nenhuma.
+# Por isso elas saíram para `scripts/rodada_assembleias.py`, 1x/dia, com
+# teto de tempo folgado.
+#
+# Filtra por `scraper_module`, não por categoria: a cadência depende de
+# COMO o scraper foi escrito, não do que a fonte publica.
+FONTES_LENTAS = {"vortx", "oliveiratrust", "pentagono"}
+
 KNOWN_SOURCES: list[dict] = [
     # Agências de rating
     {

@@ -15,6 +15,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
+from app import config
 from app.db import Base, SessionLocal, engine, ensure_schema
 from app.pipeline import run_pipeline
 from app.seed_sources import sync_known_sources
@@ -40,7 +41,11 @@ def main() -> None:
                 "Fontes sincronizadas: %d nova(s), %d atualizada(s)", n_new, n_synced
             )
 
-    summary = run_pipeline(triggered_by="scheduler")
+    # SEM AS FONTES DE ASSEMBLEIA (11/09/2026) -- elas têm rotina própria,
+    # `scripts/rodada_assembleias.py`, 1x/dia. Ver config.FONTES_LENTAS pro
+    # motivo (uma delas sozinha estourava o teto do job e derrubava a
+    # varredura inteira).
+    summary = run_pipeline(triggered_by="scheduler", exceto_modulos=config.FONTES_LENTAS)
     print(json.dumps(summary, indent=2, ensure_ascii=False))
 
     if summary.get("errors"):
