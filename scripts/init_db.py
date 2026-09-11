@@ -185,9 +185,18 @@ def conferir_conexao() -> bool:
     defeito no script. A pergunta que interessa ("o banco atendeu?") tem que
     ser respondida na primeira linha da saída.
     """
+    # `version()` e' funcao do Postgres; no SQLite o nome e' outro. Sem
+    # este desvio, rodar o init_db contra o banco local (DATABASE_URL vazio)
+    # morre em "no such function: version" -- um erro sobre a CONFERENCIA,
+    # que faz procurar defeito no banco quando o banco esta' bem.
+    sql_versao = (
+        "select sqlite_version()"
+        if engine.dialect.name == "sqlite"
+        else "select version()"
+    )
     try:
         with engine.connect() as conn:
-            versao = conn.exec_driver_sql("select version()").scalar()
+            versao = conn.exec_driver_sql(sql_versao).scalar()
     except Exception as exc:  # noqa: BLE001
         texto = str(exc)
         print("  NAO CONECTOU.")
@@ -202,7 +211,19 @@ def conferir_conexao() -> bool:
         elif "password" in texto.lower() or "role" in texto.lower():
             print("     Parece credencial. Confira o DATABASE_URL do .env.")
         return False
-    print(f"  ok -- {str(versao).split(' on ')[0]}")
+    rotulo = str(versao).split(" on ")[0]
+    if engine.dialect.name == "sqlite":
+        # Aviso, nao erro: rodar contra o SQLite local e' legitimo (e' o
+        # modo offline do app), mas quase sempre e' engano -- significa que
+        # o DATABASE_URL do .env nao foi lido, e as migracoes vao acontecer
+        # num arquivo que ninguem usa em vez de no banco da nuvem.
+        print(f"  ok -- SQLite {rotulo} (banco LOCAL)")
+        print("     ATENCAO: sem DATABASE_URL no .env, isto altera o arquivo")
+        print("     local em data/, nao o Postgres da OCI. Se a intencao era")
+        print("     o banco da nuvem, confira se a linha do .env comeca com")
+        print("     DATABASE_URL= antes de postgresql+psycopg://")
+    else:
+        print(f"  ok -- {rotulo}")
     return True
 
 

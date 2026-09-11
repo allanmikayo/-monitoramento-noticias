@@ -14,7 +14,7 @@ import itertools
 from datetime import date, datetime, timedelta
 from zoneinfo import ZoneInfo
 
-from sqlalchemy import func
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from ..models import AppSetting, Article, Company, Debenture, DebentureSpread, NegocioB3
@@ -531,38 +531,182 @@ def list_emissores(db: Session) -> list[str]:
     return [r[0] for r in rows]
 
 
-def emissor_tickers(db: Session, nomes_emissor: list[str]) -> list[dict]:
-    """Tabela dos tickers de um ou mais emissores -- código, indexador,
-    classe, incentivada, Estoque mais recente de cada um (pode ser de
-    datas diferentes entre tickers se algum ficou sem publicação num
-    pregão específico). Ampliado (24/07/2026) pra aceitar VÁRIOS emissores
-    de uma vez -- pedido do Allan pra seleção múltipla na aba de
-    emissores; devolve o campo `emissor` em cada linha pra distinguir de
-    qual empresa é cada ticker quando mais de uma está selecionada."""
+# Rótulo de cada índice da base de características do debentures.com.br no
+# vocabulário que o Allan usa no relatório. O arquivo escreve "DI"; o
+# mercado (e a ANBIMA) escrevem "CDI". Índice que não estiver aqui aparece
+# com o nome cru da fonte -- melhor um rótulo estranho do que um papel sem
+# taxa na tela.
+ROTULO_INDICE = {
+    "DI": "CDI",
+    "IPCA": "IPCA",
+    "IGP-M": "IGP-M",
+    "IGPM": "IGP-M",
+    "INPC": "INPC",
+    "TR": "TR",
+    "ANBID": "ANBID",
+    "TJLP": "TJLP",
+}
+
+# Índices em que a remuneração é uma taxa fixa, sem indexador para somar:
+# a taxa da emissão é o número sozinho ("14,476% a.a."), não "PRÉ + 14,476%".
+INDICES_PREFIXADOS = {"PRÉ", "PRE", "SEM-ÍNDICE", "SEM-INDICE", ""}
+
+
+def _pct(valor: float, casas_max: int = 2) -> str:
+    """Número em português (vírgula decimal, ponto de milhar), com no
+    máximo `casas_max` casas e no mínimo 2 — zeros à direita além da
+    segunda casa são aparados. Assim "IPCA + 8,1869%" e "CDI + 3,50%"
+    convivem na mesma coluna sem "14,4760%"."""
+    texto = f"{valor:,.{max(casas_max, 2)}f}"
+    if "." in texto:
+        inteiro, decimais = texto.split(".")
+        decimais = decimais[:2] + decimais[2:].rstrip("0")
+        texto = f"{inteiro}.{decimais}"
+    # Troca os separadores do inglês pelos do português num passo só.
+    return texto.replace(",", "\x00").replace(".", ",").replace("\x00", ".")
+
+
+def formatar_taxa_emissao(
+    indice: str | None, percentual: float | None, taxa: float | None
+) -> str | None:
+    """Monta a taxa DA EMISSÃO a partir dos três campos crus guardados em
+    `Debenture` (ver models.Debenture pro porquê de serem três).
+
+    As formas que aparecem na base de características:
+
+    - `DI`, multiplicador 100, taxa 3,5   -> "CDI + 3,50%"
+    - `DI`, multiplicador 100, sem taxa   -> "100,00% do CDI"
+    - `DI`, multiplicador 116, sem taxa   -> "116,00% do CDI"
+    - `DI`, multiplicador 108, taxa 1     -> "108,00% do CDI + 1,00%"
+    - `IPCA`, sem multiplicador, 8,1869   -> "IPCA + 8,1869%"
+    - `PRÉ`, sem multiplicador, 14,476    -> "14,476% a.a."
+
+    MULTIPLICADOR 0 OU VAZIO NÃO É 0%, É "NÃO INFORMADO" — é como o
+    arquivo representa papel indexado sem percentual próprio (todo IPCA+
+    vem assim). Por isso `DI` com multiplicador 0 e sem taxa vira só
+    "CDI", não "0% do CDI" nem "100% do CDI": dizer qual dos dois seria
+    chutar. Já multiplicador 100 explícito é informação de verdade e
+    aparece como "100,00% do CDI".
+
+    Devolve None quando não há nada a mostrar — a tela põe "—", que é
+    honesto; inventar "0,00%" não seria.
+    """
+    idx_cru = (indice or "").strip().upper()
+    rotulo = ROTULO_INDICE.get(idx_cru, idx_cru)
+    tem_taxa = taxa is not None and taxa != 0
+    texto_taxa = f"{_pct(taxa, 4)}%" if tem_taxa else None
+
+    if idx_cru in INDICES_PREFIXADOS:
+        return f"{texto_taxa} a.a." if texto_taxa else None
+    if not rotulo:
+        return texto_taxa
+
+    informado = percentual is not None and percentual != 0
+    # 100% com taxa junto é redundante ("100% do CDI + 3,50%" == "CDI +
+    # 3,50%"); 100% sozinho é o que descreve o papel.
+    if informado and (percentual != 100 or not tem_taxa):
+        base = f"{_pct(percentual)}% do {rotulo}"
+        return f"{base} + {texto_taxa}" if texto_taxa else base
+    return f"{rotulo} + {texto_taxa}" if texto_taxa else rotulo
+
+
+def emissor_tickers(db: Session, nomes_emissor: list[str]) -> dict:
+    """Tabela das dívidas a mercado de um ou mais emissores, agrupada por
+    classe, com totalizador de estoque por grupo.
+
+    O QUE CADA LINHA TRAZ: do cadastro (dado que não muda) — código,
+    indexador, classe, Lei 12.431 (`incentivada`), data da emissão e taxa
+    da emissão; do ÚLTIMO dia publicado para aquele papel — estoque e
+    duration. As datas podem diferir entre tickers: um papel que ficou sem
+    publicação num pregão traz o dia anterior, e a coluna `data_estoque`
+    diz qual é.
+
+    TAXA DA EMISSÃO substituiu a taxa indicativa (11/09/2026, pedido do
+    Allan). Vem da base de características do debentures.com.br, montada
+    por `formatar_taxa_emissao` a partir dos três campos crus do cadastro.
+    Papel capturado antes de 11/09/2026 fica com a taxa vazia até a próxima
+    rodada de `fetch_debenture_spreads` (que regrava as características de
+    todo mundo).
+
+    AGRUPADO POR CLASSE (11/09/2026, pedido do Allan): "para ficar as
+    semelhantes juntas". IPCA+Incentivadas e CDI+Tradicionais usam
+    referências diferentes — NTN-B e DI — então somar estoque faz sentido
+    dentro de cada grupo e não entre eles. Por isso `totais` vem por classe,
+    e não um total geral.
+
+    N+1 CORRIGIDO (11/09/2026). A versão anterior fazia uma consulta por
+    ticker para achar o último spread (`ORDER BY data DESC LIMIT 1` dentro
+    de um laço). Num emissor como a Energisa, com dezenas de papéis, eram
+    dezenas de idas e voltas para montar uma tabela. Agora são duas: uma
+    para o cadastro, outra para os últimos spreads de todos os códigos de
+    uma vez.
+    """
     debs = (
         db.query(Debenture)
         .filter(Debenture.nome.in_(nomes_emissor))
-        .order_by(Debenture.nome, Debenture.codigo)
+        .order_by(Debenture.classe, Debenture.nome, Debenture.codigo)
         .all()
     )
-    out = []
-    for d in debs:
-        ultimo = (
-            db.query(DebentureSpread)
-            .filter(DebentureSpread.codigo == d.codigo)
-            .order_by(DebentureSpread.data.desc())
-            .first()
+    if not debs:
+        return {"tickers": [], "totais": []}
+
+    codigos = [d.codigo for d in debs]
+    # Última data COM publicação de cada código, e a linha inteira daquele
+    # dia -- em duas etapas para ser portátil (o `DISTINCT ON` do Postgres
+    # não existe no SQLite dos testes).
+    ultimas = (
+        select(DebentureSpread.codigo, func.max(DebentureSpread.data).label("data"))
+        .where(DebentureSpread.codigo.in_(codigos))
+        .group_by(DebentureSpread.codigo)
+        .subquery()
+    )
+    recentes = db.execute(
+        select(DebentureSpread).join(
+            ultimas,
+            (DebentureSpread.codigo == ultimas.c.codigo)
+            & (DebentureSpread.data == ultimas.c.data),
         )
-        out.append({
+    ).scalars().all()
+    por_codigo = {s.codigo: s for s in recentes}
+
+    linhas: list[dict] = []
+    for d in debs:
+        u = por_codigo.get(d.codigo)
+        linhas.append({
             "codigo": d.codigo,
             "emissor": d.nome,
             "indexador": d.indexador,
             "classe": d.classe,
             "incentivada": d.incentivada,
-            "estoque": round(ultimo.estoque, 1) if ultimo and ultimo.estoque is not None else None,
-            "data_estoque": ultimo.data.isoformat() if ultimo else None,
+            "estoque": round(u.estoque, 1) if u and u.estoque is not None else None,
+            # TAXA DA EMISSÃO, NÃO A INDICATIVA (11/09/2026, pedido do
+            # Allan). São coisas diferentes: a indicativa é o preço de hoje
+            # no secundário (e muda todo dia), a da emissão é a condição
+            # contratada no papel (e não muda nunca). Numa tabela de
+            # DÍVIDA do emissor, é a segunda que descreve a dívida.
+            # O spread de hoje continua no gráfico e nos cards acima.
+            "data_emissao": d.data_emissao.isoformat() if d.data_emissao else None,
+            "taxa_emissao": formatar_taxa_emissao(
+                d.indice_emissao, d.percentual_emissao, d.taxa_emissao),
+            "duration": round(u.duration, 2) if u and u.duration is not None else None,
+            "data_estoque": u.data.isoformat() if u else None,
         })
-    return out
+
+    # Totalizadores por classe. Somados aqui, e não no navegador, porque é
+    # o mesmo número que precisa bater com o card e com a aba Visão Geral --
+    # uma soma só, num lugar só.
+    totais: list[dict] = []
+    for classe in CLASSES + [None]:
+        do_grupo = [l for l in linhas if l["classe"] == classe]
+        if not do_grupo:
+            continue
+        com_estoque = [l["estoque"] for l in do_grupo if l["estoque"] is not None]
+        totais.append({
+            "classe": classe or SEM_CLASSIFICACAO,
+            "n_ativos": len(do_grupo),
+            "estoque": round(sum(com_estoque), 1) if com_estoque else None,
+        })
+    return {"tickers": linhas, "totais": totais}
 
 
 def emissor_series(db: Session, nomes_emissor: list[str], classe: str, nivel: str = "emissor") -> dict:

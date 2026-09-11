@@ -595,6 +595,37 @@ def run_migrations(tentativas: int = 3, eng: Engine | None = None) -> list[tuple
         "ALTER TABLE securitizados ADD COLUMN setor VARCHAR(80)",
         "ALTER TABLE securitizados ADD COLUMN subsetor VARCHAR(80)",
         "ALTER TABLE securitizados ADD COLUMN grupo_economico VARCHAR(120)",
+        # LARGURAS PADRONIZADAS (11/09/2026, decisão do Allan).
+        #
+        # O mesmo conceito tinha três larguras: `setor` era VARCHAR(120) em
+        # `issuers` e VARCHAR(80) em `debentures` e `securitizados`;
+        # `grupo_economico`, 200 contra 120; `indexador`, 30 contra 20.
+        #
+        # Isso não é só redundância, é uma bomba-relógio: um valor que cabe
+        # numa tabela não cabe na outra. No dia em que algum processo copiar
+        # `issuers.setor` para `debentures.setor`, o Postgres recusa a linha
+        # inteira -- e o erro (`value too long for type character varying`)
+        # aparece no coletor, longe de qualquer decisão de modelagem.
+        #
+        # Padronizado pelo MAIS LARGO que já existia, nunca pelo mais estreito:
+        # alargar é troca de catálogo e não toca os dados; estreitar exigiria
+        # reescrever a tabela e poderia perder conteúdo.
+        "ALTER TABLE debentures ALTER COLUMN setor TYPE VARCHAR(120)",
+        "ALTER TABLE debentures ALTER COLUMN subsetor TYPE VARCHAR(120)",
+        "ALTER TABLE debentures ALTER COLUMN grupo_economico TYPE VARCHAR(200)",
+        "ALTER TABLE securitizados ALTER COLUMN setor TYPE VARCHAR(120)",
+        "ALTER TABLE securitizados ALTER COLUMN subsetor TYPE VARCHAR(120)",
+        "ALTER TABLE securitizados ALTER COLUMN grupo_economico TYPE VARCHAR(200)",
+        "ALTER TABLE securitizados ALTER COLUMN indexador TYPE VARCHAR(30)",
+        "ALTER TABLE negocios_b3 ALTER COLUMN emissor TYPE VARCHAR(300)",
+        # CONDIÇÕES DA EMISSÃO (11/09/2026) -- ver models.Debenture. Quatro
+        # colunas porque a remuneração da fonte é composta (índice +
+        # multiplicador + taxa); a formatação para tela fica em
+        # `queries.formatar_taxa_emissao`, fora do banco.
+        "ALTER TABLE debentures ADD COLUMN data_emissao DATE",
+        "ALTER TABLE debentures ADD COLUMN indice_emissao VARCHAR(30)",
+        "ALTER TABLE debentures ADD COLUMN percentual_emissao DOUBLE PRECISION",
+        "ALTER TABLE debentures ADD COLUMN taxa_emissao DOUBLE PRECISION",
     ]
     # `ALTER COLUMN ... TYPE` é sintaxe que o SQLite não tem. Antes esses
     # quatro comandos caíam no except e passavam despercebidos; agora que

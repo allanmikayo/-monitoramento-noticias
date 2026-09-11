@@ -249,10 +249,25 @@
     <div class="chart-card" style="margin-bottom:16px;">
       <h2 style="margin:0;" id="emissor-titulo-tabela">Tickers do emissor</h2>
       <table class="table" id="tabela-emissor-tickers">
-        <thead><tr><th>Código</th><th>Emissor</th><th>Indexador</th><th>Classe</th><th>Incentivada</th><th>Estoque (R$ mm)</th></tr></thead>
+        <thead><tr>
+          <th>Código</th><th>Emissor</th><th>Indexador</th>
+          <th title="Lei 12.431 — debênture incentivada, isenta de IR para pessoa física">Lei 12.431</th>
+          <th>Data de emissão</th>
+          <th title="Remuneração contratada na emissão (fonte: debentures.com.br) — não é a taxa indicativa de hoje">Taxa da emissão</th>
+          <th style="text-align:right;">Duration (anos)</th>
+          <th style="text-align:right;">Estoque (R$ mm)</th>
+          <th>Data base</th>
+        </tr></thead>
         <tbody></tbody>
-        <tfoot><tr id="tabela-emissor-total"><td colspan="5" style="text-align:right;font-weight:700;">Total</td><td style="font-weight:700;">—</td></tr></tfoot>
       </table>
+      <p class="muted small" id="emissor-tickers-nota">
+        <strong>Taxa da emissão</strong> é a remuneração contratada no papel
+        (fonte: debentures.com.br) — não muda ao longo da vida da debênture e
+        não é a taxa indicativa de hoje, que está nos cards e no gráfico
+        abaixo. <strong>Duration e estoque</strong> são do último dia
+        publicado de cada papel — a coluna "Data base" diz qual; papel sem
+        publicação da ANBIMA aparece com esses dois campos vazios.
+      </p>
     </div>
 
     <div class="emissor-grid">

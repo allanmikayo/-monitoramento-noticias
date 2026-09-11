@@ -685,29 +685,60 @@
     const data = await fetchJSON("/api/spreads/emissor", { nome: currentEmissores });
     const tbody = document.querySelector("#tabela-emissor-tickers tbody");
     tbody.innerHTML = "";
-    let totalEstoque = 0;
-    let temEstoque = false;
+
+    // AGRUPADO POR CLASSE (11/09/2026, pedido do Allan): "para ficar as
+    // semelhantes juntas". O backend já devolve as linhas ordenadas por
+    // classe e os totais por grupo -- aqui é só desenhar as quebras.
+    // Somar no navegador daria um número que poderia divergir do card da
+    // Visão Geral por arredondamento; o total vem pronto de lá.
+    const totalPorClasse = {};
+    (data.totais || []).forEach((t) => { totalPorClasse[t.classe] = t; });
+
+    const num = (v, casas) =>
+      v === null || v === undefined
+        ? "—"
+        : v.toLocaleString("pt-BR", { minimumFractionDigits: casas, maximumFractionDigits: casas });
+
+    let classeAtual = null;
     (data.tickers || []).forEach((t) => {
-      if (t.estoque !== null && t.estoque !== undefined) {
-        totalEstoque += t.estoque;
-        temEstoque = true;
+      const classe = t.classe || "Sem classificação";
+      if (classe !== classeAtual) {
+        if (classeAtual !== null) tbody.appendChild(linhaTotal(classeAtual));
+        classeAtual = classe;
+        const cab = document.createElement("tr");
+        cab.className = "grupo-classe";
+        cab.innerHTML = `<td colspan="9"><strong>${classe}</strong></td>`;
+        tbody.appendChild(cab);
       }
       const tr = document.createElement("tr");
       tr.innerHTML = `
         <td><strong>${t.codigo}</strong></td>
         <td>${t.emissor || "—"}</td>
         <td>${t.indexador || "—"}</td>
-        <td>${t.classe || "—"}</td>
         <td>${t.incentivada || "—"}</td>
-        <td>${t.estoque !== null ? t.estoque.toLocaleString("pt-BR", { maximumFractionDigits: 1 }) : "—"}</td>
+        <td>${t.data_emissao ? fmtData(t.data_emissao) : "—"}</td>
+        <td>${t.taxa_emissao || "—"}</td>
+        <td style="text-align:right;">${num(t.duration, 2)}</td>
+        <td style="text-align:right;">${num(t.estoque, 1)}</td>
+        <td>${t.data_estoque ? fmtData(t.data_estoque) : "—"}</td>
       `;
       tbody.appendChild(tr);
     });
-    // Totalizador pedido pelo Allan (24/07/2026) -- soma o Estoque de
-    // todas as dívidas mostradas na tabela (todos os tickers, de todos os
-    // emissores selecionados).
-    document.querySelector("#tabela-emissor-total td:last-child").textContent =
-      temEstoque ? totalEstoque.toLocaleString("pt-BR", { maximumFractionDigits: 1 }) : "—";
+    if (classeAtual !== null) tbody.appendChild(linhaTotal(classeAtual));
+
+    function linhaTotal(classe) {
+      const t = totalPorClasse[classe] || {};
+      const tr = document.createElement("tr");
+      tr.className = "total-classe";
+      tr.innerHTML = `
+        <td colspan="7" style="text-align:right;font-weight:700;">
+          Total ${classe} · ${t.n_ativos || 0} ativo${(t.n_ativos || 0) === 1 ? "" : "s"}
+        </td>
+        <td style="text-align:right;font-weight:700;">${num(t.estoque, 1)}</td>
+        <td></td>
+      `;
+      return tr;
+    }
   }
 
   async function loadEmissorChart() {

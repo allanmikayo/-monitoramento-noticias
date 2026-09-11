@@ -391,6 +391,31 @@ class Debenture(Base):
     # `indexador`/`classe`) pra `compute_trade_spreads` conseguir consultar
     # sem precisar rebuscar o boletim inteiro da Anbima.
     referencia_ntnb: Mapped[str | None] = mapped_column(String(20))
+    # CONDIÇÕES DA EMISSÃO (11/09/2026, pedido do Allan: "na tabela de dívida
+    # não quero taxa indicativa, quero a taxa da emissão").
+    #
+    # Vêm da base de características do debentures.com.br -- a mesma que já
+    # traz CNPJ e Lei 12.431 (ver app/spreads/fetch.py::fetch_caracs), e que
+    # é a fonte da verdade do universo de debêntures (a ANBIMA só publica o
+    # que está sendo precificado).
+    #
+    # POR QUE TRÊS COLUNAS PRA UMA TAXA, E NÃO UMA STRING PRONTA: no
+    # arquivo, a remuneração não é um campo só. "CDI + 3,50%" é
+    # `indice`="DI", `Percentual Multiplicador`=100 e
+    # `Juros Criterio Novo - Taxa`=3,5; já "116% do CDI" é o mesmo `indice`
+    # com multiplicador 116 e taxa vazia. Guardar os três crus deixa a
+    # FORMATAÇÃO mudar sem migração (ver `formatar_taxa_emissao` em
+    # app/spreads/queries.py) e mantém o dado utilizável num cálculo, não
+    # só numa tela.
+    #
+    # `indice_emissao` é o rótulo CRU da fonte ("DI", "IPCA", "IGP-M",
+    # "PRÉ", "SEM-ÍNDICE"...), deliberadamente separado de `indexador`
+    # ("CDI +"/"IPCA +", vocabulário da ANBIMA): são fontes distintas e
+    # misturar os dois rótulos na mesma coluna apagaria a diferença.
+    data_emissao: Mapped[date | None] = mapped_column(Date)
+    indice_emissao: Mapped[str | None] = mapped_column(String(30))
+    percentual_emissao: Mapped[float | None] = mapped_column(Float)
+    taxa_emissao: Mapped[float | None] = mapped_column(Float)
     # TAXONOMIA POR TICKER (09/09/2026, pedido do Allan).
     #
     # Setor, subsetor e grupo econômico vêm da aba "Tickers" do
@@ -404,9 +429,9 @@ class Debenture(Base):
     # setor é a mais consultada da Visão Geral) e evita reviver a máquina de
     # `issuers`, que está dormente desde 20/08. Um mesmo emissor PODE ter
     # tickers em subsetores diferentes, e assim isso é representável.
-    setor: Mapped[str | None] = mapped_column(String(80))
-    subsetor: Mapped[str | None] = mapped_column(String(80))
-    grupo_economico: Mapped[str | None] = mapped_column(String(120))
+    setor: Mapped[str | None] = mapped_column(String(120))
+    subsetor: Mapped[str | None] = mapped_column(String(120))
+    grupo_economico: Mapped[str | None] = mapped_column(String(200))
     # Ligação com o cadastro de empresas do monitoramento de notícias (pedido
     # do Allan, 24/07/2026 -- aba "Marcação Emissores"): permite mostrar
     # notícias da empresa ao lado do gráfico de spread dela e agregar todos
@@ -486,7 +511,7 @@ class NegocioB3(Base):
     trade_code: Mapped[str] = mapped_column(String(40), unique=True, nullable=False)
     data_negocio: Mapped[datetime] = mapped_column(Date, nullable=False)
     instrument_type: Mapped[str] = mapped_column(String(10), nullable=False)  # DEB | CRI | CRA
-    emissor: Mapped[str | None] = mapped_column(String(200))
+    emissor: Mapped[str | None] = mapped_column(String(300))
     codigo: Mapped[str] = mapped_column(String(40), nullable=False)  # ticker normalizado (ver _normalize_codigo)
     isin: Mapped[str | None] = mapped_column(String(20))
     quantidade: Mapped[float | None] = mapped_column(Float)
@@ -563,7 +588,7 @@ class Securitizado(Base):
     # Derivado de `tipo_remuneracao` (ver spreads/securitizados.py):
     # "IPCA+" | "CDI+" | "%CDI" | "OUTRO". É o filtro principal da aba,
     # porque as três primeiras classes NÃO são comparáveis entre si.
-    indexador: Mapped[str | None] = mapped_column(String(20))
+    indexador: Mapped[str | None] = mapped_column(String(30))
     referencia_ntnb: Mapped[str | None] = mapped_column(String(20))
     # TAXONOMIA POR TICKER (09/09/2026, pedido do Allan).
     #
@@ -578,9 +603,9 @@ class Securitizado(Base):
     # setor é a mais consultada da Visão Geral) e evita reviver a máquina de
     # `issuers`, que está dormente desde 20/08. Um mesmo emissor PODE ter
     # tickers em subsetores diferentes, e assim isso é representável.
-    setor: Mapped[str | None] = mapped_column(String(80))
-    subsetor: Mapped[str | None] = mapped_column(String(80))
-    grupo_economico: Mapped[str | None] = mapped_column(String(120))
+    setor: Mapped[str | None] = mapped_column(String(120))
+    subsetor: Mapped[str | None] = mapped_column(String(120))
+    grupo_economico: Mapped[str | None] = mapped_column(String(200))
     # Emissor canônico resolvido a partir do ORIGINADOR (não do emissor).
     issuer_id: Mapped[int | None] = mapped_column(ForeignKey("issuers.id"))
 

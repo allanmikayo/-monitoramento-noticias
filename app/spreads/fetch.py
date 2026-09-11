@@ -326,11 +326,32 @@ def fetch_spreads(session: requests.Session, dt: date) -> tuple[list[SpreadRow],
     return out, ntnb_rates, min_ntnb, min_venc
 
 
+def parse_data_br(val) -> date | None:
+    """Data no formato do debentures.com.br (dd/mm/aaaa) pra `date`.
+    Devolve None pra vazio, "-", "#N/D" e qualquer coisa que não case --
+    característica ausente não pode derrubar a captura inteira."""
+    s = str(val or "").strip()
+    if not s or s in {"-", "--"} or s.startswith("#"):
+        return None
+    try:
+        return datetime.strptime(s, "%d/%m/%Y").date()
+    except ValueError:
+        return None
+
+
 @dataclass
 class Caracteristicas:
     codigo: str
     incentivada: str | None
     cnpj: str | None
+    # CONDIÇÕES DA EMISSÃO (11/09/2026) -- ver models.Debenture pro porquê
+    # de guardar os três campos da remuneração crus em vez de uma string
+    # pronta. `indice` é o rótulo da fonte ("DI", "IPCA", "PRÉ"...), NÃO o
+    # vocabulário da Anbima ("CDI +"/"IPCA +").
+    data_emissao: date | None = None
+    indice_emissao: str | None = None
+    percentual_emissao: float | None = None
+    taxa_emissao: float | None = None
 
 
 def fetch_caracs(session: requests.Session) -> list[Caracteristicas]:
@@ -346,23 +367,63 @@ def fetch_caracs(session: requests.Session) -> list[Caracteristicas]:
         idx = next(i for i, l in enumerate(lines) if l.startswith("Codigo do Ativo"))
     except StopIteration:
         raise RuntimeError("Layout do arquivo de características mudou (cabeçalho 'Codigo do Ativo' não encontrado)")
-    df = pd.read_csv(StringIO("\n".join(lines[idx:])), sep="\t", dtype=str)
-    df.rename(columns={"Codigo do Ativo": "Código"}, inplace=True)
-    cols = ["Código", "Deb. Incent. (Lei 12.431)", "CNPJ"]
-    df = df[cols].apply(lambda s: s.astype("string").str.strip())
+    return parse_caracs("\n".join(lines[idx:]))
+
+
+# Colunas usadas do arquivo de características, JÁ com o nome sem espaços
+# (ver `parse_caracs`). O arquivo tem 85 colunas; pegar só estas evita que
+# uma coluna nova no meio quebre a leitura por posição.
+COL_CODIGO = "Codigo do Ativo"
+COL_INCENTIVADA = "Deb. Incent. (Lei 12.431)"
+COL_CNPJ = "CNPJ"
+COL_DATA_EMISSAO = "Data de Emissao"
+COL_INDICE = "indice"
+COL_PERCENTUAL = "Percentual Multiplicador/Rentabilidade"
+COL_TAXA = "Juros Criterio Novo - Taxa"
+
+
+def parse_caracs(texto: str) -> list[Caracteristicas]:
+    """Lê o TSV de características (do cabeçalho em diante) e devolve as
+    linhas já convertidas. Separado de `fetch_caracs` pra poder ser testado
+    contra uma amostra real do arquivo sem tocar a rede -- ver
+    tests/fixtures/caracteristicas_amostra.tsv.
+
+    NOMES DE COLUNA VÊM COM ESPAÇO NO ARQUIVO ("Empresa        ",
+    " Data de Vencimento"). Antes só três colunas eram lidas, e nenhuma
+    delas tinha esse problema; agora que lemos "Data de Emissao" e vizinhas,
+    o `.strip()` no CABEÇALHO (não só nos valores) passa a ser necessário --
+    sem ele um `KeyError` derrubaria a captura por causa de um espaço."""
+    df = pd.read_csv(StringIO(texto), sep="\t", dtype=str)
+    df.columns = [str(c).strip() for c in df.columns]
+    cols = [COL_CODIGO, COL_INCENTIVADA, COL_CNPJ,
+            COL_DATA_EMISSAO, COL_INDICE, COL_PERCENTUAL, COL_TAXA]
+    faltando = [c for c in cols if c not in df.columns]
+    if faltando:
+        raise RuntimeError(
+            "Layout do arquivo de características mudou -- coluna(s) não "
+            f"encontrada(s): {', '.join(faltando)}"
+        )
+    # `fillna("")` depois do strip: célula vazia vira `pd.NA`, e `pd.NA or
+    # None` levanta "boolean value of NA is ambiguous" em vez de virar
+    # None. Com 85 colunas lidas de um arquivo de terceiro, célula vazia é
+    # regra, não exceção.
+    df = df[cols].apply(lambda s: s.astype("string").str.strip()).fillna("")
     # Código passa por normalização mais forte que strip() (ver
     # _normalize_codigo) -- é usado pra CRUZAR com Debenture.codigo (vindo
-    # da Anbima), diferente de incentivada/CNPJ que só são exibidos, não
-    # comparados/casados com outra fonte.
-    df["Código"] = df["Código"].apply(_normalize_codigo)
+    # da Anbima), diferente dos outros campos, que só são exibidos.
+    df[COL_CODIGO] = df[COL_CODIGO].apply(_normalize_codigo)
     return [
         Caracteristicas(
-            codigo=r["Código"],
-            incentivada=(r["Deb. Incent. (Lei 12.431)"] or None),
-            cnpj=(r["CNPJ"] or None),
+            codigo=r[COL_CODIGO],
+            incentivada=(r[COL_INCENTIVADA] or None),
+            cnpj=(r[COL_CNPJ] or None),
+            data_emissao=parse_data_br(r[COL_DATA_EMISSAO]),
+            indice_emissao=(r[COL_INDICE] or None),
+            percentual_emissao=parse_num(r[COL_PERCENTUAL]),
+            taxa_emissao=parse_num(r[COL_TAXA]),
         )
         for r in df.to_dict("records")
-        if r["Código"]
+        if r[COL_CODIGO]
     ]
 
 

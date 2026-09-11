@@ -143,6 +143,14 @@ def persist_caracteristicas(db: Session, caracs: list[Caracteristicas]) -> int:
             continue
         deb.incentivada = c.incentivada
         deb.cnpj = c.cnpj
+        # Condições da emissão (11/09/2026) -- ver models.Debenture. São
+        # imutáveis pra um papel já emitido, mas regravar a cada rodada é
+        # o que faz o campo APARECER nos papéis que já estavam no cadastro
+        # antes desta coluna existir, sem precisar de um backfill à parte.
+        deb.data_emissao = c.data_emissao
+        deb.indice_emissao = c.indice_emissao
+        deb.percentual_emissao = c.percentual_emissao
+        deb.taxa_emissao = c.taxa_emissao
         deb.classe = compute_classe(deb.indexador, deb.incentivada)
         n += 1
     db.commit()
