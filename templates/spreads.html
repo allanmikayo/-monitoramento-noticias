@@ -321,6 +321,10 @@
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+{# Padrão visual de TODOS os gráficos (eixos e legenda em preto, marcador
+   em bolinha, eixo de data em Mês-Ano, dica de ferramenta por data). Tem
+   que vir depois do Chart.js e antes de quem cria gráfico. #}
+<script src="/static/chart-padrao.js?v={{ v }}"></script>
 <script src="/static/spreads.js?v={{ v }}"></script>
 {# `spreads_analitico.js` não é mais carregado (09/09/2026). Ele desenhava a
    curva por rating, a dispersão intra-rating, a compressão entre ratings, o

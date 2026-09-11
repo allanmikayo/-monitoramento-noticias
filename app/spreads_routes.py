@@ -129,6 +129,54 @@ def register_spreads_routes(require_user_dep) -> APIRouter:
             data_referencia=_parse_data(data),
         )
 
+    # SPREAD POR SETOR, COM DRILL-DOWN (reposta em 11/09/2026).
+    #
+    # BUG REAL. `static/spreads.js` chamava `/api/spreads/por-setor` e o
+    # servidor respondia 404: a rota não existia, embora
+    # `queries.spread_por_setor` estivesse inteira. Na tela isso não aparece
+    # como erro -- a tabela simplesmente fica vazia, porque a promessa do
+    # `fetch` é rejeitada e o resto da Visão Geral continua desenhando
+    # normalmente. Foi assim que a tabela "sumiu" sem ninguém ver um erro.
+    #
+    # QUATRO NÍVEIS (pedido do Allan, 11/09/2026): setor -> subsetor ->
+    # emissor -> ticker. O emissor no meio responde "quem puxou isso" -- sem
+    # ele, abrir um subsetor despejava todos os papéis de todas as empresas
+    # de uma vez, e um subsetor movido por uma emissora só ficava igual a um
+    # movido pelo setor inteiro.
+    @router.get("/api/spreads/por-setor")
+    def api_spreads_por_setor(
+        classe: str, base: str = "WoW", data: str | None = None,
+        nivel: str = "setor", setor: str | None = None,
+        subsetor: str | None = None, emissor: str | None = None,
+        user: User | None = Depends(require_user_dep), db: Session = Depends(get_db),
+    ):
+        if nivel not in ("setor", "subsetor", "emissor", "ticker"):
+            raise HTTPException(
+                status_code=400,
+                detail="nivel inválido — use setor, subsetor, emissor ou ticker",
+            )
+        # Cada nível exige os de cima. Sem isto, um pedido de "ticker" sem
+        # setor devolveria o mercado inteiro achatado numa lista -- resposta
+        # 200 com o conteúdo errado, que é pior do que um erro.
+        faltando = [
+            nome for nome, valor, exigido_em in (
+                ("setor", setor, ("subsetor", "emissor", "ticker")),
+                ("subsetor", subsetor, ("emissor", "ticker")),
+                ("emissor", emissor, ("ticker",)),
+            )
+            if nivel in exigido_em and valor is None
+        ]
+        if faltando:
+            raise HTTPException(
+                status_code=400,
+                detail=f"nivel '{nivel}' exige: {', '.join(faltando)}",
+            )
+        return queries.spread_por_setor(
+            db, _validar_classe(classe), dias_comparacao=_validar_base(base),
+            data_referencia=_parse_data(data), nivel=nivel,
+            setor=setor, subsetor=subsetor, emissor=emissor,
+        )
+
     @router.get("/api/spreads/movement-distribution")
     def api_spreads_movement_distribution(
         classe: str, base: str = "WoW", data: str | None = None,

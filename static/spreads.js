@@ -161,10 +161,14 @@
     const { series } = await fetchJSON("/api/spreads/series", { classe: currentClasse });
     destroyChart("series");
     const ctx = document.getElementById("chart-series").getContext("2d");
+    // LABELS EM ISO, NÃO FORMATADOS (11/09/2026). É o que permite ao eixo
+    // mostrar "Mar-26" e à dica de ferramenta mostrar "15/03/2026" a partir
+    // do MESMO dado -- ver PADRAO_GRAFICO.eixoData em static/chart-padrao.js.
+    const datasIso = series.map((r) => r.data);
     charts.series = new Chart(ctx, {
       type: "line",
       data: {
-        labels: series.map((r) => fmtData(r.data)),
+        labels: datasIso,
         datasets: [{
           label: `Spread médio — ${currentClasse}`,
           data: series.map((r) => r.spread_medio),
@@ -176,14 +180,11 @@
           fill: true,
         }],
       },
-      options: {
+      options: PADRAO_GRAFICO.eixoData(datasIso, {
         responsive: true,
         plugins: { legend: { display: true, position: "bottom" } },
-        scales: {
-          y: { title: { display: true, text: "bps" }, grid: { color: "#eee" } },
-          x: { grid: { display: false }, ticks: { maxTicksLimit: 12 } },
-        },
-      },
+        scales: { y: { title: { display: true, text: "bps" } } },
+      }),
     });
   }
 
@@ -242,35 +243,59 @@
   // ordem que responde "o que se moveu", que é a pergunta que traz alguém
   // a esta tabela.
   // ------------------------------------------------------------------
+  // QUATRO NÍVEIS (11/09/2026, pedido do Allan): setor -> subsetor ->
+  // emissor -> ticker. O emissor no meio responde "quem puxou isso": sem
+  // ele, abrir um subsetor despejava todos os papéis de todas as empresas
+  // de uma vez, e um subsetor movido por uma emissora só ficava
+  // indistinguível de um movido pelo setor inteiro.
+  const NIVEIS_SETOR = ["setor", "subsetor", "emissor", "ticker"];
+  const ROTULO_COLUNA = {
+    setor: "Setor", subsetor: "Subsetor", emissor: "Emissor", ticker: "Ticker",
+  };
   let setorNivel = "setor";
   let setorAtual = null;
   let subsetorAtual = null;
+  let emissorAtual = null;
+
+  // Volta para um nível acima, limpando o que fica abaixo dele. Guardar um
+  // `subsetorAtual` de uma navegação anterior seria o jeito silencioso de
+  // errar: a tela diria "todos os setores" e a consulta continuaria filtrada.
+  function irParaNivel(destino) {
+    setorNivel = destino;
+    const i = NIVEIS_SETOR.indexOf(destino);
+    if (i <= 0) setorAtual = null;
+    if (i <= 1) subsetorAtual = null;
+    if (i <= 2) emissorAtual = null;
+    loadSetor();
+  }
 
   function renderTrilhaSetor() {
     const trilha = document.getElementById("setor-trilha");
     const col = document.getElementById("setor-col-rotulo");
+    col.textContent = ROTULO_COLUNA[setorNivel];
     if (setorNivel === "setor") {
       trilha.innerHTML = "";
-      col.textContent = "Setor";
       return;
     }
-    const partes = ['<a href="#" data-nivel="setor">Todos os setores</a>'];
-    if (setorNivel === "ticker") {
-      partes.push(`<a href="#" data-nivel="subsetor">${setorAtual}</a>`);
-      partes.push(`<b>${subsetorAtual}</b>`);
-      col.textContent = "Ticker";
-    } else {
-      partes.push(`<b>${setorAtual}</b>`);
-      col.textContent = "Subsetor";
-    }
+    // A trilha é montada a partir do caminho já percorrido: cada nível
+    // acima do atual vira link, e o atual vira texto em negrito.
+    const caminho = [
+      { nivel: "setor", texto: "Todos os setores" },
+      { nivel: "subsetor", texto: setorAtual },
+      { nivel: "emissor", texto: subsetorAtual },
+      { nivel: "ticker", texto: emissorAtual },
+    ];
+    const ate = NIVEIS_SETOR.indexOf(setorNivel);
+    const partes = caminho.slice(0, ate + 1).map((p, i) =>
+      i === ate
+        ? `<b>${p.texto}</b>`
+        : `<a href="#" data-nivel="${p.nivel}">${p.texto}</a>`
+    );
     trilha.innerHTML = "› " + partes.join(" › ");
     trilha.querySelectorAll("a").forEach((a) => {
       a.addEventListener("click", (ev) => {
         ev.preventDefault();
-        const destino = a.dataset.nivel;
-        if (destino === "setor") { setorNivel = "setor"; setorAtual = null; subsetorAtual = null; }
-        else { setorNivel = "subsetor"; subsetorAtual = null; }
-        loadSetor();
+        irParaNivel(a.dataset.nivel);
       });
     });
   }
@@ -278,7 +303,8 @@
   async function loadSetor() {
     const data = await fetchJSON("/api/spreads/por-setor", {
       classe: currentClasse, base: currentBase, data: visaoDataInput.value || undefined,
-      nivel: setorNivel, setor: setorAtual || undefined, subsetor: subsetorAtual || undefined,
+      nivel: setorNivel, setor: setorAtual || undefined,
+      subsetor: subsetorAtual || undefined, emissor: emissorAtual || undefined,
     });
     renderTrilhaSetor();
 
@@ -293,7 +319,11 @@
       const podeDescer = setorNivel !== "ticker";
       if (podeDescer) {
         tr.style.cursor = "pointer";
-        tr.title = setorNivel === "setor" ? "Abrir os subsetores" : "Ver os tickers";
+        tr.title = {
+          setor: "Abrir os subsetores",
+          subsetor: "Ver os emissores",
+          emissor: "Ver os tickers",
+        }[setorNivel];
       } else {
         tr.style.cursor = "pointer";
         tr.title = "Ver a série histórica deste papel";
@@ -310,8 +340,9 @@
         <td class="${varCls}" style="text-align:right;">${l.variacao_bps !== null ? fmtBps(l.variacao_bps) : "—"}</td>
       `;
       tr.addEventListener("click", () => {
-        if (setorNivel === "setor") { setorAtual = l.rotulo; setorNivel = "subsetor"; loadSetor(); }
-        else if (setorNivel === "subsetor") { subsetorAtual = l.rotulo; setorNivel = "ticker"; loadSetor(); }
+        if (setorNivel === "setor") { setorAtual = l.rotulo; irParaNivel("subsetor"); }
+        else if (setorNivel === "subsetor") { subsetorAtual = l.rotulo; irParaNivel("emissor"); }
+        else if (setorNivel === "emissor") { emissorAtual = l.rotulo; irParaNivel("ticker"); }
         else { openDrilldown(l.rotulo, l.nome); }
       });
       tbody.appendChild(tr);
@@ -327,10 +358,11 @@
     const { series } = await fetchJSON("/api/spreads/series", { classe: currentClasse, codigo });
     destroyChart("drilldown");
     const ctx = document.getElementById("chart-drilldown").getContext("2d");
+    const datasIso = series.map((r) => r.data);
     charts.drilldown = new Chart(ctx, {
       type: "line",
       data: {
-        labels: series.map((r) => fmtData(r.data)),
+        labels: datasIso,
         datasets: [{
           label: `${codigo} — Spread (bps)`,
           data: series.map((r) => r.spread),
@@ -342,14 +374,11 @@
           fill: true,
         }],
       },
-      options: {
+      options: PADRAO_GRAFICO.eixoData(datasIso, {
         responsive: true,
         plugins: { legend: { display: true, position: "bottom" } },
-        scales: {
-          y: { title: { display: true, text: "bps" }, grid: { color: "#eee" } },
-          x: { grid: { display: false }, ticks: { maxTicksLimit: 12 } },
-        },
-      },
+        scales: { y: { title: { display: true, text: "bps" } } },
+      }),
     });
   }
 
@@ -458,7 +487,7 @@
       // "IPCA + Incentivadas" e "CDI + Tradicionais" não são os mesmos, e
       // ficar dentro de um subsetor que não existe na outra classe daria
       // tabela vazia sem explicação.
-      setorNivel = "setor"; setorAtual = null; subsetorAtual = null;
+      setorNivel = "setor"; setorAtual = null; subsetorAtual = null; emissorAtual = null;
       drilldownWrap.style.display = "none";
       destroyChart("drilldown");
       reloadAll();
@@ -973,15 +1002,12 @@
 
     charts[chave] = new Chart(ctx, {
       type: "line",
-      data: { labels: labels.map(fmtData), datasets },
-      options: {
+      data: { labels, datasets },
+      options: PADRAO_GRAFICO.eixoData(labels, {
         responsive: true,
         plugins: { legend: { display: true, position: "bottom" } },
-        scales: {
-          x: { grid: { display: false }, ticks: { maxTicksLimit: 8 } },
-          y: { title: { display: true, text: "bps" }, grid: { color: "#eee" } },
-        },
-      },
+        scales: { y: { title: { display: true, text: "bps" } } },
+      }),
     });
   }
 

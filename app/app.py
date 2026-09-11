@@ -214,13 +214,16 @@ app.include_router(register_balcao_routes(require_user))
 # tag exige role admin, conferido dentro do módulo em `_exige_admin`.
 app.include_router(register_cobertura_routes(current_user))
 
-# Aba "Banco de Dados" (12/08/2026) -- consulta e extração do que está
-# armazenado. Ao contrário de Notícias e Spreads, esta é RESTRITA: recebe
-# `require_admin`, não `current_user`. Ver app/spreads/banco_routes.py
-# para as barreiras do SQL livre.
-from .spreads.banco_routes import registrar_rotas as _registrar_banco  # noqa: E402
-
-_registrar_banco(app, require_admin, templates)
+# A ABA "BANCO DE DADOS" SAIU (11/09/2026, pedido do Allan). Ela existia
+# desde 12/08 para consultar e extrair o que está armazenado, com SQL livre
+# atrás de `require_admin` e uma lista de barreiras (somente leitura, limite
+# de linhas, validação de comando). Desde a migração para o Postgres próprio
+# da OCI o Allan tem o DBeaver ligado direto no banco, que faz o mesmo
+# melhor e sem manter uma superfície de SQL exposta na web.
+#
+# Foram removidos junto: app/spreads/banco_routes.py, templates/banco.html,
+# static/banco.js e tests/test_banco.py. Nada mais no app importava esses
+# arquivos -- a aba era autocontida.
 
 
 @app.exception_handler(OperationalError)

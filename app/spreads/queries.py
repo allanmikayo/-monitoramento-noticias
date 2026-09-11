@@ -1616,13 +1616,21 @@ def spread_por_setor(
     nivel: str = "setor",
     setor: str | None = None,
     subsetor: str | None = None,
+    emissor: str | None = None,
 ) -> dict:
-    """Agrega spread e estoque por setor / subsetor / ticker.
+    """Agrega spread e estoque por setor / subsetor / emissor / ticker.
 
     `nivel`:
       - "setor"    -> uma linha por setor
       - "subsetor" -> uma linha por subsetor DENTRO de `setor`
-      - "ticker"   -> uma linha por papel dentro de `setor`+`subsetor`
+      - "emissor"  -> uma linha por emissor dentro de `setor`+`subsetor`
+      - "ticker"   -> uma linha por papel dentro de `setor`+`subsetor`+`emissor`
+
+    NÍVEL DE EMISSOR (11/09/2026, pedido do Allan). Sem ele, abrir um
+    subsetor despejava todos os papéis de todas as empresas de uma vez --
+    e um subsetor movido por uma emissora só ficava indistinguível de um
+    movido pelo setor inteiro. Com o emissor no meio, a pergunta "quem
+    puxou isso" tem uma linha para responder.
 
     Cada linha traz o spread ponderado de hoje, o da data de comparação e a
     variação em bps entre os dois -- é a variação que ordena a tabela, porque
@@ -1631,7 +1639,7 @@ def spread_por_setor(
     dates_desc = distinct_dates(db, classe)
     hoje = _resolve_hoje(dates_desc, data_referencia)
     vazio = {"data_referencia": None, "data_comparacao": None, "nivel": nivel,
-             "setor": setor, "subsetor": subsetor, "linhas": []}
+             "setor": setor, "subsetor": subsetor, "emissor": emissor, "linhas": []}
     if hoje is None:
         return vazio
     anterior = _index_from(dates_desc, hoje, dias_comparacao)
@@ -1639,6 +1647,8 @@ def spread_por_setor(
 
     if nivel == "ticker":
         chave = Debenture.codigo
+    elif nivel == "emissor":
+        chave = Debenture.nome
     elif nivel == "subsetor":
         chave = Debenture.subsetor
     else:
@@ -1655,12 +1665,19 @@ def spread_por_setor(
         )
         if excluidos:
             q = q.filter(DebentureSpread.codigo.notin_(excluidos))
-        if nivel in ("subsetor", "ticker"):
+        # Cada nível herda os filtros dos níveis acima dele. `SEM_CLASSIFICACAO`
+        # é o rótulo que a tela mostra no lugar de um campo vazio, então aqui
+        # ele vira `IS NULL` -- comparar com a string faria a linha "Sem
+        # classificação" abrir vazia, que é o jeito silencioso de errar isto.
+        if nivel in ("subsetor", "emissor", "ticker"):
             q = (q.filter(Debenture.setor == setor) if setor != SEM_CLASSIFICACAO
                  else q.filter(Debenture.setor.is_(None)))
-        if nivel == "ticker":
+        if nivel in ("emissor", "ticker"):
             q = (q.filter(Debenture.subsetor == subsetor) if subsetor != SEM_CLASSIFICACAO
                  else q.filter(Debenture.subsetor.is_(None)))
+        if nivel == "ticker":
+            q = (q.filter(Debenture.nome == emissor) if emissor != SEM_CLASSIFICACAO
+                 else q.filter(Debenture.nome.is_(None)))
         agrupado: dict[str, list[tuple]] = {}
         for valor, spread, estoque, nome, grupo in q.all():
             rotulo = valor or SEM_CLASSIFICACAO
@@ -1698,6 +1715,6 @@ def spread_por_setor(
     return {
         "data_referencia": hoje.isoformat(),
         "data_comparacao": anterior.isoformat() if anterior else None,
-        "nivel": nivel, "setor": setor, "subsetor": subsetor,
+        "nivel": nivel, "setor": setor, "subsetor": subsetor, "emissor": emissor,
         "linhas": linhas,
     }
