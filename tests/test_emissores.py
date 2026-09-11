@@ -79,6 +79,61 @@ def test_agrupa_por_classe_e_totaliza_por_grupo():
     assert por_classe["CDI + Tradicionais"]["n_ativos"] == 2
 
 
+def test_total_geral_soma_estoque_de_todas_as_classes():
+    """PEDIDO DO ALLAN (11/09/2026): uma linha final somando IPCA+, CDI+ e o
+    que mais houver.
+
+    ISTO NÃO CONTRARIA a regra de nunca misturar as classes. O que não se
+    pode somar é TAXA -- spread de IPCA+ se mede contra a NTN-B e o de CDI+
+    contra o DI, e uma média entre os dois não significa nada. Estoque é
+    SALDO em reais: a dívida a mercado de um emissor é tudo que ele tem em
+    pé, qualquer que seja o indexador.
+    """
+    db = _base()
+    r = queries.emissor_tickers(db, ["ENERGISA S/A"])
+    assert r["total_geral"]["estoque"] == pytest.approx(700.0)  # 600 IPCA + 100 CDI
+    assert r["total_geral"]["n_ativos"] == 5
+
+
+def test_total_geral_nao_traz_spread_nem_duration():
+    """A linha de total geral só pode carregar o que é somável. Se um dia
+    alguém acrescentar um spread médio aqui, terá misturado NTN-B com DI."""
+    db = _base()
+    geral = queries.emissor_tickers(db, ["ENERGISA S/A"])["total_geral"]
+    assert set(geral) == {"estoque", "n_ativos"}
+
+
+def test_classe_outros_ganha_totalizador():
+    """BUG REAL (11/09/2026). A lista percorrida para montar os totais era
+    `CLASSES + [None]`, que não inclui "Outros" -- a classe de papel fora dos
+    dois padrões de mercado. As LINHAS apareciam na tabela (o navegador
+    agrupa pelo que recebe), mas o total do grupo vinha vazio, com zero
+    ativos e estoque em branco."""
+    db = _base(n_ipca=1, n_cdi=0)
+    db.add(Debenture(codigo="OUTRO1", nome="ENERGISA S/A", indexador="TR",
+                     classe="Outros", incentivada="N"))
+    db.add(DebentureSpread(codigo="OUTRO1", data=date(2026, 9, 9),
+                           estoque=25.0, taxa_indicativa=5.0, duration=1.5, spread=10.0))
+    db.commit()
+    r = queries.emissor_tickers(db, ["ENERGISA S/A"])
+    por_classe = {t["classe"]: t for t in r["totais"]}
+    assert "Outros" in por_classe, f"'Outros' ficou sem total: {list(por_classe)}"
+    assert por_classe["Outros"]["n_ativos"] == 1
+    assert por_classe["Outros"]["estoque"] == pytest.approx(25.0)
+    assert r["total_geral"]["estoque"] == pytest.approx(225.0)
+
+
+def test_as_duas_classes_principais_vem_antes_das_outras():
+    """A ordem dos totais é a ordem da tela. "Outros" no meio de IPCA+ e CDI+
+    faria a tabela parecer embaralhada."""
+    db = _base(n_ipca=1, n_cdi=1)
+    db.add(Debenture(codigo="OUTRO1", nome="ENERGISA S/A", classe="Outros"))
+    db.commit()
+    classes = [t["classe"] for t in queries.emissor_tickers(db, ["ENERGISA S/A"])["totais"]]
+    assert classes[:2] == ["IPCA + Incentivadas", "CDI + Tradicionais"]
+    assert classes[-1] == "Outros"
+
+
 def test_nao_soma_estoque_entre_classes():
     """IPCA+ e CDI+ usam referências diferentes (NTN-B e DI). Um total único
     misturaria as duas e não significaria nada."""

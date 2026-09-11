@@ -503,6 +503,8 @@
   const emissorGrupoPainel = document.getElementById("emissor-grupo-painel");
   const emissorGrupoBusca = document.getElementById("emissor-grupo-busca");
   const emissorGrupoLista = document.getElementById("emissor-grupo-lista");
+  const emissorLimpar = document.getElementById("emissor-limpar");
+  const emissorRecolher = document.getElementById("emissor-recolher");
   const emissorNivelTabs = document.querySelectorAll("#emissor-nivel-tabs .win-btn");
   const emissorVazio = document.getElementById("emissor-vazio");
   const emissorConteudo = document.getElementById("emissor-conteudo");
@@ -517,6 +519,20 @@
     { classe: "CDI + Tradicionais", canvas: "chart-emissor-cdi", chave: "emissorCdi" },
   ];
   let gruposEconomicos = [];
+  // Estado do "Recolher linhas" da tabela de dívidas. Guardado aqui, e não
+  // lido do DOM, para sobreviver ao redesenho da tabela a cada seleção.
+  let tickersRecolhidos = false;
+
+  // Linha de fonte de cada visual. A data é a DO PRÓPRIO VISUAL, não a do
+  // cabeçalho da página: cada bloco aqui pode se apoiar num dia diferente
+  // (papel sem publicação num pregão traz o dia anterior), e uma data global
+  // afirmaria que todos estão no mesmo dia quando não estão.
+  function escreverFonte(id, texto, iso) {
+    const el = document.getElementById(id);
+    if (!el) return;
+    const [, m, d] = (iso || "").split("-");
+    el.textContent = d ? `${texto} (dado disponível até ${d}/${m})` : texto;
+  }
   let currentNivel = document.querySelector("#emissor-nivel-tabs .win-btn.active")?.dataset.nivel || "emissor";
   let emissoresCarregados = false;
 
@@ -568,14 +584,21 @@
       // Um grupo parcialmente selecionado continua clicável para completar.
       const todos = g.emissores.every((n) => currentEmissores.includes(n));
       const div = document.createElement("div");
-      div.className = "search-item" + (todos ? " muted" : "");
+      div.className = "search-item" + (todos ? " grupo-selecionado" : "");
       div.innerHTML = `<span>${g.grupo}</span>` +
         `<span class="muted small">${g.n_emissores} emissor${g.n_emissores === 1 ? "" : "es"}` +
-        `${todos ? " · já selecionado" : ""}</span>`;
+        `${todos ? " · clique para remover" : ""}</span>`;
       div.addEventListener("click", () => {
-        g.emissores.forEach((n) => {
-          if (!currentEmissores.includes(n)) currentEmissores.push(n);
-        });
+        // Alterna: grupo inteiro já selecionado sai da seleção. Sem isto,
+        // desfazer um clique que trouxe 11 emissores seria 11 cliques nos
+        // "×" dos chips.
+        if (todos) {
+          currentEmissores = currentEmissores.filter((n) => !g.emissores.includes(n));
+        } else {
+          g.emissores.forEach((n) => {
+            if (!currentEmissores.includes(n)) currentEmissores.push(n);
+          });
+        }
         renderChips();
         renderGrupos();
         atualizarPainelEmissor();
@@ -619,6 +642,8 @@
       chip.appendChild(btnRemover);
       emissorChips.appendChild(chip);
     });
+    // Só aparece quando há o que limpar -- botão morto na tela é ruído.
+    emissorLimpar.style.display = currentEmissores.length ? "" : "none";
   }
 
   function atualizarPainelEmissor() {
@@ -683,6 +708,28 @@
     }
   });
 
+  emissorLimpar.addEventListener("click", () => {
+    currentEmissores = [];
+    renderChips();
+    renderGrupos();
+    atualizarPainelEmissor();
+  });
+
+  emissorRecolher.addEventListener("click", () => {
+    tickersRecolhidos = !tickersRecolhidos;
+    aplicarRecolhimento();
+  });
+
+  // Esconde/mostra as linhas de papel, deixando cabeçalho de grupo, totais
+  // por classe e total geral sempre visíveis -- é o resumo que a pessoa quer
+  // ver quando recolhe.
+  function aplicarRecolhimento() {
+    emissorRecolher.textContent = tickersRecolhidos ? "Expandir linhas" : "Recolher linhas";
+    document
+      .querySelectorAll("#tabela-emissor-tickers tbody tr.linha-ticker")
+      .forEach((tr) => { tr.hidden = tickersRecolhidos; });
+  }
+
   emissorNivelTabs.forEach((btn) => {
     btn.addEventListener("click", () => {
       emissorNivelTabs.forEach((b) => b.classList.remove("active"));
@@ -694,7 +741,7 @@
 
   async function reloadEmissor() {
     await Promise.all([
-      loadEmissorTabela(), loadEmissorCharts(), loadEmissorNoticias(),
+      loadEmissorTabela(), loadEmissorCharts(),
       loadEmissorNegociacoes(), loadEmissorCards(),
     ]);
   }
@@ -751,11 +798,16 @@
     if (!alvo.children.length) {
       alvo.innerHTML = '<p class="muted small">Sem papéis precificados para os emissores selecionados.</p>';
     }
+    const datasCards = (data.classes || []).map((c) => c.data).filter(Boolean).sort();
+    escreverFonte("fonte-cards", "Fonte: Anbima e Itaú BBA",
+                  datasCards[datasCards.length - 1]);
   }
 
   async function loadEmissorTabela() {
     document.getElementById("emissor-titulo-tabela").textContent =
-      currentEmissores.length === 1 ? `Tickers — ${currentEmissores[0]}` : `Tickers — ${currentEmissores.length} emissores selecionados`;
+      currentEmissores.length === 1
+        ? `Debêntures Emitidas — ${currentEmissores[0]}`
+        : `Debêntures Emitidas — ${currentEmissores.length} emissores selecionados`;
     const data = await fetchJSON("/api/spreads/emissor", { nome: currentEmissores });
     const tbody = document.querySelector("#tabela-emissor-tickers tbody");
     tbody.innerHTML = "";
@@ -781,34 +833,59 @@
         classeAtual = classe;
         const cab = document.createElement("tr");
         cab.className = "grupo-classe";
-        cab.innerHTML = `<td colspan="9"><strong>${classe}</strong></td>`;
+        cab.innerHTML = `<td colspan="9">${classe}</td>`;
         tbody.appendChild(cab);
       }
       const tr = document.createElement("tr");
+      // `linha-ticker` é o que o botão "Recolher linhas" esconde -- cabeçalho
+      // de grupo e totais nunca somem, senão recolher apagaria o resumo.
+      tr.className = "linha-ticker";
       tr.innerHTML = `
         <td><strong>${t.codigo}</strong></td>
-        <td>${t.emissor || "—"}</td>
+        <td class="col-emissor">${t.emissor || "—"}</td>
         <td>${t.indexador || "—"}</td>
         <td>${t.incentivada || "—"}</td>
         <td>${t.data_emissao ? fmtData(t.data_emissao) : "—"}</td>
         <td>${t.taxa_emissao || "—"}</td>
-        <td style="text-align:right;">${num(t.duration, 2)}</td>
-        <td style="text-align:right;">${num(t.estoque, 1)}</td>
+        <td>${num(t.duration, 2)}</td>
+        <td>${num(t.estoque, 1)}</td>
         <td>${t.data_estoque ? fmtData(t.data_estoque) : "—"}</td>
       `;
       tbody.appendChild(tr);
     });
     if (classeAtual !== null) tbody.appendChild(linhaTotal(classeAtual));
 
+    // TOTAL GERAL (11/09/2026, pedido do Allan). Só estoque e contagem.
+    // Spread e duration NÃO entram aqui: IPCA+ se mede contra a NTN-B e CDI+
+    // contra o DI, então uma média entre as duas não significaria nada.
+    // Estoque é saldo em reais -- a dívida a mercado do emissor é a soma de
+    // tudo que ele tem em pé, qualquer que seja o indexador.
+    const geral = data.total_geral;
+    if (geral && (data.tickers || []).length) {
+      const tr = document.createElement("tr");
+      tr.className = "total-geral";
+      tr.innerHTML = `
+        <td colspan="7" class="col-emissor">Total geral · ${geral.n_ativos} ativo${geral.n_ativos === 1 ? "" : "s"}</td>
+        <td>${num(geral.estoque, 1)}</td>
+        <td></td>
+      `;
+      tbody.appendChild(tr);
+    }
+
+    aplicarRecolhimento();
+    const datasTabela = (data.tickers || []).map((t) => t.data_estoque).filter(Boolean).sort();
+    escreverFonte("fonte-tabela", "Fonte: Debentures.com.br, Anbima e Itaú BBA",
+                  datasTabela[datasTabela.length - 1]);
+
     function linhaTotal(classe) {
       const t = totalPorClasse[classe] || {};
       const tr = document.createElement("tr");
       tr.className = "total-classe";
       tr.innerHTML = `
-        <td colspan="7" style="text-align:right;font-weight:700;">
+        <td colspan="7" class="col-emissor">
           Total ${classe} · ${t.n_ativos || 0} ativo${(t.n_ativos || 0) === 1 ? "" : "s"}
         </td>
-        <td style="text-align:right;font-weight:700;">${num(t.estoque, 1)}</td>
+        <td>${num(t.estoque, 1)}</td>
         <td></td>
       `;
       return tr;
@@ -847,26 +924,20 @@
     seriesList.forEach((s) => s.pontos.forEach((p) => datasEncontradas.add(p.data)));
     mercado.forEach((p) => datasEncontradas.add(p.data));
     const labels = Array.from(datasEncontradas).sort();
-
     const sufixo = chave === "emissorIpca" ? "ipca" : "cdi";
-    const sub = document.getElementById(`emissor-sub-grafico-${sufixo}`);
-    const semLinha = currentEmissores.filter(
-      (nome) => !seriesList.some((s) => s.codigo === nome)
-    );
-    if (currentNivel === "emissor" && semLinha.length && labels.length) {
-      sub.textContent = `Fonte: Anbima e Debentures.com · sem papel nesta classe: ${semLinha.join(", ")}`;
-    } else {
-      sub.textContent = "Fonte: Anbima e Debentures.com";
-    }
+    escreverFonte(`fonte-grafico-${sufixo}`, "Fonte: Anbima e Itaú BBA",
+                  labels[labels.length - 1]);
+
+    // Emissor sem papel nesta classe simplesmente não vira linha (decisão do
+    // Allan, 11/09/2026). A versão anterior listava os ausentes no subtítulo;
+    // virava um parágrafo comprido dizendo o que NÃO está no gráfico.
 
     if (!labels.length) {
       charts[chave] = null;
       el.style.display = "none";
       const msg = document.createElement("p");
       msg.className = "muted small muted-msg";
-      msg.textContent = currentEmissores.length === 1
-        ? `${currentEmissores[0]} não tem papel precificado nesta classe.`
-        : "Nenhum dos emissores selecionados tem papel precificado nesta classe.";
+      msg.textContent = "Sem papel precificado nesta classe.";
       card.appendChild(msg);
       return;
     }
@@ -914,62 +985,11 @@
     });
   }
 
-  // ------------------------------------------------------------------
-  // NOTÍCIAS EM DOIS BLOCOS (11/09/2026, pedido do Allan): "Do emissor" e
-  // "Do setor".
-  //
-  // POR QUE O SEGUNDO BLOCO EXISTE. O painel só sabia buscar por empresa da
-  // cobertura editorial, e emissor sem esse vínculo ficava com o painel
-  // vazio -- foi o que aconteceu com as três CPFLs. O setor vem da taxonomia
-  // (Debenture.setor), que está preenchida para quase todo ticker, então há
-  // contexto para mostrar mesmo sem match de empresa.
-  // ------------------------------------------------------------------
-  function renderNoticias(container, noticias, vazio) {
-    container.innerHTML = "";
-    if (!noticias.length) {
-      container.innerHTML = `<p class="muted small">${vazio}</p>`;
-      return;
-    }
-    noticias.forEach((n) => {
-      const div = document.createElement("div");
-      div.className = "news-item-mini";
-      div.innerHTML = `
-        <a href="${n.url}" target="_blank" rel="noopener">${n.title}</a>
-        <div class="muted small">${n.source_name || ""} · ${fmtData((n.published_at || "").slice(0, 10))}</div>
-      `;
-      container.appendChild(div);
-    });
-  }
-
-  async function loadEmissorNoticias() {
-    const sub = document.getElementById("emissor-noticias-sub");
-    const listaEmissor = document.getElementById("emissor-noticias-lista");
-    const listaSetor = document.getElementById("emissor-noticias-setor-lista");
-    const tituloSetor = document.getElementById("emissor-noticias-setor-titulo");
-
-    const data = await fetchJSON("/api/spreads/emissor/noticias", { nome: currentEmissores });
-    const nomesLigados = Object.values(data.empresas || {}).map((e) => e.company_name);
-    const setores = data.setores || [];
-
-    sub.textContent = nomesLigados.length
-      ? `Empresa(s) na cobertura: ${nomesLigados.join(", ")}`
-      : "Nenhum emissor selecionado está ligado a uma empresa da cobertura editorial.";
-
-    renderNoticias(
-      listaEmissor, data.noticias || [],
-      nomesLigados.length
-        ? "Nenhuma notícia encontrada ainda para essa(s) empresa(s)."
-        : 'Sem vínculo com a cobertura. Rode <code>python -m scripts.match_debenture_issuers --apply</code>, ou cadastre um alias em Fontes &amp; Empresas.'
-    );
-
-    tituloSetor.textContent = setores.length ? `Do setor — ${setores.join(", ")}` : "Do setor";
-    renderNoticias(
-      listaSetor, data.noticias_setor || [],
-      setores.length
-        ? "Nenhuma notícia etiquetada com esse(s) setor(es)."
-        : "Os emissores selecionados estão sem setor preenchido na taxonomia."
-    );
-  }
+  // O PAINEL DE NOTÍCIAS SAIU DESTA ABA (11/09/2026, pedido do Allan) --
+  // a tela ficou densa demais e notícia tem a aba própria dela. A rota
+  // /api/spreads/emissor/noticias e as consultas (`company_news`,
+  // `sector_news`, `setores_dos_emissores`) continuam de pé e testadas: o
+  // que saiu foi a caixa, não a capacidade.
 
   // Últimas negociações (negócio a negócio, B3 -- pedido do Allan,
   // 24/07/2026). Filtrado pelos mesmos tickers do(s) emissor(es)

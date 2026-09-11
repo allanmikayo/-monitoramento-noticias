@@ -155,6 +155,33 @@ def main() -> int:
             .group_by(Debenture.grupo_economico).all()
         ):
             print(f"      {g[0]!r}: {g[1]} ticker(s)")
+
+        # ------------------------------------------------------------------
+        # 5. SETOR: DOIS VOCABULARIOS. O painel de noticias tagueia artigo
+        #    com `sectors.name` (cobertura editorial); a taxonomia preenche
+        #    `debentures.setor` (planilha do Allan). Se os dois nao usarem as
+        #    MESMAS palavras, "noticias do setor do emissor" nao acha nada --
+        #    e o defeito nao aparece em lugar nenhum, so' na lista vazia.
+        # ------------------------------------------------------------------
+        _titulo("5) 'Setor' na taxonomia x 'setor' da cobertura de noticias")
+        from app.models import Sector
+        setores_deb = {
+            r[0] for r in db.query(func.distinct(Debenture.setor))
+            .filter(Debenture.setor.isnot(None)).all() if r[0]
+        }
+        setores_news = {
+            r[0] for r in db.query(func.distinct(Sector.name)).all() if r[0]
+        }
+        iguais = setores_deb & setores_news
+        print(f"  Setores distintos em debentures.setor: {len(setores_deb)}")
+        print(f"  Setores distintos em sectors.name:     {len(setores_news)}")
+        print(f"  Nomes que batem exatamente:            {len(iguais)}")
+        print("  Em debentures.setor:")
+        for x in sorted(setores_deb):
+            print(f"      {'[bate]' if x in iguais else '      '} {x}")
+        print("  Em sectors.name (cobertura de noticias):")
+        for x in sorted(setores_news):
+            print(f"      {'[bate]' if x in iguais else '      '} {x}")
     print()
     return 0
 

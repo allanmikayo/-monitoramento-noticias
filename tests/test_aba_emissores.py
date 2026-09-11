@@ -288,3 +288,21 @@ def test_painel_de_noticias_traz_os_dois_blocos(cliente_emissores):
     for chave in ("empresas", "noticias", "setores", "noticias_setor"):
         assert chave in corpo, f"falta '{chave}' na resposta"
     assert corpo["setores"] == ["Energia Elétrica"]
+
+
+def test_setor_casa_mesmo_com_acento_ou_caixa_diferente():
+    """Os dois cadastros de setor cresceram separados e ninguém garantiu que
+    escrevem igual. "ENERGIA ELETRICA" na cobertura e "Energia Elétrica" na
+    taxonomia são o mesmo setor para qualquer leitor -- e virariam dois num
+    `IN` cru de SQL, deixando o bloco de notícias vazio sem erro na tela."""
+    db = _com_noticias(_base())
+    assert queries.sector_news(db, ["ENERGIA ELETRICA"])
+    assert queries.sector_news(db, ["  energia  elétrica "])
+
+
+def test_vocabulario_de_fato_diferente_continua_vazio():
+    """A normalização conserta acento e caixa, não tradução. Se um lado diz
+    "Utilities" e o outro "Energia Elétrica", o bloco vem vazio -- e é isso
+    mesmo, até existir uma dimensão única de setor."""
+    db = _com_noticias(_base())
+    assert queries.sector_news(db, ["Utilities"]) == []

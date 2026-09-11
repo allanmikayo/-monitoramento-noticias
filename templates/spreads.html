@@ -232,9 +232,13 @@
       <button data-nivel="emissor" class="win-btn active">Nível emissor</button>
       <button data-nivel="ticker" class="win-btn">Nível ticker</button>
     </div>
+
+    {# Um grupo econômico pode jogar dezenas de emissores na tela de uma vez
+       (Saneamento trouxe 11). Tirar um por um pelo "×" de cada chip é
+       trabalho demais para desfazer um clique só. #}
+    <button type="button" id="emissor-limpar" class="win-btn" style="display:none;">Limpar seleção</button>
   </div>
   <div id="emissor-chips" class="chip-row"></div>
-  <p class="muted small">Nível emissor: spread médio ponderado pelo Estoque de cada ticker, uma linha por emissor selecionado. Nível ticker: uma linha por papel. A linha pontilhada é o spread médio de mercado da mesma classe, sem filtrar por emissor — só como referência.</p>
 
   <div id="emissor-vazio" class="muted small" style="padding:24px 0 12px 0;">Busque e selecione um ou mais emissores acima pra ver os tickers de dívida e a série de spread.</div>
 
@@ -259,30 +263,32 @@
 
        O card "SPREAD NEGOCIADO (B3)" saiu daqui: o Allan pediu três cards por
        classe, e o negócio a negócio continua embaixo, na tabela dele. #}
-    <div id="emissor-cards-duplo" class="emissor-duplo" style="margin-bottom:16px;"></div>
+    <div id="emissor-cards-duplo" class="emissor-duplo"></div>
+    <p class="fonte-visual" id="fonte-cards">Fonte: Anbima e Itaú BBA</p>
 
     <div class="chart-card" style="margin-bottom:16px;">
-      <h2 style="margin:0;" id="emissor-titulo-tabela">Tickers do emissor</h2>
-      <table class="table" id="tabela-emissor-tickers">
+      <div class="titulo-com-acao">
+        <h2 style="margin:0;" id="emissor-titulo-tabela">Debêntures Emitidas</h2>
+        {# A tabela cresce com a seleção: 11 emissores de saneamento viraram
+           dezenas de linhas. Recolher deixa só as linhas de total à vista --
+           o resumo que responde "quanto de dívida" sem rolar a página. #}
+        <button type="button" id="emissor-recolher" class="win-btn">Recolher linhas</button>
+      </div>
+      <table class="table tabela-emissao" id="tabela-emissor-tickers">
         <thead><tr>
-          <th>Código</th><th>Emissor</th><th>Indexador</th>
+          <th>Código</th>
+          <th class="col-emissor">Emissor</th>
+          <th>Indexador</th>
           <th title="Lei 12.431 — debênture incentivada, isenta de IR para pessoa física">Lei 12.431</th>
           <th>Data de emissão</th>
-          <th title="Remuneração contratada na emissão (fonte: debentures.com.br) — não é a taxa indicativa de hoje">Taxa da emissão</th>
-          <th style="text-align:right;">Duration (anos)</th>
-          <th style="text-align:right;">Estoque (R$ mm)</th>
+          <th title="Remuneração contratada na emissão — não é a taxa indicativa de hoje">Taxa da emissão</th>
+          <th>Duration (anos)</th>
+          <th>Estoque (R$ mm)</th>
           <th>Data base</th>
         </tr></thead>
         <tbody></tbody>
       </table>
-      <p class="muted small" id="emissor-tickers-nota">
-        <strong>Taxa da emissão</strong> é a remuneração contratada no papel
-        (fonte: debentures.com.br) — não muda ao longo da vida da debênture e
-        não é a taxa indicativa de hoje, que está nos cards e no gráfico
-        abaixo. <strong>Duration e estoque</strong> são do último dia
-        publicado de cada papel — a coluna "Data base" diz qual; papel sem
-        publicação da ANBIMA aparece com esses dois campos vazios.
-      </p>
+      <p class="fonte-visual" id="fonte-tabela">Fonte: Debentures.com.br, Anbima e Itaú BBA</p>
     </div>
 
     {# UM GRÁFICO POR CLASSE, LADO A LADO (11/09/2026). Mesma razão dos
@@ -292,33 +298,24 @@
     <div class="emissor-duplo" style="margin-bottom:16px;">
       <div class="chart-card">
         <h2 style="margin:0;" id="emissor-titulo-grafico-ipca">IPCA + Incentivadas</h2>
-        <p class="muted small" id="emissor-sub-grafico-ipca">Fonte: Anbima e Debentures.com</p>
         <canvas id="chart-emissor-ipca" height="150"></canvas>
+        <p class="fonte-visual" id="fonte-grafico-ipca">Fonte: Anbima e Itaú BBA</p>
       </div>
       <div class="chart-card">
         <h2 style="margin:0;" id="emissor-titulo-grafico-cdi">CDI + Tradicionais</h2>
-        <p class="muted small" id="emissor-sub-grafico-cdi">Fonte: Anbima e Debentures.com</p>
         <canvas id="chart-emissor-cdi" height="150"></canvas>
+        <p class="fonte-visual" id="fonte-grafico-cdi">Fonte: Anbima e Itaú BBA</p>
       </div>
-    </div>
-
-    <div class="chart-card" id="emissor-noticias-card" style="margin-bottom:16px;">
-      <h2 style="margin:0;">Últimas notícias</h2>
-      <p class="muted small" id="emissor-noticias-sub">—</p>
-      <h3 class="bloco-noticias">Do emissor</h3>
-      <div id="emissor-noticias-lista"></div>
-      <h3 class="bloco-noticias" id="emissor-noticias-setor-titulo">Do setor</h3>
-      <div id="emissor-noticias-setor-lista"></div>
     </div>
 
     <div class="chart-card">
       <h2 style="margin:0;">Últimas negociações (B3)</h2>
-      <p class="muted small">Negócio a negócio — DEB/CRI/CRA, atualizado a cada 15 min durante o pregão · Fonte: B3</p>
       <table class="table" id="tabela-emissor-negociacoes">
         <thead><tr><th>Data</th><th>Horário</th><th>Tipo</th><th>Código</th><th>Emissor</th><th>Indexador</th><th>Preço</th><th>Volume (R$)</th><th>Taxa</th></tr></thead>
         <tbody></tbody>
       </table>
       <p class="muted small" id="emissor-negociacoes-vazio" style="display:none;">Nenhuma negociação recente encontrada pra esses tickers.</p>
+      <p class="fonte-visual">Fonte: B3 — negócio a negócio, atualizado a cada 15 min durante o pregão</p>
     </div>
   </div>
 </div>

@@ -418,28 +418,74 @@ h3.bloco-noticias:first-of-type { margin-top: 10px; }
 
 .table td.num, .table th.num { text-align: right; }
 
-/* Tabela de dívidas da aba Emissores, agrupada por classe (11/09/2026).
-   A quebra de grupo precisa ser visível sem virar mais um card: uma faixa
-   discreta para o cabeçalho e uma linha de total com régua em cima, que é
-   a convenção de planilha que o Allan já lê todo dia. */
-#tabela-emissor-tickers tr.grupo-classe td {
-  background: #f2f2f2;
-  border-bottom: 1px solid var(--border);
-  font-size: 0.8rem;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  color: var(--muted);
-  padding-top: 14px;
+/* ------------------------------------------------------------------ */
+/* Aba Emissores — acabamento (11/09/2026)                             */
+/*                                                                      */
+/* A tela ficou densa: seis cards, duas tabelas, dois gráficos. O ajuste */
+/* aqui é quase todo de PESO VISUAL -- o que é dado fica forte, o que é  */
+/* moldura recua. Nada disso muda número nenhum.                         */
+/* ------------------------------------------------------------------ */
+
+/* Linha de fonte: sempre ABAIXO do visual, discreta, alinhada à esquerda. */
+.fonte-visual {
+  margin: 8px 0 0 0; font-size: 0.72rem; color: var(--muted); line-height: 1.4;
 }
-#tabela-emissor-tickers tr.grupo-classe:first-child td { padding-top: 8px; }
+
+.titulo-com-acao {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 12px; margin-bottom: 14px; flex-wrap: wrap;
+}
+
+/* Cards do topo: número menor que o padrão do dashboard. Seis valores em
+   1,6rem lado a lado viravam uma parede de dígitos -- a informação é a
+   comparação entre as duas colunas, não o tamanho de cada número. */
+.cards-classe .kpi-value { font-size: 1.15rem; }
+.cards-classe .kpi-card { padding: 10px 14px; }
+.cards-classe .kpi-label { font-size: 0.66rem; }
+.cards-classe .kpi-row { gap: 10px; }
+
+/* Grupo econômico já inteiro na seleção: um segundo clique tira. */
+#emissor-grupo-lista .search-item.grupo-selecionado { background: var(--accent-tint, #fff3ea); }
+
+/* Tabela "Debêntures Emitidas" (11/09/2026).
+   Cabeçalho preto com texto branco; quebra de classe em cinza claro com
+   texto preto -- a hierarquia fica explícita sem precisar de caixa alta.
+   Só Emissor (e as marcações de classe/total) alinham à esquerda; o resto
+   centraliza, que foi o pedido do Allan. */
+.tabela-emissao th {
+  background: #111111; color: #ffffff; text-transform: none;
+  font-size: 0.74rem; letter-spacing: 0.02em; text-align: center;
+  vertical-align: bottom;
+}
+.tabela-emissao td { text-align: center; }
+.tabela-emissao th.col-emissor, .tabela-emissao td.col-emissor { text-align: left; }
+#tabela-emissor-tickers tr.grupo-classe td {
+  background: #ececec;
+  color: var(--header);
+  border-bottom: 1px solid var(--border);
+  font-size: 0.82rem;
+  font-weight: 700;
+  text-align: left;
+  padding-top: 10px;
+}
 #tabela-emissor-tickers tr.total-classe td {
   border-top: 2px solid var(--border);
   border-bottom: none;
   background: #fbfbfb;
+  font-weight: 700;
 }
-#tabela-emissor-tickers td:nth-child(5),
-#tabela-emissor-tickers td:nth-child(6),
+/* Total geral: a última linha, e a única que soma as duas classes -- só
+   estoque e contagem (ver o comentário em spreads.js). Merece régua dupla
+   para não ser confundida com o total de um grupo. */
+#tabela-emissor-tickers tr.total-geral td {
+  border-top: 3px double var(--header);
+  border-bottom: none;
+  background: #f4f4f4;
+  font-weight: 700;
+}
+#tabela-emissor-tickers tr.total-classe td,
+#tabela-emissor-tickers tr.total-geral td,
 #tabela-emissor-tickers td:nth-child(7),
-#tabela-emissor-tickers tr.total-classe td {
+#tabela-emissor-tickers td:nth-child(8) {
   font-variant-numeric: tabular-nums;
 }

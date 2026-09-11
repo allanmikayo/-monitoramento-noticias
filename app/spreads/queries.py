@@ -842,8 +842,20 @@ def emissor_tickers(db: Session, nomes_emissor: list[str]) -> dict:
     # Totalizadores por classe. Somados aqui, e não no navegador, porque é
     # o mesmo número que precisa bater com o card e com a aba Visão Geral --
     # uma soma só, num lugar só.
+    #
+    # BUG CORRIGIDO (11/09/2026): a lista percorrida era `CLASSES + [None]`,
+    # que não inclui "Outros" -- a classe de papel que não cai nos dois
+    # padrões de mercado (ver `compute_classe`). As LINHAS de "Outros"
+    # apareciam na tabela (o navegador agrupa pelo que recebe), mas o total
+    # do grupo vinha vazio. Agora a ordem é: as duas classes principais na
+    # ordem de sempre, e depois o que mais existir, para nada ficar sem
+    # somatório só por não ter sido previsto aqui.
+    presentes = {l["classe"] for l in linhas}
+    ordem = CLASSES + sorted(
+        (c for c in presentes if c not in CLASSES and c is not None), key=str
+    ) + ([None] if None in presentes else [])
     totais: list[dict] = []
-    for classe in CLASSES + [None]:
+    for classe in ordem:
         do_grupo = [l for l in linhas if l["classe"] == classe]
         if not do_grupo:
             continue
@@ -853,7 +865,22 @@ def emissor_tickers(db: Session, nomes_emissor: list[str]) -> dict:
             "n_ativos": len(do_grupo),
             "estoque": round(sum(com_estoque), 1) if com_estoque else None,
         })
-    return {"tickers": linhas, "totais": totais}
+
+    # TOTAL GERAL (11/09/2026, pedido do Allan): soma IPCA+, CDI+ e o que
+    # mais houver.
+    #
+    # ISTO NÃO CONTRARIA a regra de nunca misturar as classes. O que não se
+    # pode somar é TAXA: spread de IPCA+ se mede contra a NTN-B e o de CDI+
+    # contra o DI, então uma média entre os dois não significa nada. Estoque
+    # é SALDO em reais -- a dívida a mercado do emissor é a soma de tudo que
+    # ele tem em pé, independente de indexador. Por isso o total geral traz
+    # estoque e contagem, e nunca spread ou duration.
+    com_estoque = [l["estoque"] for l in linhas if l["estoque"] is not None]
+    total_geral = {
+        "n_ativos": len(linhas),
+        "estoque": round(sum(com_estoque), 1) if com_estoque else None,
+    }
+    return {"tickers": linhas, "totais": totais, "total_geral": total_geral}
 
 
 def emissor_series(db: Session, nomes_emissor: list[str], classe: str, nivel: str = "emissor") -> dict:
@@ -1369,6 +1396,23 @@ def setores_dos_emissores(db: Session, nomes_emissor: list[str]) -> list[str]:
     return sorted({r[0] for r in rows if r[0]})
 
 
+def _chave_setor(nome: str | None) -> str:
+    """Nome de setor reduzido ao que dá para comparar entre duas fontes que
+    ninguém padronizou: sem acento, sem caixa, sem espaço sobrando.
+
+    "Energia Elétrica" e "ENERGIA ELETRICA" são o mesmo setor para qualquer
+    leitor humano, e virariam dois setores diferentes num `IN` cru de SQL --
+    resultado: bloco de notícias vazio, sem erro nenhum na tela. Isso não
+    resolve vocabulários de fato diferentes ("Energia Elétrica" x
+    "Utilities"); resolve a divergência boba, que é a mais comum quando dois
+    cadastros crescem separados."""
+    import unicodedata
+
+    sem_acento = unicodedata.normalize("NFKD", nome or "")
+    sem_acento = "".join(c for c in sem_acento if not unicodedata.combining(c))
+    return " ".join(sem_acento.split()).casefold()
+
+
 def sector_news(
     db: Session, setores: list[str], limit: int = 8, excluir_ids: list[int] | None = None,
 ) -> list[dict]:
@@ -1382,10 +1426,21 @@ def sector_news(
     """
     if not setores:
         return []
+    # Cruza pelo nome NORMALIZADO (ver `_chave_setor`) em vez de um `IN`
+    # literal. A tabela `sectors` é da ordem de dezenas de linhas -- trazer
+    # todas e casar em Python custa uma consulta trivial e evita o modo de
+    # falha silencioso de um acento fora do lugar.
+    procurados = {_chave_setor(x) for x in setores}
+    ids = [
+        sid for sid, nome in db.query(Sector.id, Sector.name).all()
+        if _chave_setor(nome) in procurados
+    ]
+    if not ids:
+        return []
     q = (
         db.query(Article)
         .join(Article.sector_tags)
-        .filter(Sector.name.in_(setores))
+        .filter(Sector.id.in_(ids))
     )
     if excluir_ids:
         q = q.filter(Article.id.notin_(excluir_ids))
