@@ -329,6 +329,29 @@ h2 { font-size: 1.05rem; margin: 20px 0 8px; color: var(--header); font-weight: 
   display: grid; grid-template-columns: minmax(0, 2fr) minmax(240px, 1fr);
   gap: 16px; align-items: start;
 }
+/* DUAS COLUNAS DE IGUAL PESO (11/09/2026): os seis cards e os dois gráficos
+   da aba Emissores. Diferente de `.emissor-grid` (2fr/1fr, feita para
+   gráfico + painel lateral) -- aqui os dois lados são a MESMA coisa medida
+   em classes diferentes, então dividir ao meio é o que diz a verdade. Numa
+   tela estreita viram um embaixo do outro em vez de espremer os dois. */
+.emissor-duplo {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(420px, 1fr));
+  gap: 16px; align-items: start;
+}
+.cards-classe-titulo {
+  margin: 0 0 10px 0; font-size: 0.95rem; display: flex;
+  align-items: baseline; gap: 8px; flex-wrap: wrap;
+}
+.cards-classe .kpi-row { margin-bottom: 0; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); }
+/* Subtítulo dos blocos do painel de notícias ("Do emissor" / "Do setor"). */
+h3.bloco-noticias {
+  margin: 16px 0 0 0; font-size: 0.78rem; letter-spacing: 0.04em;
+  text-transform: uppercase; color: var(--muted);
+}
+h3.bloco-noticias:first-of-type { margin-top: 10px; }
+#emissor-noticias-setor-lista { display: flex; flex-direction: column; gap: 10px; margin-top: 10px; }
+/* Linha do seletor de grupo econômico: nome à esquerda, contagem à direita. */
+#emissor-grupo-lista .search-item { display: flex; justify-content: space-between; gap: 12px; }
 #emissor-noticias-lista { display: flex; flex-direction: column; gap: 10px; margin-top: 10px; }
 .news-item-mini { padding-bottom: 10px; border-bottom: 1px solid var(--border); }
 .news-item-mini:last-child { border-bottom: none; padding-bottom: 0; }

@@ -192,3 +192,86 @@ def test_o_custo_nao_cresce_com_o_numero_de_tickers():
         "o custo voltou a seguir o tamanho do emissor"
     )
     assert e2.n <= 3, f"{e2.n} consultas para montar uma tabela é demais"
+
+
+# ---------------------------------------------------------------------------
+# A rota, de verdade -- não só a função
+# ---------------------------------------------------------------------------
+#
+# POR QUE ESTE BLOCO EXISTE (11/09/2026). A tabela subiu com os cabeçalhos
+# novos e NENHUMA linha. Os testes de unidade acima passavam todos: a função
+# devolvia as linhas certas. O que faltava era alguém percorrer o caminho
+# inteiro -- rota, serialização, status HTTP -- que é onde a tela realmente
+# se apoia. `loadEmissorTabela` está dentro de um `Promise.all`: se a rota
+# responde erro, o `fetch` rejeita, a tabela fica vazia e o RESTO da aba
+# (cards, gráfico) continua desenhando normalmente. Ou seja, o modo de falha
+# é silencioso e parece "dado faltando", não "rota quebrada".
+
+@pytest.fixture()
+def banco_rota():
+    """Base mínima no banco que o app usa (arquivo temporário, ver
+    tests/conftest.py) -- é o mesmo engine que a rota vai abrir."""
+    from app.db import Base, SessionLocal, engine
+    from app.models import Debenture, DebentureSpread
+
+    Base.metadata.create_all(engine)
+    with SessionLocal() as db:
+        db.query(DebentureSpread).delete()
+        db.query(Debenture).delete()
+        db.add(Debenture(codigo="ROTA11", nome="CPFL TRANSMISSAO S.A",
+                         indexador="IPCA +", classe="IPCA + Incentivadas",
+                         incentivada="S", data_emissao=date(2024, 6, 15),
+                         indice_emissao="IPCA", percentual_emissao=None,
+                         taxa_emissao=6.8123))
+        db.add(DebentureSpread(codigo="ROTA11", data=date(2026, 9, 10),
+                               estoque=120.0, taxa_indicativa=7.1, duration=5.0,
+                               spread=42.0))
+        db.commit()
+    return SessionLocal
+
+
+@pytest.fixture()
+def cliente_rota(banco_rota):
+    from fastapi.testclient import TestClient
+
+    import app.app as A
+    from app import auth
+    from app.models import User
+
+    with banco_rota() as db:
+        u = db.query(User).first()
+        if u is None:
+            u = User(email="a@a.com", name="Teste", role="admin", active=True,
+                     password_hash=auth.hash_password("x" * 10), email_confirmed=True)
+            db.add(u)
+            db.commit()
+        token = auth.create_session(db, u, ip="1", user_agent="teste").token
+        db.commit()
+    c = TestClient(A.app, raise_server_exceptions=False)
+    c.cookies.set("session_token", token)
+    yield c
+    # Ver o comentário em tests/test_aba_emissores.py: este engine é o
+    # arquivo compartilhado por toda a suíte, então o que entra aqui tem que
+    # sair aqui.
+    with banco_rota() as db:
+        db.query(DebentureSpread).delete()
+        db.query(Debenture).delete()
+        db.commit()
+
+
+def test_a_rota_da_tabela_responde_200_com_as_colunas_novas(cliente_rota):
+    r = cliente_rota.get("/api/spreads/emissor?nome=CPFL+TRANSMISSAO+S.A",
+                         follow_redirects=False)
+    assert r.status_code == 200, r.text
+    linha = r.json()["tickers"][0]
+    assert linha["taxa_emissao"] == "IPCA + 6,8123%"
+    assert linha["data_emissao"] == "2024-06-15"
+
+
+def test_a_rota_entrega_json_serializavel(cliente_rota):
+    """`date` do banco tem que sair como texto ISO. Um objeto não
+    serializável aqui vira 500 -- e a tela some sem dizer por quê."""
+    import json
+
+    r = cliente_rota.get("/api/spreads/emissor?nome=CPFL+TRANSMISSAO+S.A")
+    json.dumps(r.json())  # explode se algo não for serializável

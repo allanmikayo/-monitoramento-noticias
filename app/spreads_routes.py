@@ -277,7 +277,38 @@ def register_spreads_routes(require_user_dep) -> APIRouter:
     ):
         empresas = queries.companies_for_emissores(db, nome)
         company_ids = [e["company_id"] for e in empresas.values()]
-        return {"empresas": empresas, "noticias": queries.company_news(db, company_ids)}
+        noticias = queries.company_news(db, company_ids)
+        # NOTÍCIAS DO SETOR (11/09/2026, pedido do Allan): o painel mostrava
+        # só o que saía sobre a empresa, e emissor sem ligação com a
+        # cobertura editorial ficava com o painel vazio -- que era o caso das
+        # CPFLs. O bloco do setor dá contexto mesmo quando não há match de
+        # empresa. `excluir_ids` evita a mesma notícia nos dois blocos.
+        setores = queries.setores_dos_emissores(db, nome)
+        return {
+            "empresas": empresas,
+            "noticias": noticias,
+            "setores": setores,
+            "noticias_setor": queries.sector_news(
+                db, setores, excluir_ids=[n["id"] for n in noticias]),
+        }
+
+    # Grupos econômicos para o filtro suspenso (11/09/2026) -- vem da
+    # taxonomia já importada, ver queries.grupos_economicos.
+    @router.get("/api/spreads/grupos")
+    def api_spreads_grupos(
+        user: User | None = Depends(require_user_dep), db: Session = Depends(get_db),
+    ):
+        return {"grupos": queries.grupos_economicos(db)}
+
+    # Os seis cards do topo da aba Emissores (11/09/2026): três por classe,
+    # as duas classes lado a lado na mesma resposta -- ver
+    # queries.emissor_cards pro porquê de não haver mais um botão de classe.
+    @router.get("/api/spreads/emissor/cards")
+    def api_spreads_emissor_cards(
+        nome: list[str] = Query(...),
+        user: User | None = Depends(require_user_dep), db: Session = Depends(get_db),
+    ):
+        return queries.emissor_cards(db, nome)
 
     # Negócio a negócio da B3 (pedido do Allan, 24/07/2026) -- ver
     # app/spreads/b3_trades.py pro desenho da captura (roda a cada 15 min
@@ -288,7 +319,7 @@ def register_spreads_routes(require_user_dep) -> APIRouter:
         nome: list[str] = Query(...), classe: str = "",
         user: User | None = Depends(require_user_dep), db: Session = Depends(get_db),
     ):
-        return {"negociacoes": queries.emissor_trades(db, nome, _validar_classe(classe))}
+        return {"negociacoes": queries.emissor_trades(db, nome, _validar_classe_ou_todos(classe))}
 
     # Cards de taxa no topo da aba Emissores (pedido do Allan, 24/07/2026)
     # -- ver queries.emissor_taxas pro porquê de Anbima e B3 nunca se

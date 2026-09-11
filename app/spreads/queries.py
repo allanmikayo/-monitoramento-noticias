@@ -17,7 +17,9 @@ from zoneinfo import ZoneInfo
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from ..models import AppSetting, Article, Company, Debenture, DebentureSpread, NegocioB3
+from ..models import (
+    AppSetting, Article, Company, Debenture, DebentureSpread, NegocioB3, Sector,
+)
 from .fetch import _normalize_codigo
 
 CLASSES = ["IPCA + Incentivadas", "CDI + Tradicionais"]
@@ -610,6 +612,151 @@ def formatar_taxa_emissao(
     return f"{rotulo} + {texto_taxa}" if texto_taxa else rotulo
 
 
+def grupos_economicos(db: Session) -> list[dict]:
+    """Grupos econômicos e os emissores de cada um, pro filtro suspenso da
+    aba Emissores (pedido do Allan, 11/09/2026).
+
+    Vem de `Debenture.grupo_economico`, preenchido pela planilha de
+    taxonomia (`scripts/importar_taxonomia.py`) -- é por isso que o filtro
+    pode existir sem nenhuma captura nova: o dado já está no cadastro.
+
+    ESCOLHER UM GRUPO ADICIONA OS EMISSORES DELE à seleção (decisão do
+    Allan): o grupo é um atalho para marcar vários emissores de uma vez, não
+    um segundo eixo de filtragem. Por isso a lista de emissores vem junto --
+    o navegador não precisa de uma segunda consulta para saber o que marcar.
+
+    Grupo sem nenhum emissor nomeado fica de fora: seria uma opção que não
+    seleciona nada.
+    """
+    rows = (
+        db.query(Debenture.grupo_economico, Debenture.nome)
+        .filter(Debenture.grupo_economico.isnot(None), Debenture.nome.isnot(None))
+        .distinct()
+        .all()
+    )
+    por_grupo: dict[str, set[str]] = {}
+    for grupo, nome in rows:
+        if not grupo or not nome:
+            continue
+        por_grupo.setdefault(grupo, set()).add(nome)
+    return [
+        {"grupo": g, "n_emissores": len(nomes), "emissores": sorted(nomes)}
+        for g, nomes in sorted(por_grupo.items())
+    ]
+
+
+def _bloco_de_cards(db: Session, classe: str, codigos: list[str]) -> dict:
+    """Os três números de uma classe: spread (hoje e média 3M), duration
+    média e estoque total. Todos ponderados por Estoque, nunca média simples
+    -- é a metodologia do relatório do Allan, e `_ponderar` já cai pra média
+    simples só quando NENHUM papel do conjunto tem estoque cruzado.
+
+    Estoque é o único que SOMA em vez de ponderar: é um saldo, não uma taxa.
+    """
+    vazio = {
+        "classe": classe, "n_ativos": 0, "spread": None, "spread_fallback": False,
+        "data": None, "spread_3m": None, "spread_3m_inicio": None,
+        "spread_3m_fim": None, "duration": None, "duration_fallback": False,
+        "estoque": None,
+    }
+    if not codigos:
+        return vazio
+
+    # Último dia COM spread de cada ticker, em duas etapas (o `DISTINCT ON`
+    # do Postgres não existe no SQLite dos testes) -- mesmo desenho de
+    # `emissor_tickers`, e pelo mesmo motivo: a versão antiga desta conta
+    # fazia uma consulta POR TICKER dentro de um laço.
+    ultimas = (
+        select(DebentureSpread.codigo, func.max(DebentureSpread.data).label("data"))
+        .where(DebentureSpread.codigo.in_(codigos), DebentureSpread.spread.isnot(None))
+        .group_by(DebentureSpread.codigo)
+        .subquery()
+    )
+    recentes = db.execute(
+        select(DebentureSpread).join(
+            ultimas,
+            (DebentureSpread.codigo == ultimas.c.codigo)
+            & (DebentureSpread.data == ultimas.c.data),
+        )
+    ).scalars().all()
+    if not recentes:
+        return {**vazio, "n_ativos": len(codigos)}
+
+    spread, spread_fb = _ponderar([(r.spread, r.estoque) for r in recentes])
+    duration, duration_fb = _ponderar(
+        [(r.duration, r.estoque) for r in recentes if r.duration is not None]
+    )
+    estoques = [r.estoque for r in recentes if r.estoque is not None]
+
+    # Média de ~3 meses: 63 POSIÇÕES na lista de dias com dado, não 63 dias
+    # corridos -- mesma convenção do resto do dashboard, pra feriado e dia
+    # sem publicação não encurtarem a janela.
+    datas_desc = [
+        row[0]
+        for row in db.query(DebentureSpread.data)
+        .filter(DebentureSpread.codigo.in_(codigos), DebentureSpread.spread.isnot(None))
+        .distinct().order_by(DebentureSpread.data.desc()).limit(63).all()
+    ]
+    spread_3m = spread_3m_inicio = spread_3m_fim = None
+    if datas_desc:
+        cutoff = min(datas_desc)
+        spread_3m_inicio, spread_3m_fim = cutoff.isoformat(), max(datas_desc).isoformat()
+        rows_3m = (
+            db.query(DebentureSpread.spread, DebentureSpread.estoque)
+            .filter(
+                DebentureSpread.codigo.in_(codigos),
+                DebentureSpread.spread.isnot(None),
+                DebentureSpread.data >= cutoff,
+            ).all()
+        )
+        spread_3m, _ = _ponderar(list(rows_3m))
+
+    return {
+        "classe": classe,
+        "n_ativos": len(recentes),
+        "spread": round(spread, 1) if spread is not None else None,
+        "spread_fallback": spread_fb,
+        "data": max(r.data for r in recentes).isoformat(),
+        "spread_3m": round(spread_3m, 1) if spread_3m is not None else None,
+        "spread_3m_inicio": spread_3m_inicio,
+        "spread_3m_fim": spread_3m_fim,
+        "duration": round(duration, 2) if duration is not None else None,
+        "duration_fallback": duration_fb,
+        "estoque": round(sum(estoques), 1) if estoques else None,
+    }
+
+
+def emissor_cards(db: Session, nomes_emissor: list[str]) -> dict:
+    """Os seis cards do topo da aba Emissores (pedido do Allan,
+    11/09/2026): spread, duration média e estoque total, uma coluna para
+    IPCA + Incentivadas e outra para CDI + Tradicionais.
+
+    POR QUE AS DUAS CLASSES NA MESMA RESPOSTA. Antes a aba tinha um botão
+    escolhendo UMA classe e a tela inteira obedecia a ele. Isso obrigava a
+    trocar de filtro para comparar o IPCA+ com o CDI+ do mesmo emissor --
+    justamente a comparação que o analista faz o tempo todo. Com as duas
+    lado a lado o botão perde a função e sai da tela.
+
+    O que NÃO mudou: as duas classes continuam sem se misturar em número
+    nenhum. Elas ficam lado a lado, nunca somadas -- as referências são
+    diferentes (NTN-B e DI), e uma média entre as duas não significaria
+    nada. É a mesma regra de sempre, só que agora visível na tela em vez de
+    escondida num botão.
+    """
+    excluidos = tickers_excluidos_spread(db)
+    pares = (
+        db.query(Debenture.codigo, Debenture.classe)
+        .filter(Debenture.nome.in_(nomes_emissor))
+        .all()
+    )
+    por_classe: dict[str, list[str]] = {}
+    for codigo, classe in pares:
+        if codigo in excluidos:
+            continue
+        por_classe.setdefault(classe, []).append(codigo)
+    return {"classes": [_bloco_de_cards(db, c, por_classe.get(c, [])) for c in CLASSES]}
+
+
 def emissor_tickers(db: Session, nomes_emissor: list[str]) -> dict:
     """Tabela das dívidas a mercado de um ou mais emissores, agrupada por
     classe, com totalizador de estoque por grupo.
@@ -1130,7 +1277,7 @@ def emissor_ranking_diferencas(
     return {"aberturas": aberturas, "fechamentos": fechamentos, "data_referencia": data_mais_recente.isoformat()}
 
 
-def emissor_trades(db: Session, nomes_emissor: list[str], classe: str, limit: int = 30) -> list[dict]:
+def emissor_trades(db: Session, nomes_emissor: list[str], classe: str = "", limit: int = 30) -> list[dict]:
     """Últimas negociações (negócio a negócio, B3 -- pedido do Allan,
     24/07/2026) dos tickers do(s) emissor(es) selecionados. Filtra pelos
     mesmos códigos que já alimentam `emissor_tickers` -- por isso hoje só
@@ -1147,12 +1294,17 @@ def emissor_trades(db: Session, nomes_emissor: list[str], classe: str, limit: in
     card "SPREAD NEGOCIADO (B3)" (`emissor_taxas`, que já filtrava por
     classe) mostrava "9 negócio(s)" mas esta tabela mostrava bem mais.
     Agora exige `classe` igual ao resto da aba Emissores."""
-    codigo_indexador = {
-        row[0]: row[1]
-        for row in db.query(Debenture.codigo, Debenture.indexador)
-        .filter(Debenture.nome.in_(nomes_emissor), Debenture.classe == classe)
-        .all()
-    }
+    # `classe` vazia = TODAS as classes (11/09/2026). O botão que escolhia
+    # uma classe para a aba inteira saiu da tela -- os cards e os gráficos
+    # agora mostram IPCA+ e CDI+ lado a lado. Esta tabela é uma LISTAGEM de
+    # negócios, não uma média: juntar as duas classes aqui não cria nenhum
+    # número comparando coisas incomparáveis, cada linha continua sendo um
+    # negócio isolado com seu próprio indexador na coluna.
+    q = db.query(Debenture.codigo, Debenture.indexador).filter(
+        Debenture.nome.in_(nomes_emissor))
+    if classe:
+        q = q.filter(Debenture.classe == classe)
+    codigo_indexador = {row[0]: row[1] for row in q.all()}
     codigos = list(codigo_indexador)
     if not codigos:
         return []
@@ -1182,6 +1334,68 @@ def emissor_trades(db: Session, nomes_emissor: list[str], classe: str, limit: in
         }
         for r in rows
     ]
+
+
+def _artigo_para_dict(a: Article) -> dict:
+    return {
+        "id": a.id,
+        "title": a.title,
+        "url": a.url,
+        "source_name": a.source_name,
+        "article_type": a.article_type,
+        "published_at": a.published_at.isoformat() if a.published_at else None,
+    }
+
+
+def setores_dos_emissores(db: Session, nomes_emissor: list[str]) -> list[str]:
+    """Setores (da taxonomia) dos emissores selecionados.
+
+    ATENÇÃO A UMA ARMADILHA REAL DESTE BANCO: existem DOIS vocabulários de
+    "setor". `Debenture.setor` vem da planilha de taxonomia do Allan;
+    `Sector.name` é a cobertura editorial que etiqueta as notícias. Eles não
+    são a mesma tabela e não há garantia de que usem as mesmas palavras.
+    `sector_news` cruza os dois pelo NOME, então um setor que existe só de um
+    lado simplesmente não traz notícia -- e falha em silêncio, que é o modo
+    de falha caro aqui. `scripts/diagnostico_emissores.py` (seção 5) mede
+    quantos nomes batem; a dimensão única de setor é o passo seguinte.
+    """
+    if not nomes_emissor:
+        return []
+    rows = (
+        db.query(func.distinct(Debenture.setor))
+        .filter(Debenture.nome.in_(nomes_emissor), Debenture.setor.isnot(None))
+        .all()
+    )
+    return sorted({r[0] for r in rows if r[0]})
+
+
+def sector_news(
+    db: Session, setores: list[str], limit: int = 8, excluir_ids: list[int] | None = None,
+) -> list[dict]:
+    """Notícias etiquetadas com qualquer um dos setores (pedido do Allan,
+    11/09/2026: o painel tem que trazer o que sai sobre o emissor E sobre o
+    mercado dele).
+
+    `excluir_ids` tira as que já apareceram no bloco do emissor -- a mesma
+    notícia nos dois blocos ocuparia espaço duas vezes dizendo a mesma
+    coisa.
+    """
+    if not setores:
+        return []
+    q = (
+        db.query(Article)
+        .join(Article.sector_tags)
+        .filter(Sector.name.in_(setores))
+    )
+    if excluir_ids:
+        q = q.filter(Article.id.notin_(excluir_ids))
+    artigos = (
+        q.order_by(Article.published_at.desc().nullslast(), Article.found_at.desc())
+        .limit(limit)
+        .distinct()
+        .all()
+    )
+    return [_artigo_para_dict(a) for a in artigos]
 
 
 def company_news(db: Session, company_ids: list[int], limit: int = 8) -> list[dict]:

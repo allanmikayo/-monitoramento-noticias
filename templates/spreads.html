@@ -207,19 +207,34 @@
       <div id="emissor-busca-resultados" class="search-results" style="display:none;position:absolute;z-index:5;width:100%;"></div>
     </div>
 
-    <div class="window-tabs" id="emissor-classe-tabs">
-      {% for c in classes %}
-      <button data-classe="{{ c }}" class="win-btn{% if loop.first %} active{% endif %}">{{ c }}</button>
-      {% endfor %}
+    {# GRUPO ECONÔMICO (11/09/2026, pedido do Allan). Escolher um grupo
+       ADICIONA os emissores dele à seleção -- é um atalho para marcar vários
+       de uma vez, não um segundo eixo de filtragem. Por isso ele deixa os
+       chips visíveis e editáveis: dá para tirar um emissor do grupo ou somar
+       um de fora. Dado vem da taxonomia já importada, sem captura nova. #}
+    <div style="position:relative;">
+      <button type="button" id="emissor-grupo-btn" class="win-btn">Grupo econômico ▾</button>
+      <div id="emissor-grupo-painel" class="search-results"
+           style="display:none;position:absolute;z-index:6;min-width:320px;max-height:320px;overflow:auto;">
+        <input id="emissor-grupo-busca" type="search" placeholder="Filtrar grupo…"
+               autocomplete="off" style="width:100%;margin-bottom:6px;">
+        <div id="emissor-grupo-lista"></div>
+      </div>
     </div>
 
+    {# O botão que escolhia UMA classe para a aba inteira saiu (11/09/2026).
+       Ele obrigava a trocar de filtro para comparar o IPCA+ com o CDI+ do
+       mesmo emissor -- exatamente a comparação que se faz o tempo todo.
+       Agora as duas aparecem lado a lado, nos cards e nos gráficos. As
+       classes continuam sem se misturar em número nenhum; a separação só
+       deixou de estar escondida num botão. #}
     <div class="window-tabs" id="emissor-nivel-tabs">
       <button data-nivel="emissor" class="win-btn active">Nível emissor</button>
       <button data-nivel="ticker" class="win-btn">Nível ticker</button>
     </div>
   </div>
   <div id="emissor-chips" class="chip-row"></div>
-  <p class="muted small">Nível emissor: spread médio ponderado pelo Estoque de cada ticker, um linha por emissor selecionado. A linha pontilhada é o spread médio de mercado (mesma classe, sem filtrar por emissor) — só como referência.</p>
+  <p class="muted small">Nível emissor: spread médio ponderado pelo Estoque de cada ticker, uma linha por emissor selecionado. Nível ticker: uma linha por papel. A linha pontilhada é o spread médio de mercado da mesma classe, sem filtrar por emissor — só como referência.</p>
 
   <div id="emissor-vazio" class="muted small" style="padding:24px 0 12px 0;">Busque e selecione um ou mais emissores acima pra ver os tickers de dívida e a série de spread.</div>
 
@@ -233,18 +248,18 @@
      apagado, só deixou de ser o cartão de visita da aba. #}
 
   <div id="emissor-conteudo" style="display:none;">
-    <div class="kpi-row" id="emissor-taxas-row" style="margin-bottom:16px;">
-      <div class="kpi-card kpi-highlight">
-        <span class="kpi-label">SPREAD ANBIMA <span class="kpi-tag" id="emissor-taxa-anbima-data"></span></span>
-        <span class="kpi-value" id="emissor-taxa-anbima">—</span>
-        <div class="muted small" id="emissor-taxa-anbima-3m">Média 3M: —</div>
-      </div>
-      <div class="kpi-card">
-        <span class="kpi-label">SPREAD NEGOCIADO (B3) <span class="kpi-tag" id="emissor-taxa-b3-data"></span></span>
-        <span class="kpi-value" id="emissor-taxa-b3">—</span>
-        <div class="muted small" id="emissor-taxa-b3-sub">—</div>
-      </div>
-    </div>
+    {# SEIS CARDS, TRÊS POR CLASSE (11/09/2026, pedido do Allan): spread
+       (com a média 3M embaixo), duration média e estoque total. Desenhados
+       por JS a partir de /api/spreads/emissor/cards, que devolve as duas
+       classes numa resposta só.
+
+       As duas colunas NUNCA somam entre si. IPCA+Incentivadas se mede contra
+       a NTN-B e CDI+Tradicionais contra o DI -- uma média entre as duas não
+       significaria nada. Ficam lado a lado para comparar, não para juntar.
+
+       O card "SPREAD NEGOCIADO (B3)" saiu daqui: o Allan pediu três cards por
+       classe, e o negócio a negócio continua embaixo, na tabela dele. #}
+    <div id="emissor-cards-duplo" class="emissor-duplo" style="margin-bottom:16px;"></div>
 
     <div class="chart-card" style="margin-bottom:16px;">
       <h2 style="margin:0;" id="emissor-titulo-tabela">Tickers do emissor</h2>
@@ -270,20 +285,33 @@
       </p>
     </div>
 
-    <div class="emissor-grid">
+    {# UM GRÁFICO POR CLASSE, LADO A LADO (11/09/2026). Mesma razão dos
+       cards: as duas séries não compartilham escala nem referência, então
+       duas caixas separadas dizem a verdade que uma caixa com as duas
+       misturadas esconderia. #}
+    <div class="emissor-duplo" style="margin-bottom:16px;">
       <div class="chart-card">
-        <h2 style="margin:0;" id="emissor-titulo-grafico">Spread ao longo do tempo</h2>
-        <p class="muted small">Fonte: Anbima e Debentures.com</p>
-        <canvas id="chart-emissor" height="110"></canvas>
+        <h2 style="margin:0;" id="emissor-titulo-grafico-ipca">IPCA + Incentivadas</h2>
+        <p class="muted small" id="emissor-sub-grafico-ipca">Fonte: Anbima e Debentures.com</p>
+        <canvas id="chart-emissor-ipca" height="150"></canvas>
       </div>
-      <div class="chart-card" id="emissor-noticias-card">
-        <h2 style="margin:0;">Últimas notícias</h2>
-        <p class="muted small" id="emissor-noticias-sub">—</p>
-        <div id="emissor-noticias-lista"></div>
+      <div class="chart-card">
+        <h2 style="margin:0;" id="emissor-titulo-grafico-cdi">CDI + Tradicionais</h2>
+        <p class="muted small" id="emissor-sub-grafico-cdi">Fonte: Anbima e Debentures.com</p>
+        <canvas id="chart-emissor-cdi" height="150"></canvas>
       </div>
     </div>
 
-    <div class="chart-card" style="margin-top:16px;">
+    <div class="chart-card" id="emissor-noticias-card" style="margin-bottom:16px;">
+      <h2 style="margin:0;">Últimas notícias</h2>
+      <p class="muted small" id="emissor-noticias-sub">—</p>
+      <h3 class="bloco-noticias">Do emissor</h3>
+      <div id="emissor-noticias-lista"></div>
+      <h3 class="bloco-noticias" id="emissor-noticias-setor-titulo">Do setor</h3>
+      <div id="emissor-noticias-setor-lista"></div>
+    </div>
+
+    <div class="chart-card">
       <h2 style="margin:0;">Últimas negociações (B3)</h2>
       <p class="muted small">Negócio a negócio — DEB/CRI/CRA, atualizado a cada 15 min durante o pregão · Fonte: B3</p>
       <table class="table" id="tabela-emissor-negociacoes">
