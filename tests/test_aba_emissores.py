@@ -306,3 +306,50 @@ def test_vocabulario_de_fato_diferente_continua_vazio():
     mesmo, até existir uma dimensão única de setor."""
     db = _com_noticias(_base())
     assert queries.sector_news(db, ["Utilities"]) == []
+
+
+# ---------------------------------------------------------------------------
+# Cache dos arquivos estáticos
+# ---------------------------------------------------------------------------
+
+def test_todo_static_do_template_tem_versao():
+    """TRÊS VEZES NUM DIA (11/09/2026) nós olhamos a tela depois do deploy,
+    vimos o comportamento antigo e fomos procurar defeito no código -- que
+    estava certo. O navegador é que guardava o `.js`/`.css` anterior; o HTML
+    vem do servidor a cada visita, os estáticos não, e o Ctrl+F5 nem sempre
+    passa pela borda da Vercel.
+
+    `?v=` na URL resolve na raiz: mudou o deploy, mudou a URL, o navegador é
+    obrigado a buscar de novo. Este teste existe para a próxima referência
+    a /static nascer já versionada -- esquecer é silencioso, e o sintoma
+    aparece dias depois, parecendo bug de código.
+    """
+    import re
+    from pathlib import Path
+
+    raiz = Path(__file__).resolve().parent.parent / "templates"
+    sem_versao = []
+    for arq in raiz.glob("*.html"):
+        for linha in arq.read_text(encoding="utf-8").splitlines():
+            if not re.search(r'(src|href)="/static/', linha):
+                continue
+            if "?v=" not in linha:
+                sem_versao.append(f"{arq.name}: {linha.strip()}")
+    assert not sem_versao, "referência a /static sem ?v=:\n  " + "\n  ".join(sem_versao)
+
+
+def test_versao_estatica_muda_com_o_commit(monkeypatch):
+    from app import app as A
+
+    monkeypatch.setenv("VERCEL_GIT_COMMIT_SHA", "abcdef1234567890")
+    assert A._versao_estatica() == "abcdef123456"
+
+
+def test_versao_estatica_funciona_sem_vercel(monkeypatch):
+    """Rodando local não existe VERCEL_GIT_COMMIT_SHA -- cai no mtime dos
+    arquivos, que é o que muda a cada salvamento durante o desenvolvimento."""
+    from app import app as A
+
+    monkeypatch.delenv("VERCEL_GIT_COMMIT_SHA", raising=False)
+    v = A._versao_estatica()
+    assert v and v != "0" and v.isdigit()

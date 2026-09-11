@@ -428,7 +428,11 @@ h3.bloco-noticias:first-of-type { margin-top: 10px; }
 
 /* Linha de fonte: sempre ABAIXO do visual, discreta, alinhada à esquerda. */
 .fonte-visual {
-  margin: 8px 0 0 0; font-size: 0.72rem; color: var(--muted); line-height: 1.4;
+  /* Menor e em cinza escuro (pedido do Allan, 11/09/2026): a fonte tem que
+     estar lá para quem procurar, sem competir com o dado. Cinza escuro, e
+     não o `--muted` claro dos rótulos, para continuar legível num tamanho
+     menor -- discreto não é apagado. */
+  margin: 8px 0 0 0; font-size: 0.68rem; color: #4a4a4a; line-height: 1.4;
 }
 
 .titulo-com-acao {

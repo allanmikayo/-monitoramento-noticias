@@ -29,6 +29,48 @@ from .taxonomy import build_index
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 templates = Jinja2Templates(directory=os.path.join(BASE_DIR, "templates"))
 
+
+def _versao_estatica() -> str:
+    """Sufixo de versão pros arquivos de /static (`?v=...`).
+
+    POR QUE EXISTE (11/09/2026). Três vezes num dia só nós olhamos a tela
+    depois de um deploy, vimos o comportamento ANTIGO e fomos procurar
+    defeito no código -- quando o código estava certo e o navegador é que
+    tinha guardado o `.js`/`.css` antigo. O HTML vem do servidor a cada
+    visita e atualiza sozinho; os arquivos estáticos não, e o Ctrl+F5 nem
+    sempre passa pela borda da Vercel.
+    A URL com versão resolve na raiz: mudou o deploy, muda a URL, e o
+    navegador é OBRIGADO a buscar de novo -- sem depender de ninguém
+    lembrar de limpar cache.
+
+    A fonte preferida é o commit do deploy (`VERCEL_GIT_COMMIT_SHA`), que
+    muda exatamente quando o conteúdo muda. Rodando local não existe, então
+    caímos no mtime mais recente dos arquivos de /static: durante o
+    desenvolvimento é o que muda a cada salvamento, que é justamente o
+    comportamento desejado ali.
+    """
+    sha = os.getenv("VERCEL_GIT_COMMIT_SHA", "").strip()
+    if sha:
+        return sha[:12]
+    estaticos = os.path.join(BASE_DIR, "static")
+    try:
+        ultimo = max(
+            os.path.getmtime(os.path.join(estaticos, nome))
+            for nome in os.listdir(estaticos)
+            if os.path.isfile(os.path.join(estaticos, nome))
+        )
+        return str(int(ultimo))
+    except (OSError, ValueError):
+        # Sem /static legível não há o que versionar -- um valor fixo é
+        # melhor do que derrubar o render da página inteira por causa disso.
+        return "0"
+
+
+# Calculado UMA vez, no import: dentro de um mesmo deploy o conteúdo não
+# muda, e recalcular por requisição seria ir ao disco à toa.
+VERSAO_ESTATICA = _versao_estatica()
+templates.env.globals["v"] = VERSAO_ESTATICA
+
 _BRT = ZoneInfo("America/Sao_Paulo")
 
 
