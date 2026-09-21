@@ -190,6 +190,15 @@ def register_spreads_routes(require_user_dep) -> APIRouter:
             ),
         }
 
+    # Maiores deságios -- menor % do PU par na data analisada (21/09/2026).
+    @router.get("/api/spreads/desagios")
+    def api_spreads_desagios(
+        classe: str, data: str | None = None,
+        user: User | None = Depends(require_user_dep), db: Session = Depends(get_db),
+    ):
+        return queries.maiores_desagios(
+            db, _validar_classe(classe), data_referencia=_parse_data(data))
+
     # Dispersão de aberturas/fechamentos por duration (21/09/2026) -- ao lado
     # do gráfico de composição na Visão Geral, sobre a MESMA base (ver
     # queries._variacoes_no_par). Nome próprio porque `/api/spreads/dispersao`

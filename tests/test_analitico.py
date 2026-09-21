@@ -343,15 +343,18 @@ def test_rota_exige_login(banco, rota):
 
 
 def test_visao_geral_tem_o_que_ficou(cliente):
-    """A Visão Geral enxuta (09/09/2026): quatro cartões, evolução, setor
-    e os dois top 20. Se um sumir do template, a tela continua carregando
-    e o conteúdo some em silêncio -- que é o modo de falha caro aqui."""
+    """A Visão Geral (redesenhada em 21/09/2026): quatro cartões, evolução
+    com base comparável, composição + dispersão, setor com haltere, deságios
+    e Top 10 com alternância. Se um sumir do template, a tela continua
+    carregando e o conteúdo some em silêncio -- que é o modo de falha caro
+    aqui."""
     r = cliente.get("/spreads")
     assert r.status_code == 200
     for termo in (
         "SPREAD MÉDIO", "DURATION MÉDIA", "ATIVOS PRECIFICADOS", "ESTOQUE NA BASE",
-        "Evolução do spread médio", "Spread por setor",
-        "Top 20 aberturas", "Top 20 fechamentos",
+        "Evolução do spread médio", "chart-composicao", "chart-dispersao",
+        "Spread por setor", "Média 3M", "chart-desagios",
+        "Top 10 aberturas", 'data-lado="fechamentos"', "barra-fixa",
     ):
         assert termo in r.text, f"faltou '{termo}' na Visão Geral"
 

@@ -293,7 +293,8 @@ def time_series(db: Session, classe: str, codigo: str | None = None) -> list[dic
     # seguinte, "não gostei", ver CLAUDE.md.)
     excluidos = tickers_excluidos_spread(db)
     q = (
-        db.query(DebentureSpread.data, DebentureSpread.spread, DebentureSpread.estoque)
+        db.query(DebentureSpread.data, DebentureSpread.codigo,
+                 DebentureSpread.spread, DebentureSpread.estoque)
         .join(Debenture, Debenture.codigo == DebentureSpread.codigo)
         .filter(Debenture.classe == classe, DebentureSpread.spread.isnot(None))
     )
@@ -302,24 +303,69 @@ def time_series(db: Session, classe: str, codigo: str | None = None) -> list[dic
     rows = q.order_by(DebentureSpread.data).all()
 
     out = []
+    por_dia: list[dict[str, tuple[float, float | None]]] = []
     for dia, grupo in itertools.groupby(rows, key=lambda r: r[0]):
-        spreads = []
-        com_estoque = []
-        for _, spread, estoque in grupo:
-            spreads.append(spread)
-            if estoque is not None and estoque > 0:
-                com_estoque.append((spread, estoque))
-        if com_estoque:
-            soma_peso = sum(e for _, e in com_estoque)
-            media = (sum(s * e for s, e in com_estoque) / soma_peso) if soma_peso else None
-        else:
-            media = sum(spreads) / len(spreads) if spreads else None
+        papeis = {codigo: (spread, estoque) for _, codigo, spread, estoque in grupo}
+        media, _ = _ponderar(list(papeis.values()))
+        por_dia.append(papeis)
         out.append({
             "data": dia.isoformat(),
             "spread_medio": round(media, 1) if media is not None else None,
-            "n_ativos": len(spreads),
+            "n_ativos": len(papeis),
         })
+
+    for ponto, valor in zip(out, _serie_base_comparavel(out, por_dia)):
+        ponto["spread_comparavel"] = round(valor, 1) if valor is not None else None
     return out
+
+
+def _serie_base_comparavel(
+    pontos: list[dict], por_dia: list[dict[str, tuple[float, float | None]]],
+) -> list[float | None]:
+    """Linha "Base comparável" do gráfico de evolução (pedido do Allan,
+    21/09/2026).
+
+    O PROBLEMA QUE ELA RESOLVE. O spread médio de um dia é a média de QUEM
+    ESTÁ NA BASE naquele dia. Ele se move quando o mercado reprecifica, mas
+    também quando a base muda: uma leva de emissões longas entrando, papéis
+    curtos vencendo, um emissor saindo da precificação. Olhando só a média,
+    não dá para separar uma coisa da outra.
+
+    COMO É CALCULADA -- índice encadeado, a técnica padrão para isso. Para
+    cada par de dias consecutivos, mede-se a variação média SÓ dos papéis
+    presentes nos dois dias (ponderada pelo estoque do dia mais recente, a
+    mesma regra da linha principal). Esses passos são acumulados. Assim a
+    linha só se move por repricing: quem entra ou sai da base não participa
+    do passo em que entrou ou saiu.
+
+    ÂNCORA NO FIM. A linha termina exatamente no spread médio de hoje -- o
+    mesmo número do card -- e é reconstruída para trás. Lida assim: a
+    distância entre as duas linhas numa data passada é quanto do movimento
+    DE LÁ ATÉ HOJE veio da mudança de composição, e não de repricing.
+    Ancorar no início faria a linha terminar num número diferente do card,
+    e a primeira pergunta seria "qual dos dois é o spread de hoje?".
+
+    Par de dias sem nenhum papel em comum (não deveria acontecer num
+    histórico diário) conta como passo zero, em vez de quebrar a linha.
+    """
+    n = len(pontos)
+    if n == 0 or pontos[-1]["spread_medio"] is None:
+        return [None] * n
+    passos = [0.0] * n  # passos[i] = variação comparável de i-1 para i
+    for i in range(1, n):
+        antes, agora = por_dia[i - 1], por_dia[i]
+        comuns = [
+            (agora[c][0] - antes[c][0], agora[c][1])
+            for c in agora.keys() & antes.keys()
+        ]
+        if comuns:
+            passo, _ = _ponderar(comuns)
+            passos[i] = passo or 0.0
+    nivel = [None] * n
+    nivel[-1] = float(pontos[-1]["spread_medio"])
+    for i in range(n - 1, 0, -1):
+        nivel[i - 1] = nivel[i] - passos[i]
+    return nivel
 
 
 def movers(
@@ -606,6 +652,49 @@ def variacao_por_duration(
         "limiar": _limiar_variacao(classe),
         "n_ativos": len(pontos),
         "pontos": pontos,
+    }
+
+
+def maiores_desagios(
+    db: Session, classe: str, data_referencia: date | None = None, top_n: int = 15,
+) -> dict:
+    """Os papéis negociando mais abaixo do par -- menor % do PU par na
+    precificação ANBIMA da data analisada (pedido do Allan, 21/09/2026: "deixar
+    claro quais papéis mais depreciaram").
+
+    POR QUE % DO PU PAR E NÃO SPREAD. Spread alto pode ser só um papel longo
+    de emissor de risco maior, precificado assim desde a emissão. % do PU par
+    baixo diz outra coisa: o papel PERDEU valor em relação ao que foi emitido.
+    É a régua de quem carrega a posição, e a que conversa com a pergunta
+    "quem está sofrendo".
+
+    Um papel por linha: o mesmo emissor pode aparecer mais de uma vez, e isso
+    é informação (a curva inteira dele depreciou), não duplicata.
+    """
+    dates_desc = distinct_dates(db, classe)
+    hoje = _resolve_hoje(dates_desc, data_referencia)
+    vazio = {"data_referencia": None, "papeis": []}
+    if hoje is None:
+        return vazio
+    q = (
+        db.query(DebentureSpread.codigo, Debenture.nome, DebentureSpread.pct_pu_par,
+                 DebentureSpread.spread, DebentureSpread.duration)
+        .join(Debenture, Debenture.codigo == DebentureSpread.codigo)
+        .filter(Debenture.classe == classe, DebentureSpread.data == hoje,
+                DebentureSpread.pct_pu_par.isnot(None))
+    )
+    excluidos = tickers_excluidos_spread(db)
+    if excluidos:
+        q = q.filter(DebentureSpread.codigo.notin_(excluidos))
+    linhas = q.order_by(DebentureSpread.pct_pu_par.asc()).limit(top_n).all()
+    return {
+        "data_referencia": hoje.isoformat(),
+        "papeis": [
+            {"codigo": c, "emissor": nome, "pct_pu_par": round(pu, 2),
+             "spread": round(sp, 1) if sp is not None else None,
+             "duration": round(du, 2) if du is not None else None}
+            for c, nome, pu, sp, du in linhas
+        ],
     }
 
 
@@ -1754,14 +1843,18 @@ def spread_por_setor(
     else:
         chave = Debenture.setor
 
-    def _coletar(data: date) -> dict[str, list[tuple]]:
+    def _consulta(*filtros_de_data):
+        """A consulta do nível atual, com os filtros de data que vierem.
+        Um lugar só para os filtros de classe, exclusão e nível -- o dia de
+        hoje, o dia de comparação e a janela de 3 meses têm que olhar
+        EXATAMENTE o mesmo recorte, ou a média 3M não seria comparável ao
+        spread de hoje na mesma linha."""
         q = (
             db.query(chave, DebentureSpread.spread, DebentureSpread.estoque,
-                     Debenture.nome, Debenture.grupo_economico)
+                     Debenture.nome, Debenture.grupo_economico, DebentureSpread.duration)
             .join(Debenture, Debenture.codigo == DebentureSpread.codigo)
             .filter(Debenture.classe == classe,
-                    DebentureSpread.data == data,
-                    DebentureSpread.spread.isnot(None))
+                    DebentureSpread.spread.isnot(None), *filtros_de_data)
         )
         if excluidos:
             q = q.filter(DebentureSpread.codigo.notin_(excluidos))
@@ -1778,23 +1871,43 @@ def spread_por_setor(
         if nivel == "ticker":
             q = (q.filter(Debenture.nome == emissor) if emissor != SEM_CLASSIFICACAO
                  else q.filter(Debenture.nome.is_(None)))
+        return q
+
+    def _agrupar(q) -> dict[str, list[tuple]]:
         agrupado: dict[str, list[tuple]] = {}
-        for valor, spread, estoque, nome, grupo in q.all():
+        for valor, spread, estoque, nome, grupo, duration in q.all():
             rotulo = valor or SEM_CLASSIFICACAO
-            agrupado.setdefault(rotulo, []).append((spread, estoque, nome, grupo))
+            agrupado.setdefault(rotulo, []).append((spread, estoque, nome, grupo, duration))
         return agrupado
 
-    grupos_hoje = _coletar(hoje)
-    grupos_antes = _coletar(anterior) if anterior is not None else {}
+    grupos_hoje = _agrupar(_consulta(DebentureSpread.data == hoje))
+    grupos_antes = (_agrupar(_consulta(DebentureSpread.data == anterior))
+                    if anterior is not None else {})
+
+    # MÉDIA DE 3 MESES (21/09/2026, pedido do Allan -- o "haltere" da tabela).
+    # 63 POSIÇÕES na lista de dias com dado, terminando na data analisada --
+    # a mesma convenção de "QoQ" em COMPARACAO_BASES e da média 3M dos cards
+    # da aba Emissores. Ponderada por estoque, juntando todas as observações
+    # da janela: um papel que ficou os 63 dias pesa 63 vezes, um que entrou
+    # ontem pesa uma -- o que a média 3M quer medir é onde o grupo NEGOCIOU
+    # no período, não onde está a base de hoje.
+    idx_hoje = dates_desc.index(hoje)
+    janela = dates_desc[idx_hoje:idx_hoje + 63]
+    grupos_3m = _agrupar(_consulta(DebentureSpread.data >= janela[-1],
+                                   DebentureSpread.data <= hoje))
 
     linhas = []
     for rotulo, itens in grupos_hoje.items():
-        pares = [(sp, es) for sp, es, _n, _g in itens]
+        pares = [(sp, es) for sp, es, *_ in itens]
         spread_hoje, fallback = _ponderar(pares)
-        spread_antes, _ = _ponderar([(sp, es) for sp, es, _n, _g in grupos_antes.get(rotulo, [])])
+        spread_antes, _ = _ponderar([(sp, es) for sp, es, *_ in grupos_antes.get(rotulo, [])])
+        spread_3m, _ = _ponderar([(sp, es) for sp, es, *_ in grupos_3m.get(rotulo, [])])
+        # Duration média ponderada por estoque na data analisada -- a mesma
+        # conta do card DURATION MÉDIA, só que por grupo.
+        duration, _ = _ponderar([(du, es) for _sp, es, _n, _g, du in itens if du is not None])
         variacao = (spread_hoje - spread_antes
                     if spread_hoje is not None and spread_antes is not None else None)
-        estoques = [es for _sp, es, _n, _g in itens if es is not None]
+        estoques = [es for _sp, es, *_ in itens if es is not None]
         linhas.append({
             "rotulo": rotulo,
             # No nível de ticker o rótulo é o código; o nome e o grupo dão
@@ -1805,6 +1918,8 @@ def spread_por_setor(
             "estoque": round(sum(estoques), 1) if estoques else None,
             "spread_medio": round(spread_hoje, 1) if spread_hoje is not None else None,
             "spread_anterior": round(spread_antes, 1) if spread_antes is not None else None,
+            "spread_3m": round(spread_3m, 1) if spread_3m is not None else None,
+            "duration": round(duration, 2) if duration is not None else None,
             "variacao_bps": round(variacao, 1) if variacao is not None else None,
             "ponderacao_fallback": fallback,
         })

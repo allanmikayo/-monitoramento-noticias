@@ -42,7 +42,13 @@
 </div>
 
 <div id="painel-visao-geral">
-<div class="filters-bar">
+{# BARRA DE FILTROS FIXA (21/09/2026, diagnóstico de UX aprovado pelo Allan).
+   A página tem ~2 telas; sem isto, trocar de WoW para MoM olhando a tabela de
+   setores exigia voltar ao topo. A linha de contexto ("Boletim de ... vs ...")
+   mora dentro da barra, para a pergunta "estou olhando o quê?" ter resposta
+   em qualquer ponto da rolagem. Busca de ativo e Detalhes são ferramentas,
+   não filtros: ficam no canto direito. #}
+<div class="filters-bar barra-fixa" id="barra-visao">
   <div class="window-tabs" id="classe-tabs">
     {% for c in classes %}
     <button data-classe="{{ c }}" class="win-btn{% if loop.first %} active{% endif %}">{{ c }}</button>
@@ -56,14 +62,20 @@
   </div>
 
   <label class="muted small" style="display:flex;align-items:center;gap:6px;" title="Analisa a base como se essa fosse a data de hoje — em branco, usa sempre a última data disponível.">
-    Data analisada
+    Data
     <input type="date" id="visao-data">
   </label>
 
-  <input id="busca-ativo" type="search" placeholder="Buscar código ou nome do ativo (ex.: VALE)…" autocomplete="off">
-  <button class="btn-small" id="btn-abrir-detalhes" title="Ver a tabela com o dado granular (Código+Data) por trás dos gráficos acima">Detalhes</button>
+  <span class="contexto-base" id="nota-base">—</span>
+
+  <div class="ferramentas-barra">
+    <div style="position:relative;">
+      <input id="busca-ativo" type="search" placeholder="Buscar ativo…" autocomplete="off">
+      <div id="busca-resultados" class="search-results" style="display:none;position:absolute;right:0;z-index:30;min-width:320px;"></div>
+    </div>
+    <button class="btn-small" id="btn-abrir-detalhes" title="Ver a tabela com o dado granular (Código+Data) por trás dos gráficos">Detalhes</button>
+  </div>
 </div>
-<div id="busca-resultados" class="search-results" style="display:none;"></div>
 
 {# TELA ENXUTA (09/09/2026, pedido do Allan).
 
@@ -81,9 +93,9 @@
    aba (ver o fim do arquivo) -- eram seis chamadas de API por carga que
    deixaram de existir. #}
 
-<p class="muted small" id="nota-base">—</p>
-
-<div class="kpi-row" id="kpi-row">
+{# CARDS COMPACTOS (21/09/2026) -- mesmo padrão dos cards da aba Emissores:
+   número menor, a informação é o conjunto e não o tamanho de cada valor. #}
+<div class="kpi-row kpi-compacto" id="kpi-row">
   <div class="kpi-card kpi-highlight">
     <span class="kpi-label">SPREAD MÉDIO <span class="kpi-tag" id="kpi-spread-tag"></span></span>
     <span class="kpi-value" id="kpi-spread">—</span>
@@ -91,34 +103,35 @@
   </div>
   <div class="kpi-card">
     <span class="kpi-label">DURATION MÉDIA <span class="kpi-tag" id="kpi-duration-tag"></span></span>
-    <span class="kpi-value" id="kpi-duration" style="font-size:1.5rem;">—</span>
+    <span class="kpi-value" id="kpi-duration">—</span>
     <span class="kpi-delta muted">anos</span>
   </div>
   <div class="kpi-card">
     <span class="kpi-label">ATIVOS PRECIFICADOS</span>
-    <span class="kpi-value" id="kpi-n-ativos" style="font-size:1.5rem;">—</span>
+    <span class="kpi-value" id="kpi-n-ativos">—</span>
     <span class="kpi-delta muted">com spread na data</span>
   </div>
   <div class="kpi-card">
     <span class="kpi-label">ESTOQUE NA BASE</span>
-    <span class="kpi-value" id="kpi-estoque" style="font-size:1.5rem;">—</span>
+    <span class="kpi-value" id="kpi-estoque">—</span>
     <span class="kpi-delta muted"><span id="kpi-estoque-cobertura">—</span> ativos com estoque</span>
   </div>
 </div>
-<p class="muted small" id="kpi-nota">Médias ponderadas por estoque · Fonte: ANBIMA e Debentures.com</p>
+<p class="fonte-visual" id="kpi-nota" style="margin:-4px 0 16px;">Médias ponderadas por estoque. Fonte: Anbima, Debentures.com e Itaú BBA</p>
 
-<div class="chart-card">
+{# EVOLUÇÃO -- metade da altura de antes (21/09/2026). É o visual que menos
+   muda de uma semana para outra; ocupava uma tela inteira. #}
+<div class="chart-card" style="margin-bottom:16px;">
   <h2 style="margin:0;">Evolução do spread médio</h2>
-  <p class="muted small">Spread médio ponderado por estoque, em bps, por data de boletim · Fonte: ANBIMA</p>
-  <canvas id="chart-series" height="110"></canvas>
+  <p class="muted small" style="margin:2px 0 8px;">bps, ponderado por estoque · a linha preta mostra só o repricing, sem o efeito de papéis entrando e saindo da base</p>
+  <canvas id="chart-series" height="52"></canvas>
+  <p class="fonte-visual" id="fonte-series">Fonte: Anbima, Debentures.com e Itaú BBA</p>
 </div>
 
 {# ABERTURAS E FECHAMENTOS (21/09/2026, pedido do Allan) -- os dois
    gráficos do relatório semanal, lado a lado. Mesma base nos dois: papéis
    da classe com duration >= 1 e spread nas duas datas da comparação (ver
-   queries._variacoes_no_par). A classe, a base de comparação (WoW/MoM/...) e
-   a data analisada vêm dos controles do topo da Visão Geral. Segue o padrão
-   visual da casa: título, visual, fonte discreta embaixo. #}
+   queries._variacoes_no_par). #}
 <div class="emissor-duplo" style="margin-bottom:16px;">
   <div class="chart-card">
     <h2 style="margin:0;" id="titulo-composicao">Evolução da variação de spreads</h2>
@@ -134,43 +147,67 @@
   </div>
 </div>
 
-<div class="chart-card">
+{# SPREAD POR SETOR COM HALTERE (21/09/2026, item 4 do Allan). A tabela de
+   drill-down ganhou Duration e Média 3M, e uma coluna visual: bolinha vazia
+   na média dos últimos 3 meses, cheia no spread de hoje, traço laranja se o
+   grupo abriu contra a média e preto se fechou. Números e imagem num
+   componente só; o drill-down setor > subsetor > emissor > ticker segue
+   igual. A escala do haltere é a MESMA em todas as linhas de um nível, para
+   os comprimentos serem comparáveis entre si. #}
+<div class="chart-card" style="margin-bottom:16px;">
   <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;">
     <h2 style="margin:0;">Spread por setor</h2>
     <span class="muted small" id="setor-trilha"></span>
   </div>
-  <p class="muted small" id="setor-sub">bps, ponderado por estoque · clique numa linha para abrir o nível seguinte · Fonte: ANBIMA e taxonomia interna</p>
-  <table class="table" id="tabela-setor">
+  <p class="muted small" style="margin:2px 0 10px;" id="setor-sub">bps, ponderado por estoque · clique numa linha para abrir o nível seguinte</p>
+  <table class="table tabela-casa" id="tabela-setor">
     <thead>
       <tr>
-        <th id="setor-col-rotulo">Setor</th>
-        <th style="text-align:right;">Ativos</th>
-        <th style="text-align:right;">Estoque (R$ mi)</th>
-        <th style="text-align:right;">Spread (bps)</th>
-        <th style="text-align:right;">Variação (bps)</th>
+        <th class="col-texto" id="setor-col-rotulo">Setor</th>
+        <th>Ativos</th>
+        <th>Estoque (R$ mi)</th>
+        <th>Duration (anos)</th>
+        <th>Spread hoje</th>
+        <th>Média 3M</th>
+        <th class="col-haltere" title="Bolinha vazia: média dos últimos 3 meses · cheia: hoje">Média 3M → hoje</th>
+        <th id="setor-col-variacao">Variação</th>
       </tr>
     </thead>
     <tbody></tbody>
   </table>
   <p class="muted small" id="setor-vazio" style="display:none;">Sem dado para a data selecionada.</p>
+  <p class="fonte-visual" id="fonte-setor">Fonte: Anbima, Debentures.com e Itaú BBA</p>
 </div>
 
-<div class="movers-grid">
+{# DESÁGIOS E MAIORES MOVIMENTOS, lado a lado (21/09/2026). Os Top 20
+   aberturas e Top 20 fechamentos (40 linhas, ~800 px) viraram um Top 10 com
+   alternância -- a dispersão acima já destaca os maiores de cada lado, e a
+   tabela é o lugar de LER os nomes, não de revê-los. #}
+<div class="emissor-duplo" style="margin-bottom:16px;">
   <div class="chart-card">
-    <h2 style="margin:0;">Top 20 aberturas</h2>
-    <p class="muted small" id="aberturas-sub">Fonte: ANBIMA e Debentures.com</p>
-    <table class="table" id="tabela-aberturas">
-      <thead><tr><th>Código</th><th>Emissor</th><th style="text-align:right;">Spread (bps)</th><th style="text-align:right;">Variação (bps)</th></tr></thead>
-      <tbody></tbody>
-    </table>
+    <h2 style="margin:0;" id="titulo-desagios">Maiores deságios</h2>
+    <p class="muted small" style="margin:2px 0 8px;">% do PU par · os 15 papéis mais abaixo do par · clique numa barra para ver a série</p>
+    <div style="position:relative;height:372px;">
+      <canvas id="chart-desagios"></canvas>
+    </div>
+    <p class="fonte-visual" id="fonte-desagios">Fonte: Anbima e Itaú BBA</p>
   </div>
   <div class="chart-card">
-    <h2 style="margin:0;">Top 20 fechamentos</h2>
-    <p class="muted small" id="fechamentos-sub">Fonte: ANBIMA e Debentures.com</p>
-    <table class="table" id="tabela-fechamentos">
-      <thead><tr><th>Código</th><th>Emissor</th><th style="text-align:right;">Spread (bps)</th><th style="text-align:right;">Variação (bps)</th></tr></thead>
+    <div class="titulo-com-acao" style="margin-bottom:2px;">
+      <h2 style="margin:0;" id="titulo-movers">Top 10 aberturas</h2>
+      <div class="window-tabs" id="movers-tabs">
+        <button data-lado="aberturas" class="win-btn active">Aberturas</button>
+        <button data-lado="fechamentos" class="win-btn">Fechamentos</button>
+      </div>
+    </div>
+    <p class="muted small" style="margin:2px 0 10px;" id="movers-sub">—</p>
+    <table class="table tabela-casa" id="tabela-movers">
+      <thead><tr>
+        <th>Código</th><th class="col-texto">Emissor</th><th>Spread (bps)</th><th>Variação (bps)</th>
+      </tr></thead>
       <tbody></tbody>
     </table>
+    <p class="fonte-visual" id="fonte-movers">Fonte: Anbima, Debentures.com e Itaú BBA</p>
   </div>
 </div>
 

@@ -183,3 +183,81 @@ def test_soma_dos_emissores_bate_com_o_subsetor(banco):
                                         subsetor="Transmissão")
     n_sub = {l["rotulo"]: l["n_ativos"] for l in sub["linhas"]}["Transmissão"]
     assert sum(l["n_ativos"] for l in emis["linhas"]) == n_sub
+
+
+# ---------------------------------------------------------------------------
+# O "haltere": duration média e média de 3 meses por grupo (21/09/2026)
+# ---------------------------------------------------------------------------
+#
+# Cada linha da tabela de setor ganhou duas colunas -- duration média e média
+# do spread nos últimos 3 meses -- e um visual ligando a média 3M ao spread de
+# hoje. As três medidas têm que olhar o MESMO recorte da linha; senão o
+# haltere compararia coisas diferentes.
+
+def _banco_memoria():
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import Session as S
+
+    from app.db import Base as B
+    eng = create_engine("sqlite://")
+    B.metadata.create_all(eng)
+    return S(eng)
+
+
+def test_media_3m_junta_todas_as_observacoes_da_janela():
+    from datetime import timedelta
+    from app.models import Debenture, DebentureSpread
+
+    db = _banco_memoria()
+    db.add(Debenture(codigo="A", nome="A", classe=CLASSE, setor="Energia", subsetor="G"))
+    for i, sp in enumerate((100.0, 200.0)):
+        db.add(DebentureSpread(codigo="A", data=date(2026, 9, 1) + timedelta(days=i),
+                               spread=sp, estoque=10.0, duration=3.0))
+    db.commit()
+    [linha] = queries.spread_por_setor(db, CLASSE, nivel="setor")["linhas"]
+    assert linha["spread_medio"] == pytest.approx(200.0)
+    assert linha["spread_3m"] == pytest.approx(150.0)
+
+
+def test_janela_de_3_meses_sao_63_pregoes():
+    """Mesma convenção de QoQ: 63 POSIÇÕES na lista de dias com dado. O que
+    ficou antes disso não pode contaminar a média."""
+    from datetime import timedelta
+    from app.models import Debenture, DebentureSpread
+
+    db = _banco_memoria()
+    db.add(Debenture(codigo="A", nome="A", classe=CLASSE, setor="Energia", subsetor="G"))
+    inicio = date(2026, 1, 1)
+    for i in range(70):
+        sp = 1000.0 if i < 7 else 100.0      # os 7 primeiros ficam fora da janela
+        db.add(DebentureSpread(codigo="A", data=inicio + timedelta(days=i),
+                               spread=sp, estoque=10.0, duration=3.0))
+    db.commit()
+    [linha] = queries.spread_por_setor(db, CLASSE, nivel="setor")["linhas"]
+    assert linha["spread_3m"] == pytest.approx(100.0)
+
+
+def test_duration_media_ponderada_pelo_estoque():
+    from app.models import Debenture, DebentureSpread
+
+    db = _banco_memoria()
+    for cod, dur, est in (("A", 2.0, 300.0), ("B", 6.0, 100.0)):
+        db.add(Debenture(codigo=cod, nome=cod, classe=CLASSE, setor="Energia", subsetor="G"))
+        db.add(DebentureSpread(codigo=cod, data=date(2026, 9, 1), spread=50.0,
+                               estoque=est, duration=dur))
+    db.commit()
+    [linha] = queries.spread_por_setor(db, CLASSE, nivel="setor")["linhas"]
+    assert linha["duration"] == pytest.approx(3.0)   # (2*300 + 6*100) / 400
+
+
+def test_haltere_existe_em_todos_os_niveis(banco):
+    with banco() as db:
+        for nivel, kw in (
+            ("setor", {}),
+            ("subsetor", {"setor": "Energia Elétrica"}),
+            ("emissor", {"setor": "Energia Elétrica", "subsetor": "Transmissão"}),
+            ("ticker", {"setor": "Energia Elétrica", "subsetor": "Transmissão",
+                        "emissor": "CPFL TRANSMISSAO"}),
+        ):
+            for l in queries.spread_por_setor(db, CLASSE, nivel=nivel, **kw)["linhas"]:
+                assert "spread_3m" in l and "duration" in l, nivel

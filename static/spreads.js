@@ -48,10 +48,19 @@
 
   const charts = {}; // nome -> instancia Chart.js (destruída/recriada a cada atualização)
 
+  // NÚMEROS EM PT-BR EM TODA A ABA (21/09/2026). A Visão Geral misturava
+  // "18.6 bps" e "6.19a" (ponto) com "R$ 102,91 bi" e "63,2%" (vírgula) na
+  // mesma tela -- num material de research brasileiro, é o que mais parece
+  // erro. `num1` é o formato padrão de spread (uma casa).
+  function num1(v) {
+    return v === null || v === undefined ? "—"
+      : v.toLocaleString("pt-BR", { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+  }
+
   function fmtBps(v) {
     if (v === null || v === undefined) return "—";
     const s = v > 0 ? "+" : "";
-    return `${s}${v.toFixed(1)} bps`;
+    return `${s}${num1(v)} bps`;
   }
 
   function fmtData(iso) {
@@ -116,14 +125,17 @@
     // disponível de verdade); se já tem uma data escolhida, a resposta
     // reflete ESSA data, não a mais recente, então não mexe no max.
     if (!visaoDataInput.value && data.data_referencia) visaoDataInput.max = data.data_referencia;
-    document.getElementById("kpi-spread").textContent = data.spread_medio !== null ? `${data.spread_medio.toFixed(1)} bps` : "—";
+    document.getElementById("kpi-spread").textContent = data.spread_medio !== null ? `${num1(data.spread_medio)} bps` : "—";
     document.getElementById("kpi-spread-tag").textContent = data.spread_medio_fallback ? "sem estoque" : "pond. estoque";
-    document.getElementById("kpi-n-ativos").textContent = data.n_ativos || "—";
+    document.getElementById("kpi-n-ativos").textContent =
+      data.n_ativos ? data.n_ativos.toLocaleString("pt-BR") : "—";
     document.getElementById("dados-ate").textContent = `Dados até: ${fmtData(data.data_referencia)}`;
 
     document.getElementById("kpi-duration-tag").textContent = data.duration_ponderada_fallback ? "sem estoque" : "pond. estoque";
     document.getElementById("kpi-duration").textContent =
-      data.duration_media_ponderada !== null ? `${data.duration_media_ponderada.toFixed(2)}a` : "—";
+      data.duration_media_ponderada !== null
+        ? data.duration_media_ponderada.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+        : "—";
 
     const deltaEl = document.getElementById("kpi-variacao");
     if (data.variacao_bps === null || data.variacao_bps === undefined) {
@@ -146,12 +158,15 @@
 
     // A linha de contexto que sobrou no lugar dos textos que saíram: diz a
     // data-base e contra o que se está comparando, e nada além disso.
+    // Mora na barra fixa: curta de propósito, para caber numa linha.
     document.getElementById("nota-base").textContent =
       data.data_referencia
-        ? `Boletim de ${fmtData(data.data_referencia)}` +
-          (data.data_comparacao ? ` · comparado com ${fmtData(data.data_comparacao)} (${currentBase})`
-                                : ` · ${currentBase} sem histórico suficiente para comparar`)
+        ? `Boletim ${PADRAO_GRAFICO.diaMesCurto(data.data_referencia)}` +
+          (data.data_comparacao ? ` vs ${PADRAO_GRAFICO.diaMesCurto(data.data_comparacao)}`
+                                : ` · ${currentBase} sem histórico para comparar`)
         : "Sem dado para a data selecionada.";
+    escreverFonte("kpi-nota", "Médias ponderadas por estoque. Fonte: Anbima, Debentures.com e Itaú BBA",
+                  data.data_referencia);
   }
 
   // ------------------------------------------------------------------
@@ -165,12 +180,13 @@
     // mostrar "Mar-26" e à dica de ferramenta mostrar "15/03/2026" a partir
     // do MESMO dado -- ver PADRAO_GRAFICO.eixoData em static/chart-padrao.js.
     const datasIso = series.map((r) => r.data);
+    escreverFonte("fonte-series", "Fonte: Anbima, Debentures.com e Itaú BBA", datasIso[datasIso.length - 1]);
     charts.series = new Chart(ctx, {
       type: "line",
       data: {
         labels: datasIso,
         datasets: [{
-          label: `Spread médio — ${currentClasse}`,
+          label: "Spread médio",
           data: series.map((r) => r.spread_medio),
           borderColor: "#FF6200",
           backgroundColor: "rgba(255, 98, 0, 0.08)",
@@ -178,6 +194,22 @@
           pointRadius: 0,
           tension: 0.15,
           fill: true,
+        }, {
+          // BASE COMPARÁVEL (21/09/2026) -- índice encadeado só com papéis
+          // presentes nos dois dias de cada passo, ancorado no spread de
+          // hoje (ver queries._serie_base_comparavel). A distância entre as
+          // duas linhas numa data passada é quanto do movimento de lá até
+          // hoje veio da MUDANÇA DE BASE, e não de repricing. Preta e fina,
+          // sem preenchimento: é a linha de controle, a laranja segue sendo
+          // o protagonista.
+          label: "Base comparável",
+          data: series.map((r) => r.spread_comparavel ?? null),
+          borderColor: "#111111",
+          backgroundColor: "transparent",
+          borderWidth: 1.5,
+          pointRadius: 0,
+          tension: 0.15,
+          fill: false,
         }],
       },
       options: PADRAO_GRAFICO.eixoData(datasIso, {
@@ -200,14 +232,42 @@
   // pergunta de forma direta, e o `scatter` do payload deixou de ser lido
   // (a rota continua devolvendo, sem custo extra de consulta).
   // ------------------------------------------------------------------
-  async function loadMovers() {
-    const data = await fetchJSON("/api/spreads/movers", { classe: currentClasse, base: currentBase, top: 20, data: visaoDataInput.value || undefined });
-    const sub = `Variação de ${fmtData(data.data_comparacao)} a ${fmtData(data.data_referencia)} (${currentBase}) · Fonte: ANBIMA e Debentures.com`;
-    document.getElementById("aberturas-sub").textContent = sub;
-    document.getElementById("fechamentos-sub").textContent = sub;
-    renderMoversTable("tabela-aberturas", data.aberturas || [], "cell-abertura");
-    renderMoversTable("tabela-fechamentos", data.fechamentos || [], "cell-fechamento");
+  // TOP 10 COM ALTERNÂNCIA (21/09/2026). Eram duas tabelas de 20 linhas
+  // (~800 px) repetindo o que a dispersão já destaca. Agora é uma tabela de
+  // 10, e o botão escolhe o lado. A resposta do servidor fica guardada:
+  // trocar de lado não é uma consulta nova.
+  let moversDados = null;
+  let moversLado = "aberturas";
+
+  function renderMovers() {
+    if (!moversDados) return;
+    const aberturas = moversLado === "aberturas";
+    document.getElementById("titulo-movers").textContent =
+      `Top 10 ${aberturas ? "aberturas" : "fechamentos"}`;
+    renderMoversTable("tabela-movers",
+      (aberturas ? moversDados.aberturas : moversDados.fechamentos) || [],
+      aberturas ? "cell-abertura" : "cell-fechamento");
   }
+
+  async function loadMovers() {
+    const data = await fetchJSON("/api/spreads/movers", {
+      classe: currentClasse, base: currentBase, top: 10, data: visaoDataInput.value || undefined,
+    });
+    moversDados = data;
+    document.getElementById("movers-sub").textContent =
+      `bps · variação de ${fmtData(data.data_comparacao)} a ${fmtData(data.data_referencia)} (${currentBase}) · clique para ver a série`;
+    escreverFonte("fonte-movers", "Fonte: Anbima, Debentures.com e Itaú BBA", data.data_referencia);
+    renderMovers();
+  }
+
+  document.querySelectorAll("#movers-tabs .win-btn").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      document.querySelectorAll("#movers-tabs .win-btn").forEach((b) => b.classList.remove("active"));
+      btn.classList.add("active");
+      moversLado = btn.dataset.lado;
+      renderMovers();
+    });
+  });
 
   function renderMoversTable(tableId, rows, cellClass) {
     const tbody = document.querySelector(`#${tableId} tbody`);
@@ -222,9 +282,9 @@
       tr.title = "Clique para ver a série histórica deste ativo";
       tr.innerHTML = `
         <td><strong>${r.codigo}</strong></td>
-        <td>${r.nome || "—"}</td>
-        <td style="text-align:right;">${r.spread.toFixed(1)}</td>
-        <td class="${cellClass}" style="text-align:right;">${fmtBps(r.variacao_bps)}</td>
+        <td class="col-texto">${r.nome || "—"}</td>
+        <td>${num1(r.spread)}</td>
+        <td class="${cellClass}">${fmtBps(r.variacao_bps)}</td>
       `;
       tr.addEventListener("click", () => openDrilldown(r.codigo, r.nome));
       tbody.appendChild(tr);
@@ -300,6 +360,51 @@
     });
   }
 
+  // ------------------------------------------------------------------
+  // HALTERE (21/09/2026, item 4 do Allan): bolinha VAZIA na média dos
+  // últimos 3 meses, CHEIA no spread de hoje, traço entre as duas --
+  // laranja se o grupo abriu contra a própria média, preto se fechou.
+  // SVG direto na célula, sem Chart.js: são dezenas de linhas, e um gráfico
+  // por linha seria pesado para algo que é só dois pontos e um traço.
+  // ------------------------------------------------------------------
+  function escalaDoHaltere(linhas) {
+    const valores = [];
+    linhas.forEach((l) => {
+      if (l.spread_3m !== null && l.spread_3m !== undefined) valores.push(l.spread_3m);
+      if (l.spread_medio !== null && l.spread_medio !== undefined) valores.push(l.spread_medio);
+    });
+    if (!valores.length) return null;
+    let min = Math.min(...valores);
+    let max = Math.max(...valores);
+    if (max - min < 1) { min -= 1; max += 1; }   // grupo único ou tudo igual
+    const folga = (max - min) * 0.06;
+    return { min: min - folga, max: max + folga };
+  }
+
+  function haltere(media3m, hoje, escala) {
+    if (!escala || media3m === null || media3m === undefined || hoje === null || hoje === undefined) {
+      return '<span class="muted">—</span>';
+    }
+    const L = 170, H = 16, R = 4.5;
+    const x = (v) => R + ((v - escala.min) / (escala.max - escala.min)) * (L - 2 * R);
+    const x3m = x(media3m), xh = x(hoje);
+    const abriu = hoje > media3m;
+    const cor = abriu ? "#FF6200" : "#111111";
+    const dif = hoje - media3m;
+    const dica = `Média 3M: ${num1(media3m)} bps → hoje: ${num1(hoje)} bps (${dif > 0 ? "+" : ""}${num1(dif)})`;
+    // Zero da escala, quando ela atravessa o zero: referência discreta.
+    const zero = escala.min < 0 && escala.max > 0
+      ? `<line x1="${x(0)}" y1="1" x2="${x(0)}" y2="${H - 1}" stroke="#d0d0d0" stroke-width="1"/>` : "";
+    return `<svg width="${L}" height="${H}" viewBox="0 0 ${L} ${H}" role="img" aria-label="${dica}">
+      <title>${dica}</title>
+      <line x1="${R}" y1="${H / 2}" x2="${L - R}" y2="${H / 2}" stroke="#ececec" stroke-width="1"/>
+      ${zero}
+      <line x1="${x3m}" y1="${H / 2}" x2="${xh}" y2="${H / 2}" stroke="${cor}" stroke-width="2.5"/>
+      <circle cx="${x3m}" cy="${H / 2}" r="${R - 0.5}" fill="#ffffff" stroke="#7a7a7a" stroke-width="1.3"/>
+      <circle cx="${xh}" cy="${H / 2}" r="${R}" fill="${cor}"/>
+    </svg>`;
+  }
+
   async function loadSetor() {
     const data = await fetchJSON("/api/spreads/por-setor", {
       classe: currentClasse, base: currentBase, data: visaoDataInput.value || undefined,
@@ -313,6 +418,11 @@
     tbody.innerHTML = "";
     const linhas = data.linhas || [];
     vazio.style.display = linhas.length ? "none" : "";
+    // Uma escala para o nível inteiro: os halteres só são comparáveis entre
+    // linhas se todos usarem a mesma régua.
+    const escalaHaltere = escalaDoHaltere(linhas);
+    document.getElementById("setor-col-variacao").textContent = `Variação ${currentBase}`;
+    escreverFonte("fonte-setor", "Fonte: Anbima, Debentures.com e Itaú BBA", data.data_referencia);
 
     linhas.forEach((l) => {
       const tr = document.createElement("tr");
@@ -333,11 +443,15 @@
         ? `<strong>${l.rotulo}</strong>${l.nome ? ` <span class="muted">${l.nome}</span>` : ""}`
         : l.rotulo + (podeDescer ? ' <span class="muted">›</span>' : "");
       tr.innerHTML = `
-        <td>${rotulo}</td>
-        <td style="text-align:right;">${l.n_ativos}</td>
-        <td style="text-align:right;">${l.estoque !== null ? l.estoque.toLocaleString("pt-BR", { maximumFractionDigits: 0 }) : "—"}</td>
-        <td style="text-align:right;">${l.spread_medio !== null ? l.spread_medio.toFixed(1) : "—"}</td>
-        <td class="${varCls}" style="text-align:right;">${l.variacao_bps !== null ? fmtBps(l.variacao_bps) : "—"}</td>
+        <td class="col-texto">${rotulo}</td>
+        <td>${l.n_ativos.toLocaleString("pt-BR")}</td>
+        <td>${l.estoque !== null ? l.estoque.toLocaleString("pt-BR", { maximumFractionDigits: 0 }) : "—"}</td>
+        <td>${l.duration !== null && l.duration !== undefined
+              ? l.duration.toLocaleString("pt-BR", { minimumFractionDigits: 1, maximumFractionDigits: 1 }) : "—"}</td>
+        <td><strong>${num1(l.spread_medio)}</strong></td>
+        <td>${num1(l.spread_3m)}</td>
+        <td class="col-haltere">${haltere(l.spread_3m, l.spread_medio, escalaHaltere)}</td>
+        <td class="${varCls}">${l.variacao_bps !== null ? fmtBps(l.variacao_bps) : "—"}</td>
       `;
       tr.addEventListener("click", () => {
         if (setorNivel === "setor") { setorAtual = l.rotulo; irParaNivel("subsetor"); }
@@ -429,7 +543,7 @@
           <td>${r.incentivada || "—"}</td>
           <td>${fmtBps(r.spread)}</td>
           <td>${fmtNum(r.estoque, 1)}</td>
-          <td>${r.duration !== null ? r.duration.toFixed(1) + "a" : "—"}</td>
+          <td>${r.duration !== null ? num1(r.duration) + " anos" : "—"}</td>
         `;
         detalhesTbody.appendChild(tr);
       });
@@ -693,10 +807,137 @@
       data.data_referencia);
   }
 
+  // ------------------------------------------------------------------
+  // MAIORES DESÁGIOS (21/09/2026, pedido do Allan): os 15 papéis com menor
+  // % do PU par na data analisada -- "deixar claro quais papéis mais
+  // depreciaram". Cada barra vai do PU atual até o par (100%): o
+  // COMPRIMENTO da barra é o deságio. Uma barra começando no zero do eixo
+  // mostraria 71% e 99% quase do mesmo tamanho e esconderia justamente a
+  // diferença que interessa.
+  // ------------------------------------------------------------------
+  async function loadDesagios() {
+    const data = await fetchJSON("/api/spreads/desagios", {
+      classe: currentClasse, data: visaoDataInput.value || undefined,
+    });
+    destroyChart("desagios");
+    const el = document.getElementById("chart-desagios");
+    el.parentElement.querySelector(".muted-msg")?.remove();
+    document.getElementById("titulo-desagios").textContent =
+      `Maiores deságios — ${currentClasse}`;
+    const papeis = data.papeis || [];
+    if (!papeis.length) {
+      el.style.display = "none";
+      const msg = document.createElement("p");
+      msg.className = "muted small muted-msg";
+      msg.textContent = "Sem % do PU par publicado para a data analisada.";
+      el.after(msg);
+      return;
+    }
+    el.style.display = "";
+    const fmt = (v, c) => v.toLocaleString("pt-BR", { minimumFractionDigits: c, maximumFractionDigits: c });
+    const menor = Math.min(...papeis.map((p) => p.pct_pu_par));
+    // Rótulo do eixo: emissor encurtado + ticker. O nome completo e os
+    // demais dados ficam na dica de ferramenta.
+    const rotulo = (p) => {
+      const nome = (p.emissor || "").replace(/\s+(S\.?\/?A\.?|LTDA\.?)$/i, "");
+      return `${nome.length > 30 ? nome.slice(0, 29) + "…" : nome} · ${p.codigo}`;
+    };
+
+    charts.desagios = new Chart(el.getContext("2d"), {
+      type: "bar",
+      data: {
+        labels: papeis.map(rotulo),
+        datasets: [{
+          label: "% do PU par",
+          data: papeis.map((p) => [p.pct_pu_par, 100]),
+          backgroundColor: "#FF6200",
+          borderWidth: 0,
+          barPercentage: 0.7,
+          rotulos: papeis.map((p) => `${fmt(p.pct_pu_par, 1)}%`),
+        }],
+      },
+      plugins: [{
+        // Valor escrito à esquerda da barra, onde ela começa -- é o número
+        // que se lê primeiro.
+        id: "valorDesagio",
+        afterDatasetsDraw(chart) {
+          const { ctx } = chart;
+          const meta = chart.getDatasetMeta(0);
+          ctx.save();
+          ctx.font = `600 11px ${Chart.defaults.font.family}`;
+          ctx.fillStyle = PADRAO_GRAFICO.PRETO;
+          ctx.textAlign = "right";
+          ctx.textBaseline = "middle";
+          meta.data.forEach((barra, i) => {
+            const { x, base, y } = barra.getProps(["x", "base", "y"], true);
+            ctx.fillText(chart.data.datasets[0].rotulos[i], Math.min(x, base) - 5, y);
+          });
+          ctx.restore();
+        },
+      }, {
+        // Linha do par (100%), a referência de todas as barras.
+        id: "linhaPar",
+        afterDatasetsDraw(chart) {
+          const { ctx, chartArea, scales } = chart;
+          const px = scales.x.getPixelForValue(100);
+          ctx.save();
+          ctx.strokeStyle = PADRAO_GRAFICO.PRETO;
+          ctx.lineWidth = 1;
+          ctx.beginPath();
+          ctx.moveTo(px, chartArea.top);
+          ctx.lineTo(px, chartArea.bottom);
+          ctx.stroke();
+          ctx.restore();
+        },
+      }],
+      options: {
+        indexAxis: "y",
+        responsive: true,
+        maintainAspectRatio: false,
+        interaction: { mode: "nearest", intersect: true, axis: "y" },
+        scales: {
+          x: {
+            // Espaço à esquerda para o rótulo de valor da barra mais longa.
+            min: Math.floor((menor - 6) / 5) * 5,
+            max: 102,
+            title: { display: true, text: "% do PU par" },
+            ticks: { callback: (v) => `${v}%` },
+            grid: { color: PADRAO_GRAFICO.GRADE },
+          },
+          y: { grid: { display: false }, ticks: { autoSkip: false, font: { size: 10.5 } } },
+        },
+        plugins: {
+          legend: { display: false },
+          tooltip: {
+            callbacks: {
+              title: (itens) => {
+                const p = papeis[itens[0].dataIndex];
+                return `${p.codigo} — ${p.emissor || ""}`;
+              },
+              label: (item) => {
+                const p = papeis[item.dataIndex];
+                const partes = [` ${fmt(p.pct_pu_par, 2)}% do PU par (deságio de ${fmt(100 - p.pct_pu_par, 1)} p.p.)`];
+                if (p.spread !== null) partes.push(` Spread ${fmt(p.spread, 1)} bps`);
+                if (p.duration !== null) partes.push(` Duration ${fmt(p.duration, 2)} anos`);
+                return partes;
+              },
+            },
+          },
+        },
+        onClick(evento, elementos) {
+          if (!elementos.length) return;
+          const p = papeis[elementos[0].index];
+          openDrilldown(p.codigo, p.emissor);
+        },
+      },
+    });
+    escreverFonte("fonte-desagios", "Fonte: Anbima e Itaú BBA", data.data_referencia);
+  }
+
   async function reloadAll() {
     await Promise.all([
       loadKPI(), loadSeriesChart(), loadSetor(), loadMovers(),
-      loadComposicao(), loadDispersao(),
+      loadComposicao(), loadDispersao(), loadDesagios(),
     ]);
   }
 
@@ -739,6 +980,7 @@
     loadMovers();
     loadComposicao();
     loadDispersao();
+    loadDesagios();
   });
 
   reloadAll();

@@ -38,6 +38,20 @@
   Chart.defaults.plugins.legend.labels.boxWidth = 8;
   Chart.defaults.plugins.legend.labels.boxHeight = 8;
   Chart.defaults.plugins.legend.labels.padding = 14;
+  // Bolinha CHEIA, na cor da linha. Em série com preenchimento quase
+  // transparente embaixo (o laranja do spread médio), a legenda herdava essa
+  // cor clarinha e a bolinha saía oca -- parecendo outra série.
+  const gerarRotulosPadrao = Chart.defaults.plugins.legend.labels.generateLabels;
+  Chart.defaults.plugins.legend.labels.generateLabels = function (chart) {
+    return gerarRotulosPadrao.call(this, chart).map((rot) => {
+      const ds = chart.data.datasets[rot.datasetIndex];
+      const tipo = (ds && ds.type) || chart.config.type;
+      if (tipo === "line" && typeof rot.strokeStyle === "string") {
+        rot.fillStyle = rot.strokeStyle;
+      }
+      return rot;
+    });
+  };
 
   // Modo "index" + `intersect: false`: o alvo é a POSIÇÃO no eixo x, não a
   // linha. Em série temporal é o que se quer -- "o que aconteceu neste dia".
@@ -86,18 +100,49 @@
    * dado. Formatando na hora de montar os labels (como era antes), o eixo
    * ficava preso ao formato escolhido ali e a dica repetia exatamente a
    * mesma string. */
+  /* Em quais posições do eixo escrever o mês: só na VIRADA de mês.
+   *
+   * BUG CORRIGIDO (21/09/2026). A versão anterior deixava o Chart.js
+   * escolher ~8 posições espaçadas e escrevia "Mês-Ano" em cada uma -- numa
+   * série de 3 meses isso dava "Jul-26, Jul-26, Jul-26". Um rótulo de mês
+   * só tem sentido uma vez por mês. Com muitos meses (histórico de 2 anos
+   * num gráfico de meia largura), escreve um a cada N para não encavalar;
+   * as marcas sem texto continuam lá, só em branco. */
+  function viradasDeMes(labelsIso, maxRotulos) {
+    const viradas = [];
+    labelsIso.forEach((iso, i) => {
+      const mes = String(iso).slice(0, 7);
+      if (i === 0) {
+        // O primeiro ponto só ganha rótulo se a série começa no início do
+        // mês. Começando no dia 24, "Jun-26" ficaria colado em "Jul-26" logo
+        // adiante, rotulando uma semana como se fosse um mês.
+        if (Number(String(iso).slice(8, 10)) <= 7) viradas.push(i);
+      } else if (mes !== String(labelsIso[i - 1]).slice(0, 7)) {
+        viradas.push(i);
+      }
+    });
+    const passo = Math.max(1, Math.ceil(viradas.length / (maxRotulos || 12)));
+    return new Set(viradas.filter((_, k) => k % passo === 0));
+  }
+
   function eixoData(labelsIso, opcoes) {
     const base = opcoes || {};
     const escalas = base.scales || {};
+    const extra = (escalas.x || {}).ticks || {};
+    const mostrar = viradasDeMes(labelsIso, extra.maxRotulosMes || 12);
     return Object.assign({}, base, {
       scales: Object.assign({}, escalas, {
         x: Object.assign({ grid: { display: false } }, escalas.x, {
           ticks: Object.assign(
-            { maxTicksLimit: 8, autoSkip: true, maxRotation: 0 },
-            (escalas.x || {}).ticks,
+            { maxRotation: 0 },
+            extra,
             {
+              // Uma marca por data, sem pular: quem decide o que aparece é
+              // `mostrar`, não o autoSkip do Chart.js -- ele não sabe o que
+              // é uma virada de mês.
+              autoSkip: false,
               callback(valor, indice) {
-                return mesAno(labelsIso[indice]);
+                return mostrar.has(indice) ? mesAno(labelsIso[indice]) : "";
               },
             }
           ),
@@ -179,7 +224,15 @@
     },
   };
 
+  /* "2026-09-18" -> "18/09": data sem ano, para lugares apertados em que o
+     ano é óbvio pelo contexto (a linha de contexto da barra fixa). */
+  function diaMesCurto(iso) {
+    if (!iso) return "";
+    const [, m, d] = String(iso).split("-");
+    return d ? `${d}/${m}` : String(iso);
+  }
+
   window.PADRAO_GRAFICO = {
-    mesAno, dataCheia, diaMes, eixoData, linhaZero, rotulosNasBarras, PRETO, GRADE,
+    mesAno, dataCheia, diaMes, diaMesCurto, eixoData, linhaZero, rotulosNasBarras, PRETO, GRADE,
   };
 })();

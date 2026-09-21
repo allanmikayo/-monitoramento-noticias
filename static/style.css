@@ -292,8 +292,8 @@ h2 { font-size: 1.05rem; margin: 20px 0 8px; color: var(--header); font-weight: 
 .kpi-tag { background: #f0f0f0; color: var(--muted); border-radius: 999px; padding: 1px 8px; font-size: 0.68rem; text-transform: none; }
 .kpi-value { font-size: 1.6rem; font-weight: 700; color: var(--header); }
 .kpi-delta { font-size: 0.82rem; font-weight: 700; }
-.kpi-delta.up { color: var(--off); }
-.kpi-delta.down { color: var(--ok); }
+.kpi-delta.up { color: var(--accent); }
+.kpi-delta.down { color: #111111; }
 .kpi-delta.flat { color: var(--muted); }
 
 .chart-grid {
@@ -312,8 +312,8 @@ h2 { font-size: 1.05rem; margin: 20px 0 8px; color: var(--header); font-weight: 
   gap: 16px;
 }
 .movers-grid .table td.num, .movers-grid .table th.num { text-align: right; }
-.cell-abertura { color: var(--off); font-weight: 700; }
-.cell-fechamento { color: var(--ok); font-weight: 700; }
+.cell-abertura { color: var(--accent); font-weight: 700; }
+.cell-fechamento { color: #111111; font-weight: 700; }
 
 /* Ampliação 24/07/2026: header com "dados até", abas Visão Geral/         */
 /* Marcação Emissores, e o painel de emissor (tabela + gráfico + notícias) */
@@ -493,3 +493,55 @@ h3.bloco-noticias:first-of-type { margin-top: 10px; }
 #tabela-emissor-tickers td:nth-child(8) {
   font-variant-numeric: tabular-nums;
 }
+
+
+/* ------------------------------------------------------------------ */
+/* Visão Geral redesenhada (21/09/2026, diagnóstico de UX aprovado)    */
+/* ------------------------------------------------------------------ */
+
+/* CONVENÇÃO DE COR ÚNICA: laranja = abriu, preto = fechou -- a do relatório
+   semanal do Allan. Até aqui as tabelas usavam vermelho/verde e os gráficos
+   laranja/preto, a meio palmo de distância na mesma página. As regras
+   `.cell-abertura`, `.cell-fechamento` e `.kpi-delta.up/.down` acima foram
+   trocadas para isso; vale também para o Balcão B3, que usa as mesmas
+   classes. --off/--ok (vermelho/verde) continuam existindo para o que é
+   ERRO e SUCESSO -- alerta, botão de excluir --, que não é a mesma coisa que
+   um spread abrir ou fechar. */
+
+/* Barra de filtros fixa no topo durante a rolagem. */
+.barra-fixa {
+  position: sticky; top: 0; z-index: 20;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.06);
+}
+.contexto-base { font-size: 0.78rem; color: #4a4a4a; }
+.ferramentas-barra { margin-left: auto; display: flex; align-items: center; gap: 8px; }
+/* `#busca-ativo` herda um `min-width: 260px` de quando a busca era um campo
+   largo no meio da barra -- era ele que empurrava as ferramentas para uma
+   segunda linha. Na barra fixa ela é ferramenta de canto. */
+.ferramentas-barra #busca-ativo { width: 150px; min-width: 0; margin-left: 0; }
+/* A barra fixa precisa caber numa linha: numa barra que acompanha a rolagem,
+   cada linha extra é altura roubada de TODOS os gráficos, o tempo todo. Em
+   tela estreita ela ainda pode quebrar -- aí é melhor quebrar que cortar. */
+.barra-fixa { gap: 10px; padding: 10px 14px; }
+.barra-fixa .win-btn { padding: 6px 11px; }
+
+/* Cards compactos -- mesmo desenho dos cards da aba Emissores. */
+.kpi-compacto { gap: 10px; margin-bottom: 10px; }
+.kpi-compacto .kpi-card { padding: 10px 14px; }
+.kpi-compacto .kpi-value { font-size: 1.15rem; }
+.kpi-compacto .kpi-label { font-size: 0.66rem; }
+
+/* Tabela no padrão da casa (o mesmo da "Debêntures Emitidas"): cabeçalho
+   preto com texto branco, colunas centralizadas, texto (nome, rótulo) à
+   esquerda. `.tabela-emissao` continua existindo por compatibilidade. */
+.tabela-casa th {
+  background: #111111; color: #ffffff; text-transform: none;
+  font-size: 0.74rem; letter-spacing: 0.02em; text-align: center; vertical-align: bottom;
+}
+.tabela-casa td { text-align: center; font-variant-numeric: tabular-nums; }
+.tabela-casa th.col-texto, .tabela-casa td.col-texto { text-align: left; }
+.tabela-casa tbody tr:hover td { background: #faf6f2; }
+
+/* Coluna do haltere na tabela de setor. */
+.tabela-casa th.col-haltere, .tabela-casa td.col-haltere { width: 190px; padding-top: 4px; padding-bottom: 4px; }
+.tabela-casa td.col-haltere svg { display: block; margin: 0 auto; overflow: visible; }
