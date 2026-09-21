@@ -182,11 +182,27 @@ def register_spreads_routes(require_user_dep) -> APIRouter:
         classe: str, base: str = "WoW", data: str | None = None,
         user: User | None = Depends(require_user_dep), db: Session = Depends(get_db),
     ):
+        classe = _validar_classe(classe)
         return {
+            "faixas": queries.faixas_variacao(classe),
             "snapshots": queries.movement_distribution(
-                db, _validar_classe(classe), dias_comparacao=_validar_base(base), data_referencia=_parse_data(data),
-            )
+                db, classe, dias_comparacao=_validar_base(base), data_referencia=_parse_data(data),
+            ),
         }
+
+    # Dispersão de aberturas/fechamentos por duration (21/09/2026) -- ao lado
+    # do gráfico de composição na Visão Geral, sobre a MESMA base (ver
+    # queries._variacoes_no_par). Nome próprio porque `/api/spreads/dispersao`
+    # já existe e é outra coisa (dispersão intra-rating, analitico.py).
+    @router.get("/api/spreads/variacao-por-duration")
+    def api_spreads_variacao_por_duration(
+        classe: str, base: str = "WoW", data: str | None = None,
+        user: User | None = Depends(require_user_dep), db: Session = Depends(get_db),
+    ):
+        return queries.variacao_por_duration(
+            db, _validar_classe(classe), dias_comparacao=_validar_base(base),
+            data_referencia=_parse_data(data),
+        )
 
     # ------------------------------------------------------------------
     # Análises de valor relativo (pedido do Allan, 12/08/2026) — ver

@@ -118,5 +118,68 @@
     });
   }
 
-  window.PADRAO_GRAFICO = { mesAno, dataCheia, eixoData };
+  /* "2026-09-18" -> "18-set". Rótulo de coluna quando cada coluna é UMA
+     data específica (composição semanal do relatório), e não um eixo
+     contínuo de meses -- aí o dia é a informação, não ruído. */
+  function diaMes(iso) {
+    if (!iso) return "";
+    const [, m, d] = String(iso).split("-");
+    if (!d) return String(iso);
+    return `${Number(d)}-${MESES[Number(m) - 1].toLowerCase()}`;
+  }
+
+  /* Linha preta no zero do eixo y. Em gráfico de abertura/fechamento o zero
+     É a informação -- separa quem abriu de quem fechou -- e não pode ter o
+     mesmo peso das linhas de grade. Uso: `plugins: [PADRAO_GRAFICO.linhaZero]`. */
+  const linhaZero = {
+    id: "linhaZero",
+    afterDatasetsDraw(chart) {
+      const y = chart.scales.y;
+      if (!y || y.min > 0 || y.max < 0) return;
+      const { ctx, chartArea } = chart;
+      const py = y.getPixelForValue(0);
+      ctx.save();
+      ctx.strokeStyle = PRETO;
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(chartArea.left, py);
+      ctx.lineTo(chartArea.right, py);
+      ctx.stroke();
+      ctx.restore();
+    },
+  };
+
+  /* Escreve o valor dentro de cada segmento de coluna empilhada, como no
+     relatório ("49%", "13%"). O texto de cada dataset vem de
+     `dataset.rotulos[i]` (já formatado) e a cor de `dataset.corRotulo`.
+     Segmento baixo demais para caber o texto fica sem rótulo: o número
+     continua na dica de ferramenta, e um "1%" espremido sobre a borda só
+     vira borrão. */
+  const rotulosNasBarras = {
+    id: "rotulosNasBarras",
+    afterDatasetsDraw(chart) {
+      const { ctx } = chart;
+      ctx.save();
+      ctx.font = `600 11px ${Chart.defaults.font.family}`;
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      chart.data.datasets.forEach((ds, i) => {
+        const meta = chart.getDatasetMeta(i);
+        if (meta.hidden || !ds.rotulos) return;
+        meta.data.forEach((barra, j) => {
+          const texto = ds.rotulos[j];
+          if (!texto) return;
+          const { y, base } = barra.getProps(["y", "base"], true);
+          if (Math.abs(base - y) < 14) return;
+          ctx.fillStyle = ds.corRotulo || "#ffffff";
+          ctx.fillText(texto, barra.x, (y + base) / 2);
+        });
+      });
+      ctx.restore();
+    },
+  };
+
+  window.PADRAO_GRAFICO = {
+    mesAno, dataCheia, diaMes, eixoData, linhaZero, rotulosNasBarras, PRETO, GRADE,
+  };
 })();

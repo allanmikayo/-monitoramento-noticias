@@ -113,6 +113,27 @@
   <canvas id="chart-series" height="110"></canvas>
 </div>
 
+{# ABERTURAS E FECHAMENTOS (21/09/2026, pedido do Allan) -- os dois
+   gráficos do relatório semanal, lado a lado. Mesma base nos dois: papéis
+   da classe com duration >= 1 e spread nas duas datas da comparação (ver
+   queries._variacoes_no_par). A classe, a base de comparação (WoW/MoM/...) e
+   a data analisada vêm dos controles do topo da Visão Geral. Segue o padrão
+   visual da casa: título, visual, fonte discreta embaixo. #}
+<div class="emissor-duplo" style="margin-bottom:16px;">
+  <div class="chart-card">
+    <h2 style="margin:0;" id="titulo-composicao">Evolução da variação de spreads</h2>
+    <p class="muted small" style="margin:2px 0 8px;" id="sub-composicao">% da base de ativos por faixa</p>
+    <canvas id="chart-composicao" height="210"></canvas>
+    <p class="fonte-visual" id="fonte-composicao">Fonte: Anbima, Debentures.com e Itaú BBA</p>
+  </div>
+  <div class="chart-card">
+    <h2 style="margin:0;" id="titulo-dispersao">Variação de spreads por duration</h2>
+    <p class="muted small" style="margin:2px 0 8px;" id="sub-dispersao">bps · clique num ponto para ver a série do papel</p>
+    <canvas id="chart-dispersao" height="210"></canvas>
+    <p class="fonte-visual" id="fonte-dispersao">Fonte: Anbima, Debentures.com e Itaú BBA</p>
+  </div>
+</div>
+
 <div class="chart-card">
   <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;">
     <h2 style="margin:0;">Spread por setor</h2>

@@ -474,8 +474,230 @@
   // ------------------------------------------------------------------
   // Orquestração / eventos dos toggles da Visão Geral
   // ------------------------------------------------------------------
+  // ------------------------------------------------------------------
+  // ABERTURAS E FECHAMENTOS (21/09/2026, pedido do Allan) -- os dois
+  // gráficos do relatório semanal, lado a lado. Mesma base nos dois: papéis
+  // da classe com duration >= 1 e spread nas duas datas da comparação.
+  // Toda a conta é do servidor (queries.movement_distribution e
+  // queries.variacao_por_duration); aqui só se desenha.
+  // ------------------------------------------------------------------
+
+  // Cores das faixas, na ordem da legenda. Do extremo negativo ao extremo
+  // positivo: cinza, preto, laranja, amarelo -- as mesmas do relatório.
+  const CORES_FAIXA = ["#8c8c8c", "#111111", "#FF6200", "#FFC000"];
+  // Texto dentro do segmento: branco nos escuros, preto no amarelo.
+  const COR_ROTULO_FAIXA = ["#ffffff", "#ffffff", "#ffffff", "#111111"];
+
+  function fmtPctInteiro(v) {
+    return v === null || v === undefined ? "" : `${Math.round(Math.abs(v))}%`;
+  }
+
+  async function loadComposicao() {
+    const data = await fetchJSON("/api/spreads/movement-distribution", {
+      classe: currentClasse, base: currentBase, data: visaoDataInput.value || undefined,
+    });
+    destroyChart("composicao");
+    const el = document.getElementById("chart-composicao");
+    el.parentElement.querySelector(".muted-msg")?.remove();
+    document.getElementById("titulo-composicao").textContent =
+      `Evolução da variação de spreads — ${currentClasse}`;
+
+    const cols = data.snapshots || [];
+    const faixas = data.faixas || [];
+    if (!cols.length) {
+      el.style.display = "none";
+      const msg = document.createElement("p");
+      msg.className = "muted small muted-msg";
+      msg.textContent = "Sem histórico suficiente para esta base de comparação.";
+      el.after(msg);
+      return;
+    }
+    el.style.display = "";
+
+    // ORDEM DE EMPILHAMENTO. No Chart.js, positivos e negativos empilham
+    // separados, cada lado a partir do zero, na ordem dos datasets. Para a
+    // faixa MODERADA ficar colada no zero e a EXTREMA na ponta -- dos dois
+    // lados, espelhado --, os datasets entram como: -10..0, <-10, 0..10, >10.
+    // A legenda é reordenada abaixo para a ordem natural, da esquerda para a
+    // direita: <-10, -10..0, 0..10, >10.
+    const ordemPilha = [1, 0, 2, 3];
+    const datasets = ordemPilha.map((k) => {
+      const negativa = k < 2;
+      const pcts = cols.map((c) => c.faixas[k].pct);
+      return {
+        label: faixas[k],
+        ordemLegenda: k,
+        data: pcts.map((v) => (v === null ? null : negativa ? -v : v)),
+        backgroundColor: CORES_FAIXA[k],
+        borderWidth: 0,
+        stack: "base",
+        rotulos: pcts.map(fmtPctInteiro),
+        corRotulo: COR_ROTULO_FAIXA[k],
+        contagens: cols.map((c) => c.faixas[k].n),
+      };
+    });
+
+    charts.composicao = new Chart(el.getContext("2d"), {
+      type: "bar",
+      data: { labels: cols.map((c) => PADRAO_GRAFICO.diaMes(c.data)), datasets },
+      plugins: [PADRAO_GRAFICO.linhaZero, PADRAO_GRAFICO.rotulosNasBarras],
+      options: {
+        responsive: true,
+        datasets: { bar: { barPercentage: 0.62, categoryPercentage: 0.9 } },
+        scales: {
+          x: { stacked: true, grid: { display: false }, border: { display: false } },
+          // Sem eixo y visível, como no relatório: os valores estão escritos
+          // dentro das barras, e a régua só competiria com eles.
+          y: { stacked: true, display: false },
+        },
+        plugins: {
+          legend: {
+            position: "bottom",
+            labels: { sort: (a, b) =>
+              datasets[a.datasetIndex].ordemLegenda - datasets[b.datasetIndex].ordemLegenda },
+          },
+          tooltip: {
+            callbacks: {
+              title(itens) {
+                const c = cols[itens[0].dataIndex];
+                return `${PADRAO_GRAFICO.dataCheia(c.data)} vs ${PADRAO_GRAFICO.dataCheia(c.data_comparacao)}`;
+              },
+              label(item) {
+                const ds = datasets[item.datasetIndex];
+                const n = ds.contagens[item.dataIndex];
+                return ` ${ds.label}: ${fmtPctInteiro(item.raw)} (${n} papé${n === 1 ? "l" : "is"})`;
+              },
+              footer(itens) {
+                return `Base: ${cols[itens[0].dataIndex].n_ativos} papéis`;
+              },
+            },
+            // Ordem natural das faixas também na dica, do extremo negativo
+            // ao extremo positivo.
+            itemSort: (a, b) =>
+              datasets[a.datasetIndex].ordemLegenda - datasets[b.datasetIndex].ordemLegenda,
+          },
+        },
+      },
+    });
+
+    const ultima = cols[cols.length - 1];
+    document.getElementById("sub-composicao").textContent =
+      `% da base de ativos por faixa · ${currentBase} · ${ultima.n_ativos} papéis na última coluna`;
+    escreverFonte("fonte-composicao",
+      "Fonte: Anbima, Debentures.com e Itaú BBA",
+      ultima.data);
+  }
+
+  async function loadDispersao() {
+    const data = await fetchJSON("/api/spreads/variacao-por-duration", {
+      classe: currentClasse, base: currentBase, data: visaoDataInput.value || undefined,
+    });
+    destroyChart("dispersao");
+    const el = document.getElementById("chart-dispersao");
+    el.parentElement.querySelector(".muted-msg")?.remove();
+    document.getElementById("titulo-dispersao").textContent =
+      `Variação de spreads por duration — ${currentClasse}`;
+
+    const pontos = data.pontos || [];
+    if (!pontos.length) {
+      el.style.display = "none";
+      const msg = document.createElement("p");
+      msg.className = "muted small muted-msg";
+      msg.textContent = "Sem papéis com spread nas duas datas desta comparação.";
+      el.after(msg);
+      return;
+    }
+    el.style.display = "";
+
+    const serie = (destaque) => pontos
+      .filter((p) => p.destaque === destaque)
+      .map((p) => ({ x: p.duration, y: p.variacao, p }));
+
+    // A nuvem cinza vem PRIMEIRO na lista para ser desenhada por baixo: os
+    // destaques laranja e preto ficam por cima dela, não escondidos.
+    // Todos os pontos do MESMO tamanho (pedido do Allan, 21/09/2026): o
+    // destaque é feito só pela cor. Ponto maior sugere peso maior -- e aqui
+    // ninguém pesa mais que ninguém, cada ponto é um papel.
+    const RAIO = 4.5;
+    const datasets = [
+      { label: "Demais papéis", data: serie(null), semLegenda: true,
+        backgroundColor: "#c4c4c4", pointRadius: RAIO, pointHoverRadius: RAIO + 2 },
+      { label: "Maiores aberturas", data: serie("abertura"),
+        backgroundColor: "#FF6200", pointRadius: RAIO, pointHoverRadius: RAIO + 2 },
+      { label: "Maiores fechamentos", data: serie("fechamento"),
+        backgroundColor: "#111111", pointRadius: RAIO, pointHoverRadius: RAIO + 2 },
+    ];
+
+    const fmt1 = (v) => v.toLocaleString("pt-BR", { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+
+    charts.dispersao = new Chart(el.getContext("2d"), {
+      type: "scatter",
+      data: { datasets },
+      plugins: [PADRAO_GRAFICO.linhaZero],
+      options: {
+        responsive: true,
+        // Dispersão não tem "data" no eixo x: o padrão global (modo index,
+        // que mostra todas as séries da mesma posição) aqui mostraria dezenas
+        // de papéis de uma vez. O alvo é o ponto sob o mouse.
+        interaction: { mode: "nearest", intersect: true },
+        scales: {
+          x: {
+            min: 1,
+            title: { display: true, text: "Duration (anos)" },
+            ticks: { callback: (v) => fmt1(v) },
+            grid: { color: PADRAO_GRAFICO.GRADE },
+          },
+          y: {
+            title: { display: true, text: "Abertura / fechamento (bps)" },
+            grid: { color: PADRAO_GRAFICO.GRADE },
+          },
+        },
+        plugins: {
+          legend: {
+            position: "bottom",
+            labels: { filter: (item) => !datasets[item.datasetIndex].semLegenda },
+          },
+          tooltip: {
+            mode: "nearest",
+            intersect: true,
+            callbacks: {
+              title(itens) {
+                const p = itens[0].raw.p;
+                return `${p.codigo}${p.nome ? " — " + p.nome : ""}`;
+              },
+              label(item) {
+                const p = item.raw.p;
+                const sinal = p.variacao > 0 ? "+" : "";
+                return ` Duration ${fmt1(p.duration)} · ${sinal}${fmt1(p.variacao)} bps`;
+              },
+            },
+          },
+        },
+        // Clicar num ponto abre a série histórica do papel -- o mesmo
+        // drill-down dos tickers da tabela de setor.
+        onClick(evento, elementos) {
+          if (!elementos.length) return;
+          const { datasetIndex, index } = elementos[0];
+          const p = datasets[datasetIndex].data[index].p;
+          openDrilldown(p.codigo, p.nome);
+        },
+      },
+    });
+
+    document.getElementById("sub-dispersao").textContent =
+      `bps · ${PADRAO_GRAFICO.dataCheia(data.data_referencia)} vs ` +
+      `${PADRAO_GRAFICO.dataCheia(data.data_comparacao)} · ${data.n_ativos} papéis · ` +
+      `clique num ponto para ver a série`;
+    escreverFonte("fonte-dispersao",
+      "Fonte: Anbima, Debentures.com e Itaú BBA",
+      data.data_referencia);
+  }
+
   async function reloadAll() {
-    await Promise.all([loadKPI(), loadSeriesChart(), loadSetor(), loadMovers()]);
+    await Promise.all([
+      loadKPI(), loadSeriesChart(), loadSetor(), loadMovers(),
+      loadComposicao(), loadDispersao(),
+    ]);
   }
 
   classeTabs.forEach((btn) => {
@@ -502,6 +724,8 @@
       loadKPI();
       loadSetor();
       loadMovers();
+      loadComposicao();
+      loadDispersao();
     });
   });
 
@@ -513,6 +737,8 @@
     loadKPI();
     loadSetor();
     loadMovers();
+    loadComposicao();
+    loadDispersao();
   });
 
   reloadAll();

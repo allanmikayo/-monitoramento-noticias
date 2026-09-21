@@ -398,49 +398,142 @@ def movers(
     }
 
 
-def movement_distribution(
-    db: Session, classe: str, dias_comparacao: int = 5, n_snapshots: int = 5, data_referencia: date | None = None,
+# ---------------------------------------------------------------------------
+# Aberturas e fechamentos: composição da base e dispersão por duration
+# (redesenhado em 21/09/2026, pedido do Allan -- os dois gráficos lado a lado
+# na Visão Geral, no formato do relatório semanal)
+# ---------------------------------------------------------------------------
+
+# Papel com menos de 1 ano de duration fica de fora das duas contas. Perto
+# do vencimento o spread fica instável (o PU converge para o par e qualquer
+# centavo vira dezenas de bps), e esses papéis dominariam as caudas dos dois
+# gráficos sem dizer nada sobre o mercado. É o mesmo corte do relatório.
+DURATION_MINIMA_VARIACAO = 1.0
+
+# Quantos papéis ganham destaque na dispersão ("maiores aberturas" em
+# laranja, "maiores fechamentos" em preto). Dez de cada lado é o que o
+# relatório semanal destaca, e ainda deixa a nuvem cinza legível.
+TOP_DESTAQUES_DISPERSAO = 10
+
+
+def _limiar_variacao(classe: str) -> int:
+    """10 bps para IPCA+ Incentivadas, 5 para CDI+ Tradicionais -- a mesma
+    régua do relatório semanal. As duas bases têm volatilidade histórica
+    diferente, e uma faixa única deixaria o CDI+ quase todo no miolo."""
+    return 10 if classe == "IPCA + Incentivadas" else 5
+
+
+def faixas_variacao(classe: str) -> list[str]:
+    limiar = _limiar_variacao(classe)
+    return [f"< -{limiar} bps", f"-{limiar} até 0 bps",
+            f"0 até {limiar} bps", f"> {limiar} bps"]
+
+
+def _indice_faixa(variacao: float, limiar: int) -> int:
+    """Em qual das quatro faixas a variação cai.
+
+    Bordas: "< -10" é estrito; -10 exato entra em "-10 até 0"; zero exato
+    entra em "0 até 10" (papel que não se mexeu não fechou); "> 10" é
+    estrito, então 10 exato ainda é "0 até 10". Cada valor cai em
+    exatamente uma faixa -- as quatro sempre somam 100%.
+    """
+    if variacao < -limiar:
+        return 0
+    if variacao < 0:
+        return 1
+    if variacao <= limiar:
+        return 2
+    return 3
+
+
+def _variacoes_no_par(
+    db: Session, classe: str, d: date, anterior: date, excluidos: set[str],
 ) -> list[dict]:
-    """Composição da base de ativos por faixa de abertura/fechamento de
-    spread — pedido do Allan (24/07/2026): o STEP entre snapshots é a
-    própria base de comparação selecionada no dashboard (d-1/WoW/MoM/QoQ/
-    SoS/YoY, ver COMPARACAO_BASES), não uma janela fixa. Ou seja: se a base
-    é d-1, mostra os últimos `n_snapshots` DIAS (cada um comparado com o
-    dia útil anterior); se é MoM, mostra os últimos `n_snapshots` MESES
-    (cada um comparado com ~21 du atrás); etc. Cada snapshot i usa
-    `dates_desc[i*dias_comparacao]` como referência, comparada contra
-    `dates_desc[(i+1)*dias_comparacao]` — é sempre "essa data vs. exatamente
-    uma base de comparação atrás", nunca comparação com hoje.
+    """Variação de spread (bps) de cada papel entre `anterior` e `d`.
 
-    Limiar de bucket: 10 bps pra IPCA+ Incentivadas, 5 bps pra CDI+
-    Tradicionais (mesma diferença usada no relatório semanal -- bases com
-    volatilidade histórica diferente).
+    A BASE, que os dois gráficos compartilham:
+      - papéis da `classe`, fora da lista de exclusão manual;
+      - duration >= 1 na data `d` (ver DURATION_MINIMA_VARIACAO);
+      - spread publicado NAS DUAS datas.
 
-    Devolve do snapshot mais ANTIGO pro mais recente (ordem de eixo X de
-    gráfico) — com menos de `n_snapshots` períodos de histórico disponível,
-    devolve só os que dá, sem erro."""
+    A última condição é a que mais pesa. Sem ela, um papel que estreou no
+    meio da janela (ou saiu dela) entraria com uma "variação" contra nada --
+    e a composição mudaria de uma coluna para outra por causa de quem ENTROU
+    na base, não de quem se MOVEU.
+    """
+    q_hoje = (
+        db.query(DebentureSpread.codigo, DebentureSpread.spread,
+                 DebentureSpread.duration, Debenture.nome)
+        .join(Debenture, Debenture.codigo == DebentureSpread.codigo)
+        .filter(
+            Debenture.classe == classe,
+            DebentureSpread.data == d,
+            DebentureSpread.spread.isnot(None),
+            DebentureSpread.duration.isnot(None),
+            DebentureSpread.duration >= DURATION_MINIMA_VARIACAO,
+        )
+    )
+    # Mesma junção com `debentures` na data anterior, em vez de um
+    # `codigo IN (...)` com mil códigos: o filtro por classe já restringe o
+    # conjunto, e a consulta fica do mesmo tamanho qualquer que seja a base.
+    q_antes = (
+        db.query(DebentureSpread.codigo, DebentureSpread.spread)
+        .join(Debenture, Debenture.codigo == DebentureSpread.codigo)
+        .filter(
+            Debenture.classe == classe,
+            DebentureSpread.data == anterior,
+            DebentureSpread.spread.isnot(None),
+        )
+    )
+    if excluidos:
+        q_hoje = q_hoje.filter(DebentureSpread.codigo.notin_(excluidos))
+        q_antes = q_antes.filter(DebentureSpread.codigo.notin_(excluidos))
+
+    antes = {codigo: spread for codigo, spread in q_antes.all()}
+    return [
+        {"codigo": codigo, "nome": nome, "duration": duration,
+         "variacao": spread - antes[codigo]}
+        for codigo, spread, duration, nome in q_hoje.all()
+        if codigo in antes
+    ]
+
+
+def movement_distribution(
+    db: Session, classe: str, dias_comparacao: int = 5, n_snapshots: int = 4,
+    data_referencia: date | None = None,
+) -> list[dict]:
+    """Composição da base por faixa de abertura/fechamento -- o gráfico de
+    colunas empilhadas "Evolução da Var. Spreads (% da base de ativos)".
+
+    AS COLUNAS (decisão do Allan, 24/07 e reconfirmada em 21/09/2026): o
+    passo entre colunas é a JANELA INTEIRA da base selecionada. Com WoW, as
+    quatro colunas são quatro semanas seguidas (28-ago, 4-set, 11-set,
+    18-set); com MoM, quatro meses. Cada coluna compara a sua data com
+    exatamente uma janela antes -- os períodos não se sobrepõem, então cada
+    coluna conta uma história independente.
+
+    A âncora é a data analisada (campo de data da Visão Geral) ou, vazia, a
+    mais recente com spread publicado.
+
+    % POR QUANTIDADE DE PAPÉIS (decisão do Allan, 21/09/2026). Até esta
+    versão a conta era por estoque (decisão de 27/07). Agora cada papel
+    conta 1: o gráfico mede a AMPLITUDE do movimento -- quantos nomes
+    abriram -- e não quanto do dinheiro do mercado se moveu. É a exceção
+    deliberada à regra "tudo ponderado por estoque" do resto do dashboard.
+
+    Devolve do mais ANTIGO para o mais recente (ordem do eixo x). Com
+    histórico curto, devolve só as colunas que dá, sem erro.
+    """
     dates_desc = distinct_dates(db, classe)
-    limiar = 10 if classe == "IPCA + Incentivadas" else 5
-    labels = [f"< -{limiar} bps", f"-{limiar} a 0 bps", f"0 a {limiar} bps", f"> {limiar} bps"]
+    hoje = _resolve_hoje(dates_desc, data_referencia)
+    if hoje is None:
+        return []
+    idx_hoje = dates_desc.index(hoje)
+    limiar = _limiar_variacao(classe)
+    rotulos = faixas_variacao(classe)
     excluidos = tickers_excluidos_spread(db)
 
-    # Âncora dos snapshots: por padrão a data mais recente (idx 0); com
-    # `data_referencia` (campo de data da Visão Geral, 27/07/2026) os
-    # snapshots recuam a partir da data escolhida em vez de sempre da
-    # última publicada -- mesma resolução "mais próxima pra trás" de
-    # `_resolve_hoje`. BUG CORRIGIDO (27/07/2026): se `data_referencia`
-    # for anterior a TODO o histórico, `_resolve_hoje` devolve `None` --
-    # antes disso caía silenciosamente pro índice 0 (data mais recente),
-    # ou seja, o gráfico de distribuição mostrava "hoje" enquanto o
-    # KPI/Movers (que já tratavam esse caso corretamente) mostravam vazio
-    # -- inconsistente. Agora devolve lista vazia também, igual aos
-    # outros dois.
-    hoje = _resolve_hoje(dates_desc, data_referencia)
-    if data_referencia is not None and hoje is None:
-        return []
-    idx_hoje = dates_desc.index(hoje) if hoje is not None else 0
-
-    out = []
+    colunas: list[dict] = []
     for i in range(n_snapshots):
         idx = idx_hoje + i * dias_comparacao
         if idx >= len(dates_desc):
@@ -448,65 +541,72 @@ def movement_distribution(
         d = dates_desc[idx]
         anterior = _date_n_back(dates_desc, idx + dias_comparacao)
         if anterior is None:
-            break  # sem histórico suficiente pra mais snapshots nessa base
-        # CORRIGIDO (27/07/2026): "composição da base" agora pondera por
-        # Estoque (% do ESTOQUE em cada faixa), não mais % da CONTAGEM de
-        # tickers -- mesma convenção usada em todo o resto do dashboard
-        # (spread médio, duration, agora também a série histórica, ver
-        # `_weighted_avg_spread`/`time_series`). Um papel gigante que
-        # abriu 50bps pesa mais na composição da base do que um papel
-        # pequeno que fechou 5bps -- contar "1 ticker" pra cada teria o
-        # mesmo problema de média simples que o Allan já tinha pegado no
-        # card. `estoque` vem sempre do dia "hoje" do snapshot (mesma
-        # convenção de `_weighted_avg_duration`/`_weighted_avg_spread`).
-        q_hoje = (
-            db.query(DebentureSpread.codigo, DebentureSpread.spread, DebentureSpread.estoque)
-            .join(Debenture, Debenture.codigo == DebentureSpread.codigo)
-            .filter(Debenture.classe == classe, DebentureSpread.data == d, DebentureSpread.spread.isnot(None))
-        )
-        q_ant = (
-            db.query(DebentureSpread.codigo, DebentureSpread.spread)
-            .join(Debenture, Debenture.codigo == DebentureSpread.codigo)
-            .filter(Debenture.classe == classe, DebentureSpread.data == anterior, DebentureSpread.spread.isnot(None))
-        )
-        if excluidos:
-            q_hoje = q_hoje.filter(DebentureSpread.codigo.notin_(excluidos))
-            q_ant = q_ant.filter(DebentureSpread.codigo.notin_(excluidos))
-        spreads_hoje = {codigo: (spread, estoque) for codigo, spread, estoque in q_hoje.all()}
-        spreads_ant = dict(q_ant.all())
-
-        deltas_com_peso = []  # (delta, estoque) só pra quem tem Estoque > 0
-        deltas_todos = []  # (delta,) pra todo mundo com comparação válida -- fallback e n_ativos
-        for codigo, (spread, estoque) in spreads_hoje.items():
-            ant = spreads_ant.get(codigo)
-            if ant is None:
-                continue
-            delta = spread - ant
-            deltas_todos.append(delta)
-            if estoque is not None and estoque > 0:
-                deltas_com_peso.append((delta, estoque))
-
-        buckets = {label: 0.0 for label in labels}
-        if deltas_com_peso:
-            usar = deltas_com_peso  # ponderado -- exclui quem não tem Estoque, igual ao resto do dashboard
-        else:
-            usar = [(delta, 1.0) for delta in deltas_todos]  # fallback: contagem simples (peso 1 cada)
-        total_peso = sum(peso for _, peso in usar)
-        for delta, peso in usar:
-            if delta < -limiar:
-                buckets[labels[0]] += peso
-            elif delta < 0:
-                buckets[labels[1]] += peso
-            elif delta <= limiar:
-                buckets[labels[2]] += peso
-            else:
-                buckets[labels[3]] += peso
-        pct = {k: (round(v / total_peso * 100, 1) if total_peso else 0) for k, v in buckets.items()}
-        out.append({
-            "data": d.isoformat(), "data_comparacao": anterior.isoformat(),
-            "n_ativos": len(deltas_todos), **pct,
+            break  # sem histórico para comparar esta coluna
+        variacoes = _variacoes_no_par(db, classe, d, anterior, excluidos)
+        contagem = [0, 0, 0, 0]
+        for v in variacoes:
+            contagem[_indice_faixa(v["variacao"], limiar)] += 1
+        n = len(variacoes)
+        colunas.append({
+            "data": d.isoformat(),
+            "data_comparacao": anterior.isoformat(),
+            "n_ativos": n,
+            "faixas": [
+                {"faixa": rotulos[k], "n": contagem[k],
+                 "pct": round(100 * contagem[k] / n, 1) if n else None}
+                for k in range(4)
+            ],
         })
-    return list(reversed(out))
+    return list(reversed(colunas))
+
+
+def variacao_por_duration(
+    db: Session, classe: str, dias_comparacao: int = 5,
+    data_referencia: date | None = None, top_n: int = TOP_DESTAQUES_DISPERSAO,
+) -> dict:
+    """Dispersão "Variação Spreads (bps)" x duration, na data analisada contra
+    uma janela antes -- a mesma base do gráfico de composição (duration >= 1,
+    spread nas duas pontas), para um ponto aqui sempre corresponder a alguém
+    contado lá.
+
+    Destaques: as `top_n` maiores aberturas (só variação POSITIVA) e os
+    `top_n` maiores fechamentos (só NEGATIVA). O sinal importa: numa semana
+    em que tudo abriu, "os dez que menos abriram" não são fechamentos, e
+    pintá-los de preto contaria uma história falsa.
+    """
+    dates_desc = distinct_dates(db, classe)
+    vazio = {"data_referencia": None, "data_comparacao": None,
+             "limiar": _limiar_variacao(classe), "n_ativos": 0, "pontos": []}
+    hoje = _resolve_hoje(dates_desc, data_referencia)
+    if hoje is None:
+        return vazio
+    anterior = _index_from(dates_desc, hoje, dias_comparacao)
+    if anterior is None:
+        return vazio
+
+    variacoes = _variacoes_no_par(
+        db, classe, hoje, anterior, tickers_excluidos_spread(db))
+    ordenadas = sorted(variacoes, key=lambda v: v["variacao"])
+    fechamentos = {v["codigo"] for v in ordenadas[:top_n] if v["variacao"] < 0}
+    aberturas = {v["codigo"] for v in ordenadas[::-1][:top_n] if v["variacao"] > 0}
+
+    pontos = []
+    for v in variacoes:
+        destaque = ("abertura" if v["codigo"] in aberturas
+                    else "fechamento" if v["codigo"] in fechamentos else None)
+        pontos.append({
+            "codigo": v["codigo"], "nome": v["nome"],
+            "duration": round(v["duration"], 2),
+            "variacao": round(v["variacao"], 1),
+            "destaque": destaque,
+        })
+    return {
+        "data_referencia": hoje.isoformat(),
+        "data_comparacao": anterior.isoformat(),
+        "limiar": _limiar_variacao(classe),
+        "n_ativos": len(pontos),
+        "pontos": pontos,
+    }
 
 
 def search_debentures(db: Session, q: str, classe: str | None = None, limit: int = 20) -> list[dict]:
