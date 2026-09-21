@@ -30,46 +30,57 @@ BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 templates = Jinja2Templates(directory=os.path.join(BASE_DIR, "templates"))
 
 
-def _versao_estatica() -> str:
+def _versao_estatica(pasta: str | None = None) -> str:
     """Sufixo de versão pros arquivos de /static (`?v=...`).
 
     POR QUE EXISTE (11/09/2026). Três vezes num dia só nós olhamos a tela
     depois de um deploy, vimos o comportamento ANTIGO e fomos procurar
     defeito no código -- quando o código estava certo e o navegador é que
-    tinha guardado o `.js`/`.css` antigo. O HTML vem do servidor a cada
-    visita e atualiza sozinho; os arquivos estáticos não, e o Ctrl+F5 nem
-    sempre passa pela borda da Vercel.
-    A URL com versão resolve na raiz: mudou o deploy, muda a URL, e o
-    navegador é OBRIGADO a buscar de novo -- sem depender de ninguém
-    lembrar de limpar cache.
+    tinha guardado o `.js`/`.css` antigo. O vercel.json manda a borda e o
+    navegador guardarem /static por 1 ano (`immutable`), então a ÚNICA
+    coisa que força buscar de novo é a URL mudar.
 
-    A fonte preferida é o commit do deploy (`VERCEL_GIT_COMMIT_SHA`), que
-    muda exatamente quando o conteúdo muda. Rodando local não existe, então
-    caímos no mtime mais recente dos arquivos de /static: durante o
-    desenvolvimento é o que muda a cada salvamento, que é justamente o
-    comportamento desejado ali.
+    POR QUE HASH DO CONTEÚDO (21/09/2026). A primeira versão usava o
+    `VERCEL_GIT_COMMIT_SHA` e, na falta dele, o mtime dos arquivos. Em
+    produção o `?v=` não mudou entre deploys: o HTML novo chegou, mas o
+    spreads.js/style.css servidos eram de dias antes (a tela mostrava os
+    espaços novos vazios). A variável de sistema não chega à função e, no
+    pacote da Vercel, o mtime é fixo -- ou seja, a versão era sempre a
+    mesma. O hash do próprio conteúdo não depende de ambiente nenhum: muda
+    se, e somente se, algum arquivo de /static mudou.
     """
-    sha = os.getenv("VERCEL_GIT_COMMIT_SHA", "").strip()
-    if sha:
-        return sha[:12]
-    estaticos = os.path.join(BASE_DIR, "static")
+    import hashlib
+
+    raiz = pasta or os.path.join(BASE_DIR, "static")
+    h = hashlib.md5()
     try:
-        ultimo = max(
-            os.path.getmtime(os.path.join(estaticos, nome))
-            for nome in os.listdir(estaticos)
-            if os.path.isfile(os.path.join(estaticos, nome))
-        )
-        return str(int(ultimo))
-    except (OSError, ValueError):
+        for dirpath, dirnames, arquivos in os.walk(raiz):
+            dirnames.sort()
+            for nome in sorted(arquivos):
+                caminho = os.path.join(dirpath, nome)
+                h.update(os.path.relpath(caminho, raiz).replace(os.sep, "/").encode())
+                with open(caminho, "rb") as f:
+                    h.update(f.read())
+    except OSError:
         # Sem /static legível não há o que versionar -- um valor fixo é
         # melhor do que derrubar o render da página inteira por causa disso.
         return "0"
+    return h.hexdigest()[:12]
 
 
 # Calculado UMA vez, no import: dentro de um mesmo deploy o conteúdo não
 # muda, e recalcular por requisição seria ir ao disco à toa.
 VERSAO_ESTATICA = _versao_estatica()
 templates.env.globals["v"] = VERSAO_ESTATICA
+# Spreads, Balcão e Cobertura criam o PRÓPRIO Jinja2Templates. Até 21/09 o
+# `v` só existia aqui, então essas páginas saíam com `?v=` VAZIO -- URL
+# idêntica a cada deploy, e com o `immutable` de 1 ano do vercel.json o
+# navegador nunca buscava o spreads.js/style.css novos. Todos recebem o
+# mesmo valor; o teste `test_paginas_renderizam_versao_estatica` guarda.
+from . import balcao_routes as _br, cobertura_routes as _cr, spreads_routes as _sr  # noqa: E402
+
+for _t in (_br.templates, _cr.templates, _sr.templates):
+    _t.env.globals["v"] = VERSAO_ESTATICA
 
 _BRT = ZoneInfo("America/Sao_Paulo")
 

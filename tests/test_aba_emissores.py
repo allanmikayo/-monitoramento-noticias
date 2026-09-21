@@ -338,18 +338,43 @@ def test_todo_static_do_template_tem_versao():
     assert not sem_versao, "referência a /static sem ?v=:\n  " + "\n  ".join(sem_versao)
 
 
-def test_versao_estatica_muda_com_o_commit(monkeypatch):
+def test_versao_estatica_muda_quando_o_conteudo_muda(tmp_path):
+    """Regressão de 21/09/2026: em produção o `?v=` ficou igual entre
+    deploys e o navegador seguiu com o spreads.js antigo."""
     from app import app as A
 
-    monkeypatch.setenv("VERCEL_GIT_COMMIT_SHA", "abcdef1234567890")
-    assert A._versao_estatica() == "abcdef123456"
+    (tmp_path / "a.js").write_text("um", encoding="utf-8")
+    (tmp_path / "sub").mkdir()
+    (tmp_path / "sub" / "b.css").write_text("x", encoding="utf-8")
+    v1 = A._versao_estatica(str(tmp_path))
+    assert v1 == A._versao_estatica(str(tmp_path))  # determinístico
+    (tmp_path / "sub" / "b.css").write_text("y", encoding="utf-8")
+    v2 = A._versao_estatica(str(tmp_path))
+    assert v1 != v2 and len(v2) == 12
 
 
-def test_versao_estatica_funciona_sem_vercel(monkeypatch):
-    """Rodando local não existe VERCEL_GIT_COMMIT_SHA -- cai no mtime dos
-    arquivos, que é o que muda a cada salvamento durante o desenvolvimento."""
+def test_versao_estatica_ignora_ambiente(monkeypatch):
+    """Nem commit nem mtime entram na conta -- só o conteúdo."""
     from app import app as A
 
     monkeypatch.delenv("VERCEL_GIT_COMMIT_SHA", raising=False)
     v = A._versao_estatica()
-    assert v and v != "0" and v.isdigit()
+    monkeypatch.setenv("VERCEL_GIT_COMMIT_SHA", "abcdef1234567890")
+    assert A._versao_estatica() == v and v != "0"
+
+
+@pytest.mark.parametrize("pagina", ["/", "/spreads", "/balcao", "/cobertura", "/minha-conta"])
+def test_paginas_renderizam_versao_estatica(cliente_emissores, pagina):
+    """O teste de template acima só garante que o `?v={{ v }}` está escrito.
+    Em 21/09/2026 descobrimos que Spreads/Balcão/Cobertura usam um Jinja
+    próprio, sem o `v` -- a página saía com `?v=` vazio e o navegador ficou
+    com o spreads.js antigo. Aqui olhamos o HTML DE VERDADE."""
+    import re
+
+    from app import app as A
+
+    r = cliente_emissores.get(pagina, follow_redirects=False)
+    assert r.status_code == 200, (pagina, r.status_code)
+    refs = re.findall(r'/static/[^"\']+\?v=([^"\'&]*)', r.text)
+    assert refs, f"{pagina}: nenhuma referência versionada a /static"
+    assert all(v == A.VERSAO_ESTATICA and v not in ("", "0") for v in refs), (pagina, refs)
