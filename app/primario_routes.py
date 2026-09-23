@@ -21,7 +21,8 @@ from .primario import queries
 from .primario.coleta import ROTULO_INSTRUMENTO, STATUS_MORTO
 
 
-def _validar(janela: str, instrumento: list[str], incentivada: str) -> tuple[str, list[str], str]:
+def _validar(janela: str, instrumento: list[str], incentivada: str,
+             base: str = "registro") -> tuple[str, list[str], str, str]:
     if janela not in queries.JANELAS:
         raise HTTPException(400, f"janela inválida: {janela} — use {list(queries.JANELAS)}")
     ruins = [i for i in instrumento if i not in queries.INSTRUMENTOS]
@@ -29,7 +30,9 @@ def _validar(janela: str, instrumento: list[str], incentivada: str) -> tuple[str
         raise HTTPException(400, f"instrumento inválido: {ruins} — use {list(queries.INSTRUMENTOS)}")
     if incentivada not in queries.INCENTIVADA:
         raise HTTPException(400, "incentivada deve ser vazio, S ou N")
-    return janela, instrumento, incentivada
+    if base not in queries.BASES_DATA:
+        raise HTTPException(400, f"base inválida: {base} — use {list(queries.BASES_DATA)}")
+    return janela, instrumento, incentivada, base
 
 
 def register_primario_routes(require_user_dep, templates) -> APIRouter:
@@ -45,29 +48,31 @@ def register_primario_routes(require_user_dep, templates) -> APIRouter:
     @router.get("/api/primario/dados")
     def api_dados(
         janela: str = "12m", instrumento: list[str] = Query(default=[]), incentivada: str = "",
+        base: str = "registro",
         user: User | None = Depends(require_user_dep), db: Session = Depends(get_db),
     ):
-        janela, instrumento, incentivada = _validar(janela, instrumento, incentivada)
+        janela, instrumento, incentivada, base = _validar(janela, instrumento, incentivada, base)
         return queries.painel(db, janela=janela, instrumentos=instrumento,
-                              incentivada=incentivada)
+                              incentivada=incentivada, base=base)
 
     @router.get("/api/primario/ofertas.csv")
     def api_csv(
         janela: str = "12m", instrumento: list[str] = Query(default=[]), incentivada: str = "",
+        base: str = "registro",
         user: User | None = Depends(require_user_dep), db: Session = Depends(get_db),
     ):
         """A janela inteira, uma oferta por linha — para cruzar no Excel.
 
         Separador ";" e BOM porque é o que o Excel em pt-BR abre sem pedir
         nada (mesma escolha do CSV do painel de uso)."""
-        janela, instrumento, incentivada = _validar(janela, instrumento, incentivada)
+        janela, instrumento, incentivada, base = _validar(janela, instrumento, incentivada, base)
         hoje = queries._hoje(db)
         inicio, fim = queries.janela_para_datas(janela, hoje)
-        q = select(OfertaCVM).where(OfertaCVM.data_registro.is_not(None),
-                                    OfertaCVM.data_registro <= fim,
+        col = queries._coluna_data(base)
+        q = select(OfertaCVM).where(col.is_not(None), col <= fim,
                                     OfertaCVM.status.not_in(STATUS_MORTO))
         if inicio:
-            q = q.where(OfertaCVM.data_registro >= inicio)
+            q = q.where(col >= inicio)
         if instrumento:
             q = q.where(OfertaCVM.instrumento.in_(instrumento))
         if incentivada in ("S", "N"):
@@ -79,15 +84,22 @@ def register_primario_routes(require_user_dep, templates) -> APIRouter:
         w.writerow(["data_registro", "data_encerramento", "instrumento", "emissor",
                     "cnpj_emissor", "valor_total_registrado", "coordenador_lider",
                     "coordenador_lider_cvm", "status", "tipo_oferta", "publico_alvo",
-                    "regime_distribuicao", "incentivada", "sustentavel", "emissao",
-                    "agente_fiduciario", "numero_requerimento"])
-        for o in db.scalars(q.order_by(OfertaCVM.data_registro.desc())).all():
+                    "devedor", "regime_distribuicao", "bookbuilding", "incentivada", "sustentavel",
+                    "emissao", "agente_fiduciario", "investidores",
+                    "qtd_bancos_consorcio", "qtd_outras_if", "qtd_fundos",
+                    "qtd_pessoa_fisica", "qtd_institucionais", "qtd_estrangeiro",
+                    "qtd_outros", "numero_requerimento"])
+        for o in db.scalars(q.order_by(col.desc())).all():
             w.writerow([
                 o.data_registro, o.data_encerramento, o.instrumento, o.nome_emissor,
                 o.cnpj_emissor, f"{o.valor_total or 0:.2f}".replace(".", ","), o.lider,
                 o.nome_lider, o.status, o.tipo_oferta, o.publico_alvo,
-                o.regime_distribuicao, o.incentivado, o.sustentavel, o.emissao,
-                o.agente_fiduciario, o.numero_requerimento,
+                o.devedor_curto or o.devedor, o.regime_distribuicao, o.bookbuilding,
+                o.incentivado, o.sustentavel,
+                o.emissao, o.agente_fiduciario, o.n_investidores,
+                o.qtd_bancos_consorcio, o.qtd_outras_if, o.qtd_fundos,
+                o.qtd_pessoa_natural, o.qtd_institucionais, o.qtd_estrangeiro,
+                o.qtd_outros, o.numero_requerimento,
             ])
         return Response(buf.getvalue(), media_type="text/csv; charset=utf-8",
                         headers={"Content-Disposition":

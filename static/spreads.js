@@ -19,8 +19,6 @@
   // back-end resolve pra data disponível mais próxima pra trás, ver
   // `_resolve_hoje` em queries.py).
   const visaoDataInput = document.getElementById("visao-data");
-  const buscaInput = document.getElementById("busca-ativo");
-  const buscaResultados = document.getElementById("busca-resultados");
   const drilldownWrap = document.getElementById("drilldown-wrap");
   const btnFecharDrilldown = document.getElementById("btn-fechar-drilldown");
 
@@ -39,8 +37,36 @@
   const detalhesTbody = document.querySelector("#tabela-detalhes tbody");
   const detalhesContagem = document.getElementById("detalhes-contagem");
 
+  const inicioInput = document.getElementById("visao-inicio");
+  const rotuloInicio = document.getElementById("rotulo-inicio");
+
   let currentClasse = document.querySelector("#classe-tabs .win-btn.active")?.dataset.classe || "";
   let currentBase = document.querySelector("#base-tabs .win-btn.active")?.dataset.base || "WoW";
+
+  // RECORTE DA PÁGINA (24/09/2026). Setor, subsetor e grupo econômico valem
+  // para TODA a Visão Geral. Um objeto só, montado num lugar só
+  // (`paramsComuns`), para nenhum bloco ficar mostrando um recorte
+  // diferente do bloco de cima -- erro que ninguém percebe olhando a tela.
+  const filtros = { setor: [], subsetor: [], grupo: [] };
+  const BASE_PERSONALIZADA = "Personalizado";
+
+  function baseValida() {
+    // "Personalizado" sem data escolhida ainda não é uma comparação: a tela
+    // espera em vez de pedir ao servidor algo que ele recusaria com 400.
+    return currentBase !== BASE_PERSONALIZADA || !!inicioInput.value;
+  }
+
+  function paramsComuns(extras) {
+    return Object.assign({
+      classe: currentClasse,
+      base: currentBase,
+      inicio: currentBase === BASE_PERSONALIZADA ? (inicioInput.value || undefined) : undefined,
+      data: visaoDataInput.value || undefined,
+      setor: filtros.setor,
+      subsetor: filtros.subsetor,
+      grupo: filtros.grupo,
+    }, extras || {});
+  }
   let currentDrilldownCodigo = null;
 
   let currentDetalhesClasse = document.querySelector("#detalhes-classe-tabs .win-btn.active")?.dataset.classe || "";
@@ -118,7 +144,7 @@
   // KPIs
   // ------------------------------------------------------------------
   async function loadKPI() {
-    const data = await fetchJSON("/api/spreads/summary", { classe: currentClasse, base: currentBase, data: visaoDataInput.value || undefined });
+    const data = await fetchJSON("/api/spreads/summary", paramsComuns());
     // Trava o campo de data pra não deixar escolher além do que existe na
     // base (sem dado futuro pra mostrar) -- só quando o campo ainda está
     // vazio (nesse caso `data.data_referencia` é sempre a última
@@ -173,7 +199,9 @@
   // Gráfico 1 -- Evolução do spread médio (linha)
   // ------------------------------------------------------------------
   async function loadSeriesChart() {
-    const { series } = await fetchJSON("/api/spreads/series", { classe: currentClasse });
+    const { series } = await fetchJSON("/api/spreads/series", {
+      classe: currentClasse, setor: filtros.setor, subsetor: filtros.subsetor, grupo: filtros.grupo,
+    });
     destroyChart("series");
     const ctx = document.getElementById("chart-series").getContext("2d");
     // LABELS EM ISO, NÃO FORMATADOS (11/09/2026). É o que permite ao eixo
@@ -250,9 +278,7 @@
   }
 
   async function loadMovers() {
-    const data = await fetchJSON("/api/spreads/movers", {
-      classe: currentClasse, base: currentBase, top: 10, data: visaoDataInput.value || undefined,
-    });
+    const data = await fetchJSON("/api/spreads/movers", paramsComuns({ top: 10 }));
     moversDados = data;
     document.getElementById("movers-sub").textContent =
       `bps · variação de ${fmtData(data.data_comparacao)} a ${fmtData(data.data_referencia)} (${currentBase}) · clique para ver a série`;
@@ -406,10 +432,17 @@
   }
 
   async function loadSetor() {
+    // Atenção aos dois pares de nomes: `setor`/`subsetor` aqui são o
+    // CAMINHO do drill-down; `filtro_*` é o recorte da barra, que vale para
+    // a página inteira (ver a rota em spreads_routes.py).
     const data = await fetchJSON("/api/spreads/por-setor", {
-      classe: currentClasse, base: currentBase, data: visaoDataInput.value || undefined,
+      classe: currentClasse, base: currentBase,
+      inicio: currentBase === BASE_PERSONALIZADA ? (inicioInput.value || undefined) : undefined,
+      data: visaoDataInput.value || undefined,
       nivel: setorNivel, setor: setorAtual || undefined,
       subsetor: subsetorAtual || undefined, emissor: emissorAtual || undefined,
+      filtro_setor: filtros.setor, filtro_subsetor: filtros.subsetor,
+      filtro_grupo: filtros.grupo,
     });
     renderTrilhaSetor();
 
@@ -421,7 +454,14 @@
     // Uma escala para o nível inteiro: os halteres só são comparáveis entre
     // linhas se todos usarem a mesma régua.
     const escalaHaltere = escalaDoHaltere(linhas);
-    document.getElementById("setor-col-variacao").textContent = `Variação ${currentBase}`;
+    // A coluna é só "Variação" (24/09/2026): o QUE ela compara já está dito
+    // na barra de filtros e na dica da própria coluna -- repetir "WoW" no
+    // cabeçalho quebrava quando a base virava uma data escolhida à mão.
+    const colVar = document.getElementById("setor-col-variacao");
+    colVar.textContent = "Variação";
+    colVar.title = data.data_comparacao
+      ? `Contra ${PADRAO_GRAFICO.dataCheia(data.data_comparacao)}`
+      : "Sem data de comparação disponível";
     escreverFonte("fonte-setor", "Fonte: Anbima, Debentures.com e Itaú BBA", data.data_referencia);
 
     linhas.forEach((l) => {
@@ -501,12 +541,6 @@
     drilldownWrap.style.display = "none";
     destroyChart("drilldown");
     currentDrilldownCodigo = null;
-  });
-
-  document.addEventListener("click", (e) => {
-    if (!buscaResultados.contains(e.target) && e.target !== buscaInput) {
-      buscaResultados.style.display = "none";
-    }
   });
 
   // ------------------------------------------------------------------
@@ -608,9 +642,7 @@
   }
 
   async function loadComposicao() {
-    const data = await fetchJSON("/api/spreads/movement-distribution", {
-      classe: currentClasse, base: currentBase, data: visaoDataInput.value || undefined,
-    });
+    const data = await fetchJSON("/api/spreads/movement-distribution", paramsComuns());
     destroyChart("composicao");
     const el = document.getElementById("chart-composicao");
     el.parentElement.querySelector(".muted-msg")?.remove();
@@ -703,15 +735,17 @@
       ultima.data);
   }
 
+  // "spread" = nível de cada papel na curva; "abertura" = quanto andou.
+  let modoDispersao = "spread";
+
   async function loadDispersao() {
-    const data = await fetchJSON("/api/spreads/variacao-por-duration", {
-      classe: currentClasse, base: currentBase, data: visaoDataInput.value || undefined,
-    });
+    const data = await fetchJSON("/api/spreads/variacao-por-duration", paramsComuns());
     destroyChart("dispersao");
     const el = document.getElementById("chart-dispersao");
     el.parentElement.querySelector(".muted-msg")?.remove();
+    const porSpread = modoDispersao === "spread";
     document.getElementById("titulo-dispersao").textContent =
-      `Variação de spreads por duration — ${currentClasse}`;
+      `Spread x Duration — ${currentClasse}`;
 
     const pontos = data.pontos || [];
     if (!pontos.length) {
@@ -724,9 +758,13 @@
     }
     el.style.display = "";
 
+    const eixoY = (p) => (porSpread ? p.spread : p.variacao);
     const serie = (destaque) => pontos
-      .filter((p) => p.destaque === destaque)
-      .map((p) => ({ x: p.duration, y: p.variacao, p }));
+      // No modo "spread" não há destaque: a pergunta é onde o papel está na
+      // curva, e pintar dez pontos por causa do movimento da semana
+      // mandaria o olho para a pergunta errada.
+      .filter((p) => (porSpread ? destaque === null : p.destaque === destaque))
+      .map((p) => ({ x: p.duration, y: eixoY(p), p }));
 
     // A nuvem cinza vem PRIMEIRO na lista para ser desenhada por baixo: os
     // destaques laranja e preto ficam por cima dela, não escondidos.
@@ -748,7 +786,10 @@
     charts.dispersao = new Chart(el.getContext("2d"), {
       type: "scatter",
       data: { datasets },
-      plugins: [PADRAO_GRAFICO.linhaZero],
+      // A linha do zero só faz sentido no modo de variação: no modo de
+      // spread o zero não é a fronteira entre abrir e fechar, é só o começo
+      // do eixo.
+      plugins: porSpread ? [] : [PADRAO_GRAFICO.linhaZero],
       options: {
         responsive: true,
         // Dispersão não tem "data" no eixo x: o padrão global (modo index,
@@ -763,7 +804,8 @@
             grid: { color: PADRAO_GRAFICO.GRADE },
           },
           y: {
-            title: { display: true, text: "Abertura / fechamento (bps)" },
+            title: { display: true,
+                     text: porSpread ? "Spread (bps)" : "Abertura / fechamento (bps)" },
             grid: { color: PADRAO_GRAFICO.GRADE },
           },
         },
@@ -783,7 +825,11 @@
               label(item) {
                 const p = item.raw.p;
                 const sinal = p.variacao > 0 ? "+" : "";
-                return ` Duration ${fmt1(p.duration)} · ${sinal}${fmt1(p.variacao)} bps`;
+                // Os dois números na dica nos dois modos: quem olha o nível
+                // quer saber se ele acabou de andar, e vice-versa.
+                return [` Duration ${fmt1(p.duration)} anos`,
+                        ` Spread ${fmt1(p.spread)} bps`,
+                        ` Variação ${sinal}${fmt1(p.variacao)} bps`];
               },
             },
           },
@@ -799,10 +845,12 @@
       },
     });
 
-    document.getElementById("sub-dispersao").textContent =
-      `bps · ${PADRAO_GRAFICO.dataCheia(data.data_referencia)} vs ` +
-      `${PADRAO_GRAFICO.dataCheia(data.data_comparacao)} · ${data.n_ativos} papéis · ` +
-      `clique num ponto para ver a série`;
+    document.getElementById("sub-dispersao").textContent = porSpread
+      ? `bps em ${PADRAO_GRAFICO.dataCheia(data.data_referencia)} · ${data.n_ativos} papéis · `
+        + `clique num ponto para ver a série`
+      : `bps · ${PADRAO_GRAFICO.dataCheia(data.data_referencia)} vs `
+        + `${PADRAO_GRAFICO.dataCheia(data.data_comparacao)} · ${data.n_ativos} papéis · `
+        + `clique num ponto para ver a série`;
     escreverFonte("fonte-dispersao",
       "Fonte: Anbima, Debentures.com e Itaú BBA",
       data.data_referencia);
@@ -819,6 +867,7 @@
   async function loadDesagios() {
     const data = await fetchJSON("/api/spreads/desagios", {
       classe: currentClasse, data: visaoDataInput.value || undefined,
+      setor: filtros.setor, subsetor: filtros.subsetor, grupo: filtros.grupo,
     });
     destroyChart("desagios");
     const el = document.getElementById("chart-desagios");
@@ -839,10 +888,18 @@
     const menor = Math.min(...papeis.map((p) => p.pct_pu_par));
     // Rótulo do eixo: emissor encurtado + ticker. O nome completo e os
     // demais dados ficam na dica de ferramenta.
+    // PAPEL SEM TAXA INDICATIVA (24/09/2026, dúvida do Allan sobre a
+    // Raízen). A Anbima publica o % do PU par de papéis que NÃO tiveram
+    // taxa indicativa divulgada na data -- eles entram aqui (o deságio é
+    // dado publicado) mas não entram em nenhuma conta de spread da página.
+    // O asterisco marca isso na própria barra em vez de deixar a diferença
+    // invisível.
     const rotulo = (p) => {
       const nome = (p.emissor || "").replace(/\s+(S\.?\/?A\.?|LTDA\.?)$/i, "");
-      return `${nome.length > 30 ? nome.slice(0, 29) + "…" : nome} · ${p.codigo}`;
+      const curto = nome.length > 28 ? nome.slice(0, 27) + "…" : nome;
+      return `${curto} · ${p.codigo}${p.spread === null ? " *" : ""}`;
     };
+    const semTaxa = papeis.filter((p) => p.spread === null).length;
 
     charts.desagios = new Chart(el.getContext("2d"), {
       type: "bar",
@@ -918,7 +975,8 @@
               label: (item) => {
                 const p = papeis[item.dataIndex];
                 const partes = [` ${fmt(p.pct_pu_par, 2)}% do PU par (deságio de ${fmt(100 - p.pct_pu_par, 1)} p.p.)`];
-                if (p.spread !== null) partes.push(` Spread ${fmt(p.spread, 1)} bps`);
+                partes.push(p.spread !== null ? ` Spread ${fmt(p.spread, 1)} bps`
+                                              : " Sem taxa indicativa da Anbima nesta data");
                 if (p.duration !== null) partes.push(` Duration ${fmt(p.duration, 2)} anos`);
                 return partes;
               },
@@ -932,7 +990,14 @@
         },
       },
     });
-    escreverFonte("fonte-desagios", "Fonte: Anbima e Itaú BBA", data.data_referencia);
+    // A nota do asterisco fica na linha de fonte, que já é o lugar das
+    // ressalvas de base nesta página.
+    escreverFonte("fonte-desagios",
+      semTaxa
+        ? "* papel com PU publicado e sem taxa indicativa na data — fica fora das contas de spread. "
+          + "Fonte: Anbima e Itaú BBA"
+        : "Fonte: Anbima e Itaú BBA",
+      data.data_referencia);
   }
 
   async function reloadAll() {
@@ -953,11 +1018,30 @@
       // ficar dentro de um subsetor que não existe na outra classe daria
       // tabela vazia sem explicação.
       setorNivel = "setor"; setorAtual = null; subsetorAtual = null; emissorAtual = null;
+      // A taxonomia das duas classes não é a mesma: um setor escolhido em
+      // IPCA+ pode não existir em CDI+, e sobraria um filtro invisível
+      // deixando a tela vazia.
+      filtros.setor = []; filtros.subsetor = []; filtros.grupo = [];
+      opcoesFiltro = { setores: [], subsetores: [], grupos: [] };
+      atualizarMenus();
+      if (barraFiltros2.style.display !== "none") carregarOpcoesFiltro();
       drilldownWrap.style.display = "none";
       destroyChart("drilldown");
       reloadAll();
     });
   });
+
+  // Tudo que depende da comparação (KPIs, tabela de setor, movers,
+  // composição e dispersão). A evolução e os deságios ficam de fora: a
+  // linha mostra o histórico inteiro e o deságio é uma foto da data.
+  function recarregarComparacao() {
+    if (!baseValida()) return;
+    loadKPI();
+    loadSetor();
+    loadMovers();
+    loadComposicao();
+    loadDispersao();
+  }
 
   baseTabs.forEach((btn) => {
     btn.addEventListener("click", () => {
@@ -965,10 +1049,166 @@
       btn.classList.add("active");
       currentBase = btn.dataset.base;
       registrarUso("filtro", "Base: " + btn.dataset.base);
-      loadKPI();
-      loadSetor();
-      loadMovers();
-      loadComposicao();
+      const personalizada = currentBase === BASE_PERSONALIZADA;
+      rotuloInicio.style.display = personalizada ? "flex" : "none";
+      if (personalizada && !inicioInput.value) {
+        // Sem data ainda: mostra o campo, dá o foco e espera -- pedir ao
+        // servidor uma comparação sem ponto de partida daria 400.
+        document.getElementById("nota-base").textContent =
+          "Escolha a data inicial da comparação em “De”.";
+        inicioInput.focus();
+        return;
+      }
+      recarregarComparacao();
+    });
+  });
+
+  // Data inicial da comparação (base "Personalizado").
+  inicioInput.addEventListener("change", () => {
+    if (currentBase !== BASE_PERSONALIZADA) return;
+    registrarUso("filtro", "Base: data escolhida");
+    recarregarComparacao();
+  });
+
+  // ------------------------------------------------------------------
+  // SEGUNDA LINHA DE FILTROS (24/09/2026): setor, subsetor e grupo
+  // econômico, seleção múltipla com busca por nome. Valem para a página
+  // inteira -- por isso mexer neles chama `reloadAll`, não um bloco só.
+  // ------------------------------------------------------------------
+  const btnMaisFiltros = document.getElementById("btn-mais-filtros");
+  const barraFiltros2 = document.getElementById("barra-filtros-2");
+  const btnLimparFiltros = document.getElementById("btn-limpar-filtros");
+  let opcoesFiltro = { setores: [], subsetores: [], grupos: [] };
+
+  btnMaisFiltros.addEventListener("click", () => {
+    const abrindo = barraFiltros2.style.display === "none";
+    barraFiltros2.style.display = abrindo ? "" : "none";
+    btnMaisFiltros.setAttribute("aria-expanded", abrindo ? "true" : "false");
+    // As setas apontam para o que vai acontecer no PRÓXIMO clique.
+    btnMaisFiltros.querySelector(".setas").textContent = abrindo ? "⌃⌃" : "⌄⌄";
+    if (abrindo && !opcoesFiltro.setores.length) carregarOpcoesFiltro();
+  });
+
+  function rotuloMenu(prefixo, escolhidos) {
+    if (!escolhidos.length) return `${prefixo}: todos`;
+    if (escolhidos.length === 1) return `${prefixo}: ${escolhidos[0]}`;
+    return `${prefixo}: ${escolhidos.length} selecionados`;
+  }
+
+  // Um componente pequeno para os três menus -- lista com busca e
+  // caixinhas. `itens()` é função (não lista) porque a de subsetor muda
+  // conforme os setores escolhidos.
+  function montarMenu(id, prefixo, chave, itens) {
+    const raiz = document.getElementById(id);
+    const botao = raiz.querySelector(".menu-multi-btn");
+    const painel = raiz.querySelector(".menu-multi-painel");
+    const busca = raiz.querySelector(".menu-multi-busca");
+    const lista = raiz.querySelector(".menu-multi-lista");
+
+    function desenhar() {
+      const termo = (busca.value || "").trim().toLowerCase();
+      const visiveis = itens().filter((n) => n.toLowerCase().includes(termo));
+      lista.innerHTML = "";
+      if (!visiveis.length) {
+        lista.innerHTML = '<div class="muted small" style="padding:6px 2px;">Nada encontrado.</div>';
+        return;
+      }
+      visiveis.slice(0, 300).forEach((nome) => {
+        const label = document.createElement("label");
+        const cb = document.createElement("input");
+        cb.type = "checkbox";
+        cb.checked = filtros[chave].includes(nome);
+        cb.addEventListener("change", () => {
+          filtros[chave] = cb.checked
+            ? [...filtros[chave], nome]
+            : filtros[chave].filter((x) => x !== nome);
+          if (chave === "setor") {
+            // Subsetor de um setor que saiu do recorte não pode continuar
+            // marcado -- ficaria um filtro invisível derrubando a tela.
+            const permitidos = new Set(subsetoresDisponiveis());
+            filtros.subsetor = filtros.subsetor.filter((x) => permitidos.has(x));
+          }
+          if (cb.checked) registrarUso("filtro", `${prefixo}: ${nome}`);
+          atualizarMenus();
+          reloadAll();
+        });
+        label.appendChild(cb);
+        label.appendChild(document.createTextNode(nome));
+        lista.appendChild(label);
+      });
+    }
+
+    botao.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const abrindo = painel.style.display === "none";
+      document.querySelectorAll(".menu-multi-painel").forEach((p) => { p.style.display = "none"; });
+      painel.style.display = abrindo ? "block" : "none";
+      if (abrindo) { desenhar(); busca.focus(); }
+    });
+    painel.addEventListener("click", (e) => e.stopPropagation());
+    busca.addEventListener("input", desenhar);
+    raiz.querySelector(".menu-multi-limpar").addEventListener("click", () => {
+      filtros[chave] = [];
+      if (chave === "setor") filtros.subsetor = [];
+      desenhar();
+      atualizarMenus();
+      reloadAll();
+    });
+    return { botao, desenhar };
+  }
+
+  function subsetoresDisponiveis() {
+    const setores = filtros.setor;
+    return opcoesFiltro.subsetores
+      .filter((x) => !setores.length || setores.includes(x.setor))
+      .map((x) => x.subsetor);
+  }
+
+  const menus = {
+    setor: montarMenu("menu-setor", "Setor", "setor", () => opcoesFiltro.setores),
+    subsetor: montarMenu("menu-subsetor", "Subsetor", "subsetor", subsetoresDisponiveis),
+    grupo: montarMenu("menu-grupo", "Grupo econômico", "grupo", () => opcoesFiltro.grupos),
+  };
+  const PREFIXO_MENU = { setor: "Setor", subsetor: "Subsetor", grupo: "Grupo econômico" };
+
+  function atualizarMenus() {
+    Object.entries(menus).forEach(([chave, menu]) => {
+      menu.botao.textContent = rotuloMenu(PREFIXO_MENU[chave], filtros[chave]);
+      menu.botao.classList.toggle("tem-selecao", filtros[chave].length > 0);
+      menu.desenhar();
+    });
+    const total = filtros.setor.length + filtros.subsetor.length + filtros.grupo.length;
+    btnLimparFiltros.style.display = total ? "" : "none";
+    btnMaisFiltros.classList.toggle("tem-selecao", total > 0);
+    document.getElementById("nota-filtros").textContent = total
+      ? "Recorte ativo em toda a página"
+      : "Sem recorte: mercado inteiro da classe";
+  }
+
+  btnLimparFiltros.addEventListener("click", () => {
+    filtros.setor = []; filtros.subsetor = []; filtros.grupo = [];
+    atualizarMenus();
+    reloadAll();
+  });
+
+  document.addEventListener("click", () => {
+    document.querySelectorAll(".menu-multi-painel").forEach((p) => { p.style.display = "none"; });
+  });
+
+  async function carregarOpcoesFiltro() {
+    opcoesFiltro = await fetchJSON("/api/spreads/opcoes-filtro", { classe: currentClasse });
+    atualizarMenus();
+  }
+
+  atualizarMenus();
+
+  // Alternância do gráfico Spread x Duration.
+  document.querySelectorAll("#dispersao-tabs .win-btn").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      document.querySelectorAll("#dispersao-tabs .win-btn").forEach((b) => b.classList.remove("active"));
+      btn.classList.add("active");
+      modoDispersao = btn.dataset.modo;
+      registrarUso("filtro", "Dispersão: " + btn.textContent.trim());
       loadDispersao();
     });
   });

@@ -626,6 +626,19 @@ def run_migrations(tentativas: int = 3, eng: Engine | None = None) -> list[tuple
         "ALTER TABLE debentures ADD COLUMN indice_emissao VARCHAR(30)",
         "ALTER TABLE debentures ADD COLUMN percentual_emissao DOUBLE PRECISION",
         "ALTER TABLE debentures ADD COLUMN taxa_emissao DOUBLE PRECISION",
+        # PARA ONDE FOI O PAPEL (23/09/2026) -- ver models.OfertaCVM. Entram
+        # aqui, e não só no create_all, para o caso de a tabela já existir de
+        # uma carga anterior: create_all cria tabela nova, nunca coluna nova.
+        "ALTER TABLE ofertas_cvm ADD COLUMN qtd_bancos_consorcio DOUBLE PRECISION",
+        "ALTER TABLE ofertas_cvm ADD COLUMN qtd_outras_if DOUBLE PRECISION",
+        "ALTER TABLE ofertas_cvm ADD COLUMN qtd_fundos DOUBLE PRECISION",
+        "ALTER TABLE ofertas_cvm ADD COLUMN qtd_pessoa_natural DOUBLE PRECISION",
+        "ALTER TABLE ofertas_cvm ADD COLUMN qtd_institucionais DOUBLE PRECISION",
+        "ALTER TABLE ofertas_cvm ADD COLUMN qtd_estrangeiro DOUBLE PRECISION",
+        "ALTER TABLE ofertas_cvm ADD COLUMN qtd_outros DOUBLE PRECISION",
+        "ALTER TABLE ofertas_cvm ADD COLUMN n_investidores INTEGER",
+        "ALTER TABLE ofertas_cvm ADD COLUMN devedor TEXT",
+        "ALTER TABLE ofertas_cvm ADD COLUMN devedor_curto VARCHAR(80)",
     ]
     # `ALTER COLUMN ... TYPE` é sintaxe que o SQLite não tem. Antes esses
     # quatro comandos caíam no except e passavam despercebidos; agora que

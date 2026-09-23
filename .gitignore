@@ -27,3 +27,12 @@ venv/
 
 # saidas de diagnostico e log dos scripts
 data/*.txt
+
+# Arquivos brutos da CVM (ofertas de distribuicao). Sao ~40 MB que o
+# coletor baixa sozinho toda manha -- versiona-los faria cada deploy da
+# Vercel carregar o arquivo de ontem sem que ninguem leia. Os backups do
+# zip tambem ficam so' em disco (scripts/coletar_ofertas_cvm.py).
+data/oferta_*.csv
+data/*.zip
+data/backups_cvm/
+data/meta_*.txt

@@ -30,6 +30,12 @@ templates = Jinja2Templates(directory=os.path.join(BASE_DIR, "templates"))
 
 router = APIRouter()
 
+# Bases oferecidas na tela (24/09/2026, pedido do Allan): QoQ, SoS e YoY
+# saíram -- em spread de crédito ninguém compara contra um ano atrás numa
+# tela de acompanhamento; para isso existe a data inicial escolhida à mão.
+BASES_TELA = ("d-1", "WoW", "MoM")
+BASE_PERSONALIZADA = "Personalizado"
+
 
 def _validar_classe(classe: str) -> str:
     if classe not in queries.CLASSES:
@@ -77,6 +83,53 @@ def _parse_data(data: str | None) -> date | None:
         raise HTTPException(status_code=400, detail="data inválida — use AAAA-MM-DD")
 
 
+def _filtros(setor: list[str], subsetor: list[str], grupo: list[str]) -> queries.Filtros:
+    """Recorte da segunda linha de filtros (24/09/2026).
+
+    Listas vazias = "tudo", que é como a tela abre. Não há validação contra
+    a taxonomia de propósito: os valores vêm da própria base (ver
+    `queries.opcoes_filtro`), e um nome que não existe mais simplesmente
+    não casa com nada -- devolver 400 aqui deixaria a tela quebrada depois
+    de uma reclassificação em vez de só mostrar menos linhas.
+    """
+    return queries.Filtros(tuple(setor), tuple(subsetor), tuple(grupo))
+
+
+def _base_em_dias(db: Session, classe: str, base: str, data: str | None,
+                  inicio: str | None) -> int:
+    """Converte a base escolhida em POSIÇÕES no histórico de dias com dado.
+
+    "Personalizado" (24/09/2026, pedido do Allan) não abre um caminho
+    paralelo no back-end: a data inicial que ele digita vira o mesmo
+    `dias_comparacao` que d-1/WoW/MoM já usam (ver `queries.passos_ate`).
+    Assim KPI, tabela de setor, composição, dispersão e movers continuam
+    respondendo à mesma pergunta, sem cada um interpretar a data do seu
+    jeito.
+    """
+    if base != BASE_PERSONALIZADA:
+        return _validar_base(base)
+    d_inicio = _parse_data(inicio)
+    if d_inicio is None:
+        raise HTTPException(
+            status_code=400,
+            detail="base 'Personalizado' exige a data inicial em `inicio` (AAAA-MM-DD)",
+        )
+    datas = queries.distinct_dates(db, classe)
+    hoje = queries._resolve_hoje(datas, _parse_data(data))
+    if hoje is None:
+        return queries.COMPARACAO_BASES["WoW"]
+    if d_inicio >= hoje:
+        raise HTTPException(
+            status_code=400,
+            detail="a data inicial da comparação precisa ser anterior à data analisada",
+        )
+    passos = queries.passos_ate(datas, hoje, d_inicio)
+    if passos is None:
+        raise HTTPException(
+            status_code=400, detail="não há histórico suficiente para essa data inicial")
+    return passos
+
+
 def _validar_base(base: str) -> int:
     """Traduz o rótulo da base de comparação (d-1/WoW/MoM/QoQ/SoS/YoY,
     pedido do Allan 24/07/2026) pra posições no histórico -- ver
@@ -99,34 +152,58 @@ def register_spreads_routes(require_user_dep) -> APIRouter:
         return templates.TemplateResponse(
             request, "spreads.html", {
                 "user": user, "classes": queries.CLASSES,
-                "bases_comparacao": list(queries.COMPARACAO_BASES),
+                "bases_comparacao": list(BASES_TELA),
+                "base_personalizada": BASE_PERSONALIZADA,
             }
         )
 
     @router.get("/api/spreads/summary")
     def api_spreads_summary(
-        classe: str, base: str = "WoW", data: str | None = None,
+        classe: str, base: str = "WoW", data: str | None = None, inicio: str | None = None,
+        setor: list[str] = Query(default=[]), subsetor: list[str] = Query(default=[]),
+        grupo: list[str] = Query(default=[]),
         user: User | None = Depends(require_user_dep), db: Session = Depends(get_db),
     ):
+        classe = _validar_classe(classe)
         return queries.kpi_summary(
-            db, _validar_classe(classe), dias_comparacao=_validar_base(base), data_referencia=_parse_data(data),
+            db, classe, dias_comparacao=_base_em_dias(db, classe, base, data, inicio),
+            data_referencia=_parse_data(data), filtros=_filtros(setor, subsetor, grupo),
         )
 
     @router.get("/api/spreads/series")
     def api_spreads_series(
         classe: str, codigo: str | None = None,
+        setor: list[str] = Query(default=[]), subsetor: list[str] = Query(default=[]),
+        grupo: list[str] = Query(default=[]),
         user: User | None = Depends(require_user_dep), db: Session = Depends(get_db),
     ):
-        return {"series": queries.time_series(db, _validar_classe(classe), codigo=codigo)}
+        # Com `codigo` a série é de UM papel: o recorte de carteira não se
+        # aplica (o papel ou está nele, ou a tela nem teria como pedi-lo).
+        filtros = None if codigo else _filtros(setor, subsetor, grupo)
+        return {"series": queries.time_series(db, _validar_classe(classe), codigo=codigo,
+                                              filtros=filtros)}
+
+    # Opções das listas suspensas da segunda linha de filtros (24/09/2026).
+    @router.get("/api/spreads/opcoes-filtro")
+    def api_spreads_opcoes_filtro(
+        classe: str,
+        user: User | None = Depends(require_user_dep), db: Session = Depends(get_db),
+    ):
+        return queries.opcoes_filtro(db, _validar_classe(classe))
 
     @router.get("/api/spreads/movers")
     def api_spreads_movers(
         classe: str, base: str = "WoW", top: int = 10, data: str | None = None,
+        inicio: str | None = None,
+        setor: list[str] = Query(default=[]), subsetor: list[str] = Query(default=[]),
+        grupo: list[str] = Query(default=[]),
         user: User | None = Depends(require_user_dep), db: Session = Depends(get_db),
     ):
+        classe = _validar_classe(classe)
         return queries.movers(
-            db, _validar_classe(classe), dias_comparacao=_validar_base(base), top_n=top,
-            data_referencia=_parse_data(data),
+            db, classe, dias_comparacao=_base_em_dias(db, classe, base, data, inicio),
+            top_n=top, data_referencia=_parse_data(data),
+            filtros=_filtros(setor, subsetor, grupo),
         )
 
     # SPREAD POR SETOR, COM DRILL-DOWN (reposta em 11/09/2026).
@@ -145,9 +222,12 @@ def register_spreads_routes(require_user_dep) -> APIRouter:
     # movido pelo setor inteiro.
     @router.get("/api/spreads/por-setor")
     def api_spreads_por_setor(
-        classe: str, base: str = "WoW", data: str | None = None,
+        classe: str, base: str = "WoW", data: str | None = None, inicio: str | None = None,
         nivel: str = "setor", setor: str | None = None,
         subsetor: str | None = None, emissor: str | None = None,
+        filtro_setor: list[str] = Query(default=[]),
+        filtro_subsetor: list[str] = Query(default=[]),
+        filtro_grupo: list[str] = Query(default=[]),
         user: User | None = Depends(require_user_dep), db: Session = Depends(get_db),
     ):
         if nivel not in ("setor", "subsetor", "emissor", "ticker"):
@@ -171,22 +251,31 @@ def register_spreads_routes(require_user_dep) -> APIRouter:
                 status_code=400,
                 detail=f"nivel '{nivel}' exige: {', '.join(faltando)}",
             )
+        # `setor`/`subsetor`/`emissor` são o CAMINHO do drill-down (onde a
+        # tabela está agora); `filtro_*` é o recorte da barra de filtros, que
+        # vale para a página inteira. Nomes diferentes de propósito: são duas
+        # coisas distintas que aqui se encontram na mesma rota.
+        classe = _validar_classe(classe)
         return queries.spread_por_setor(
-            db, _validar_classe(classe), dias_comparacao=_validar_base(base),
+            db, classe, dias_comparacao=_base_em_dias(db, classe, base, data, inicio),
             data_referencia=_parse_data(data), nivel=nivel,
             setor=setor, subsetor=subsetor, emissor=emissor,
+            filtros=_filtros(filtro_setor, filtro_subsetor, filtro_grupo),
         )
 
     @router.get("/api/spreads/movement-distribution")
     def api_spreads_movement_distribution(
-        classe: str, base: str = "WoW", data: str | None = None,
+        classe: str, base: str = "WoW", data: str | None = None, inicio: str | None = None,
+        setor: list[str] = Query(default=[]), subsetor: list[str] = Query(default=[]),
+        grupo: list[str] = Query(default=[]),
         user: User | None = Depends(require_user_dep), db: Session = Depends(get_db),
     ):
         classe = _validar_classe(classe)
         return {
             "faixas": queries.faixas_variacao(classe),
             "snapshots": queries.movement_distribution(
-                db, classe, dias_comparacao=_validar_base(base), data_referencia=_parse_data(data),
+                db, classe, dias_comparacao=_base_em_dias(db, classe, base, data, inicio),
+                data_referencia=_parse_data(data), filtros=_filtros(setor, subsetor, grupo),
             ),
         }
 
@@ -194,10 +283,13 @@ def register_spreads_routes(require_user_dep) -> APIRouter:
     @router.get("/api/spreads/desagios")
     def api_spreads_desagios(
         classe: str, data: str | None = None,
+        setor: list[str] = Query(default=[]), subsetor: list[str] = Query(default=[]),
+        grupo: list[str] = Query(default=[]),
         user: User | None = Depends(require_user_dep), db: Session = Depends(get_db),
     ):
         return queries.maiores_desagios(
-            db, _validar_classe(classe), data_referencia=_parse_data(data))
+            db, _validar_classe(classe), data_referencia=_parse_data(data),
+            filtros=_filtros(setor, subsetor, grupo))
 
     # Dispersão de aberturas/fechamentos por duration (21/09/2026) -- ao lado
     # do gráfico de composição na Visão Geral, sobre a MESMA base (ver
@@ -205,12 +297,15 @@ def register_spreads_routes(require_user_dep) -> APIRouter:
     # já existe e é outra coisa (dispersão intra-rating, analitico.py).
     @router.get("/api/spreads/variacao-por-duration")
     def api_spreads_variacao_por_duration(
-        classe: str, base: str = "WoW", data: str | None = None,
+        classe: str, base: str = "WoW", data: str | None = None, inicio: str | None = None,
+        setor: list[str] = Query(default=[]), subsetor: list[str] = Query(default=[]),
+        grupo: list[str] = Query(default=[]),
         user: User | None = Depends(require_user_dep), db: Session = Depends(get_db),
     ):
+        classe = _validar_classe(classe)
         return queries.variacao_por_duration(
-            db, _validar_classe(classe), dias_comparacao=_validar_base(base),
-            data_referencia=_parse_data(data),
+            db, classe, dias_comparacao=_base_em_dias(db, classe, base, data, inicio),
+            data_referencia=_parse_data(data), filtros=_filtros(setor, subsetor, grupo),
         )
 
     # ------------------------------------------------------------------

@@ -46,8 +46,12 @@
    A página tem ~2 telas; sem isto, trocar de WoW para MoM olhando a tabela de
    setores exigia voltar ao topo. A linha de contexto ("Boletim de ... vs ...")
    mora dentro da barra, para a pergunta "estou olhando o quê?" ter resposta
-   em qualquer ponto da rolagem. Busca de ativo e Detalhes são ferramentas,
-   não filtros: ficam no canto direito. #}
+   em qualquer ponto da rolagem.
+
+   SEGUNDA LINHA (24/09/2026, pedido do Allan): setor, subsetor e grupo
+   econômico ficam escondidos atrás do botão de setas -- são o recorte que
+   se usa às vezes, e deixá-los sempre à mostra tiraria espaço de classe e
+   base, que se usam sempre. A busca de ativo saiu da barra no mesmo dia. #}
 <div class="filters-bar barra-fixa" id="barra-visao">
   <div class="window-tabs" id="classe-tabs">
     {% for c in classes %}
@@ -59,7 +63,17 @@
     {% for b in bases_comparacao %}
     <button data-base="{{ b }}" class="win-btn{% if b == 'WoW' %} active{% endif %}">{{ b }}</button>
     {% endfor %}
+    <button data-base="{{ base_personalizada }}" class="win-btn"
+            title="Escolher à mão a data inicial da comparação">Personalizado</button>
   </div>
+
+  {# Só aparece com "Personalizado" ligado: é a DATA INICIAL da comparação
+     (a final continua sendo o campo "Data" ao lado, ou a última disponível). #}
+  <label class="muted small" id="rotulo-inicio" style="display:none;align-items:center;gap:6px;"
+         title="Data inicial da comparação — a final é a do campo Data.">
+    De
+    <input type="date" id="visao-inicio">
+  </label>
 
   <label class="muted small" style="display:flex;align-items:center;gap:6px;" title="Analisa a base como se essa fosse a data de hoje — em branco, usa sempre a última data disponível.">
     Data
@@ -69,12 +83,43 @@
   <span class="contexto-base" id="nota-base">—</span>
 
   <div class="ferramentas-barra">
-    <div style="position:relative;">
-      <input id="busca-ativo" type="search" placeholder="Buscar ativo…" autocomplete="off">
-      <div id="busca-resultados" class="search-results" style="display:none;position:absolute;right:0;z-index:30;min-width:320px;"></div>
-    </div>
+    <button class="btn-small" id="btn-mais-filtros" aria-expanded="false"
+            title="Filtros de setor, subsetor e grupo econômico">Filtros <span class="setas">⌄⌄</span></button>
     <button class="btn-small" id="btn-abrir-detalhes" title="Ver a tabela com o dado granular (Código+Data) por trás dos gráficos">Detalhes</button>
   </div>
+</div>
+
+{# SEGUNDA LINHA DE FILTROS. Três listas de seleção múltipla com busca por
+   nome; valem para TODA a página (KPIs, séries, composição, dispersão,
+   tabela de setor, movers e deságios). Fica logo abaixo da barra fixa e
+   rola junto com ela. #}
+<div class="filters-bar barra-fixa barra-filtros-2" id="barra-filtros-2" style="display:none;">
+  <div class="menu-multi" id="menu-setor">
+    <button type="button" class="btn-small menu-multi-btn">Setor: todos</button>
+    <div class="menu-multi-painel" style="display:none;">
+      <input type="search" class="menu-multi-busca" placeholder="Buscar setor…" autocomplete="off">
+      <div class="menu-multi-lista"></div>
+      <button type="button" class="btn-small menu-multi-limpar">Limpar</button>
+    </div>
+  </div>
+  <div class="menu-multi" id="menu-subsetor">
+    <button type="button" class="btn-small menu-multi-btn">Subsetor: todos</button>
+    <div class="menu-multi-painel" style="display:none;">
+      <input type="search" class="menu-multi-busca" placeholder="Buscar subsetor…" autocomplete="off">
+      <div class="menu-multi-lista"></div>
+      <button type="button" class="btn-small menu-multi-limpar">Limpar</button>
+    </div>
+  </div>
+  <div class="menu-multi" id="menu-grupo">
+    <button type="button" class="btn-small menu-multi-btn">Grupo econômico: todos</button>
+    <div class="menu-multi-painel" style="display:none;">
+      <input type="search" class="menu-multi-busca" placeholder="Buscar grupo…" autocomplete="off">
+      <div class="menu-multi-lista"></div>
+      <button type="button" class="btn-small menu-multi-limpar">Limpar</button>
+    </div>
+  </div>
+  <span class="contexto-base" id="nota-filtros">Sem recorte: mercado inteiro da classe</span>
+  <button class="btn-small" id="btn-limpar-filtros" style="display:none;">Limpar filtros</button>
 </div>
 
 {# TELA ENXUTA (09/09/2026, pedido do Allan).
@@ -140,7 +185,17 @@
     <p class="fonte-visual" id="fonte-composicao">Fonte: Anbima, Debentures.com e Itaú BBA</p>
   </div>
   <div class="chart-card">
-    <h2 style="margin:0;" id="titulo-dispersao">Variação de spreads por duration</h2>
+    {# DOIS MODOS (24/09/2026, pedido do Allan). "Spread" mostra ONDE cada
+       papel está na curva (nível x duration, bolinhas iguais); "Abertura"
+       mostra QUANTO cada um andou na base escolhida, destacando as maiores
+       aberturas e fechamentos. Mesma base de papéis nos dois. #}
+    <div class="titulo-com-acao" style="margin-bottom:2px;">
+      <h2 style="margin:0;" id="titulo-dispersao">Spread x Duration</h2>
+      <div class="window-tabs" id="dispersao-tabs">
+        <button data-modo="spread" class="win-btn active">Spread</button>
+        <button data-modo="abertura" class="win-btn">Abertura</button>
+      </div>
+    </div>
     <p class="muted small" style="margin:2px 0 8px;" id="sub-dispersao">bps · clique num ponto para ver a série do papel</p>
     <canvas id="chart-dispersao" height="210"></canvas>
     <p class="fonte-visual" id="fonte-dispersao">Fonte: Anbima, Debentures.com e Itaú BBA</p>
@@ -170,7 +225,7 @@
         <th>Spread hoje</th>
         <th>Média 3M</th>
         <th class="col-haltere" title="Bolinha vazia: média dos últimos 3 meses · cheia: hoje">Média 3M → hoje</th>
-        <th id="setor-col-variacao">Variação</th>
+        <th id="setor-col-variacao" title="Variação contra a data de comparação escolhida na barra de filtros">Variação</th>
       </tr>
     </thead>
     <tbody></tbody>

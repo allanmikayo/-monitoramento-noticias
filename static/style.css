@@ -573,3 +573,26 @@ h3.bloco-noticias:first-of-type { margin-top: 10px; }
    cabeçalho fica preso no topo para não se perder na rolagem. */
 .tabela-rolagem { max-height: 360px; overflow: auto; }
 .tabela-rolagem thead th { position: sticky; top: 0; z-index: 1; }
+
+/* ------------------------------------------------------------------ */
+/* Segunda linha de filtros da Visão Geral (24/09/2026)                */
+/* ------------------------------------------------------------------ */
+.barra-filtros-2 { margin-top: -10px; margin-bottom: 14px; }
+#btn-mais-filtros .setas { letter-spacing: -3px; margin-left: 4px; font-size: 0.9em; }
+.menu-multi { position: relative; }
+.menu-multi-btn { max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.menu-multi-btn.tem-selecao { border-color: var(--accent); color: var(--accent); font-weight: 600; }
+.menu-multi-painel {
+  position: absolute; top: calc(100% + 4px); left: 0; z-index: 40; min-width: 260px;
+  background: var(--card-bg); border: 1px solid var(--border); border-radius: 8px;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.12); padding: 8px;
+}
+.menu-multi-busca { width: 100%; margin-bottom: 6px; }
+.menu-multi-lista { max-height: 260px; overflow: auto; }
+.menu-multi-lista label {
+  display: flex; align-items: center; gap: 7px; padding: 4px 2px;
+  font-size: 0.82rem; cursor: pointer;
+}
+.menu-multi-lista label:hover { background: #faf6f2; }
+.menu-multi-lista input { width: auto; margin: 0; }
+.menu-multi-limpar { margin-top: 6px; width: 100%; }

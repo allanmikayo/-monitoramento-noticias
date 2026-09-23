@@ -429,19 +429,36 @@ class OfertaCVM(Base):
     incentivado: Mapped[str | None] = mapped_column(String(5))
     sustentavel: Mapped[str | None] = mapped_column(String(5))
 
+    # QUEM É O DEVEDOR DE VERDADE. Em CRI e CRA o emissor é a
+    # securitizadora (Opea, Virgo, True...), que é veículo, não risco. A CVM
+    # publica os devedores num campo de texto livre, preenchido em 100% dos
+    # securitizados: é ele que diz "este CRI é da Klabin". `devedor_curto` é
+    # a tentativa de extrair só o nome, para dar para somar (ver
+    # `coleta.resumir_devedor`); quando o texto não permite, fica vazio e a
+    # conta cai no emissor.
+    devedor: Mapped[str | None] = mapped_column(Text)
+    devedor_curto: Mapped[str | None] = mapped_column(String(80))
+
     destinacao: Mapped[str | None] = mapped_column(Text)
     tipo_lastro: Mapped[str | None] = mapped_column(String(120))
     agente_fiduciario: Mapped[str | None] = mapped_column(String(250))
 
-    # Quem comprou. Vem preenchido em menos da metade das ofertas (fundos em
-    # ~42%, pessoa natural em ~9% das debêntures de 2026), então serve de
-    # tendência e nunca de número fechado -- a tela diz isso.
-    invest_pf_n: Mapped[int | None] = mapped_column(Integer)
-    invest_pf_qtd: Mapped[float | None] = mapped_column(Float)
-    invest_fundos_n: Mapped[int | None] = mapped_column(Integer)
-    invest_fundos_qtd: Mapped[float | None] = mapped_column(Float)
-    invest_prev_n: Mapped[int | None] = mapped_column(Integer)
-    invest_prev_qtd: Mapped[float | None] = mapped_column(Float)
+    # PARA ONDE FOI O PAPEL (23/09/2026). A CVM publica, na oferta
+    # encerrada, a QUANTIDADE de títulos que ficou com cada tipo de
+    # investidor. É o campo mais útil da base inteira para crédito: é ele
+    # que diz se o banco encarteirou ou se distribuiu. Guardamos os grupos
+    # já somados (ver `primario/coleta.py::GRUPOS_INVESTIDOR`) porque é
+    # nesse nível que se lê o mercado -- 12 colunas cruas responderiam a
+    # mesma pergunta com mais ruído. Medido: 99% do volume encerrado vem
+    # com essa quebra preenchida.
+    qtd_bancos_consorcio: Mapped[float | None] = mapped_column(Float)
+    qtd_outras_if: Mapped[float | None] = mapped_column(Float)
+    qtd_fundos: Mapped[float | None] = mapped_column(Float)
+    qtd_pessoa_natural: Mapped[float | None] = mapped_column(Float)
+    qtd_institucionais: Mapped[float | None] = mapped_column(Float)
+    qtd_estrangeiro: Mapped[float | None] = mapped_column(Float)
+    qtd_outros: Mapped[float | None] = mapped_column(Float)
+    n_investidores: Mapped[int | None] = mapped_column(Integer)
 
     coletado_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
     atualizado_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)

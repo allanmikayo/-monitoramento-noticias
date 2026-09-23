@@ -59,7 +59,8 @@ def test_converte_os_campos_certos():
     assert o["instrumento"] == "DEB" and o["incentivado"] == "S"
     assert o["lider"] == "Itaú BBA"                      # razão social -> nome curto
     assert o["nome_lider"].startswith("ITAU BBA")        # o cru continua guardado
-    assert o["invest_fundos_n"] == 42
+    assert o["qtd_fundos"] == 800_000 and o["qtd_bancos_consorcio"] == 200_000
+    assert o["n_investidores"] == 44
 
 
 def test_extrai_o_arquivo_certo_do_zip():
@@ -189,23 +190,77 @@ def test_filtro_de_instrumento_e_de_incentivada(db):
     assert so_inc["kpis"]["ofertas"] == 1 and so_inc["maiores"][0]["incentivada"] == "S"
 
 
-def test_estreantes_sao_a_primeira_oferta_do_emissor(db):
+def test_captadores_mostram_quem_voltou_ao_mercado(db):
+    """Volume sozinho não diz nada; volume com número de acessos, sim --
+    emissor que volta três vezes no ano está rolando dívida."""
     coleta.coletar(db, conteudo_zip=_zip())
-    nomes = {e["emissor"] for e in queries.painel(db, janela="tudo")["estreantes"]}
-    assert "CIA SANEAMENTO ALFA S.A." in nomes and len(nomes) == 4
+    cap = queries.painel(db, janela="tudo")["captadores"]
+    assert cap[0]["nome"] == "CIA SANEAMENTO ALFA S.A." and cap[0]["volume"] == 1000.0
+    assert cap[0]["ofertas"] == 1 and cap[0]["instrumentos"] == ["DEB"]
 
 
-def test_novidades_olha_a_trilha_e_nao_o_arquivo(db):
+def test_quem_ficou_com_o_papel(db):
+    """O KPI de encarteiramento é a pergunta que o Allan faz primeiro: o
+    banco ficou com o papel ou distribuiu?"""
+    coleta.coletar(db, conteudo_zip=_zip())
+    k = queries.painel(db, janela="tudo")["kpis"]
+    # 1001 (R$ 1,0 bi): 80% fundos, 20% bancos do consórcio.
+    # 1002 (R$ 0,5 bi): 100% pessoa física.
+    # -> encarteirado 13,3% e pessoa física 33,3% sobre R$ 1,5 bi cobertos.
+    assert k["encarteirado_pct"] == 13.3 and k["pessoa_fisica_pct"] == 33.3
+    assert k["volume_com_quebra"] == 1.5
+    tri = queries.painel(db, janela="tudo")["distribuicao"]
+    t1 = [t for t in tri if t["trimestre"] == "2026-T1"][0]
+    assert t1["qtd_fundos"] == 53.3 and t1["encarteirado"] == 13.3
+    assert t1["qtd_pessoa_natural"] == 33.3
+
+
+def test_base_de_data_muda_o_eixo(db):
+    """Registro e encerramento respondem coisas diferentes -- a oferta 1003
+    tem registro em fev e nunca encerrou, então só aparece por registro."""
+    coleta.coletar(db, conteudo_zip=_zip())
+    por_registro = queries.painel(db, janela="tudo", base="registro")
+    por_encerramento = queries.painel(db, janela="tudo", base="encerramento")
+    assert por_registro["kpis"]["ofertas"] == 4
+    assert por_encerramento["kpis"]["ofertas"] == 3
+    assert por_encerramento["serie"][0]["mes"] == "2026-01-01"
+
+
+def test_resumo_da_fila_separa_o_que_esta_parado(db):
+    coleta.coletar(db, conteudo_zip=_zip())
+    fila = queries.pipeline(db, hoje=date(2026, 9, 23))
+    r = queries.resumo_pipeline(fila)
+    assert r["ofertas"] == 1 and r["paradas"] == 1 and r["vivas"] == 0
+    fila_nova = queries.pipeline(db, hoje=date(2026, 3, 1))
+    assert queries.resumo_pipeline(fila_nova)["vivas"] == 1
+
+
+def test_devedor_no_lugar_da_securitizadora(db):
+    """CRI/CRA: o emissor é a securitizadora; quem toma o dinheiro (e o
+    risco de crédito) está no campo de devedores."""
+    assert coleta.resumir_devedor("KLABIN S.A.") == "KLABIN S.A"
+    assert coleta.resumir_devedor(
+        "Devedor: S.A. USINA CORURIPE AÇÚCAR E ÁLCOOL (CNPJ: 12.229.415/0001-10)"
+        "Coobrigado: CORURIPE HOLDING S.A.") == "S.A. USINA CORURIPE AÇÚCAR E ÁLCOOL"
+    # Texto que descreve a estrutura em vez de nomear a empresa não vira
+    # nome: somar isso seria pior do que não somar.
+    assert coleta.resumir_devedor(
+        "Os Direitos Creditórios são 100% concentrados na Vamos Locação de "
+        "Caminhões, Máquinas e Equipamentos") is None
+    assert coleta.resumir_devedor("") is None
+
+
+def test_movimentos_olham_a_trilha_e_nao_o_arquivo(db):
     """O arquivo da CVM é sobrescrito e não sabe o que mudou; a trilha sabe.
     E o que ficou para trás no tempo sai da janela de 7 dias."""
     linhas = _csv().splitlines(keepends=True)
     coleta.coletar(db, conteudo_zip=_zip("".join(linhas[:-2])))
     coleta.coletar(db, conteudo_zip=_zip())
-    assert len(queries.novidades(db, dias=7)) == 1
+    assert len(queries.movimentos(db, dias=30)) == 1
     antiga = db.query(OfertaCVMStatus).one()
-    antiga.visto_em = datetime.now(timezone.utc) - timedelta(days=30)
+    antiga.visto_em = datetime.now(timezone.utc) - timedelta(days=60)
     db.commit()
-    assert queries.novidades(db, dias=7) == []
+    assert queries.movimentos(db, dias=30) == []
 
 
 # --------------------------------- rotas -----------------------------------
@@ -236,12 +291,14 @@ def test_pagina_e_api_respondem(cliente, db):
     assert "/static/primario.js?v=" in pagina.text and "Mercado Primário" in pagina.text
     dados = cliente.get("/api/primario/dados?janela=tudo").json()
     assert dados["kpis"]["ofertas"] == 4 and dados["janela"] == "tudo"
+    assert "distribuicao" in dados and "captadores" in dados and "movimentos" in dados
 
 
 def test_api_recusa_filtro_invalido(cliente):
     assert cliente.get("/api/primario/dados?janela=decada").status_code == 400
     assert cliente.get("/api/primario/dados?instrumento=XPTO").status_code == 400
     assert cliente.get("/api/primario/dados?incentivada=talvez").status_code == 400
+    assert cliente.get("/api/primario/dados?base=chute").status_code == 400
 
 
 def test_csv_sai_pronto_para_o_excel(cliente, db):

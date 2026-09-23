@@ -34,6 +34,7 @@ from __future__ import annotations
 
 import csv
 import io
+import re
 import logging
 import os
 import zipfile
@@ -138,6 +139,46 @@ def limpar_lider(nome: str | None) -> str | None:
     return (limpo.title()[:80] or None)
 
 
+# Devedor do securitizado: texto livre. As formas que aparecem de verdade:
+# "KLABIN S.A.", "Devedor: X (CNPJ ...) Coobrigado: Y", e parágrafos
+# inteiros descrevendo a estrutura. Só o primeiro caso vira nome somável.
+_PREFIXO_DEVEDOR = re.compile(r"^(devedora?s?|emissora?|cedentes?)\s*:?\s*", re.I)
+_CNPJ = re.compile(r"\(?\s*CNPJ[^)]*\)?", re.I)
+_SUFIXO_EMPRESA = re.compile(r"\b(S\.?/?A\.?|LTDA\.?|S\.?A\.?S|EIRELI)\b", re.I)
+_RUIDO = re.compile(r"\b(fiador|coobrigad|aval|garantidor|cedente|inscrit|com sede|sociedade)", re.I)
+
+
+def resumir_devedor(texto: str | None) -> str | None:
+    """Texto livre dos devedores -> nome da empresa, quando dá.
+
+    Devolve None de propósito quando o texto descreve uma estrutura em vez
+    de nomear uma empresa (~21% dos casos): somar "Os direitos creditórios
+    são concentrados em..." como se fosse um emissor seria pior do que não
+    somar. Quem chama cai no nome do emissor nesses casos.
+    """
+    t = " ".join((texto or "").split())
+    if not t:
+        return None
+    t = _PREFIXO_DEVEDOR.sub("", t)
+    t = _CNPJ.sub("", t)
+    # Corta no primeiro "Coobrigado:/Fiador:" -- o que vem depois é garantia,
+    # não o devedor, e é o que fazia o nome virar um parágrafo.
+    ruido = _RUIDO.search(t)
+    if ruido:
+        t = t[: ruido.start()]
+    t = t.strip(" .,-;")
+    if not t:
+        return None
+    # `end() >= 8` porque "S.A." pode estar no COMEÇO do nome ("S.A. Usina
+    # Coruripe"): cortar ali devolveria a sigla sozinha.
+    for m in _SUFIXO_EMPRESA.finditer(t):
+        if m.end() >= 8:
+            t = t[: m.end()]
+            break
+    t = t.strip(" .,-;")
+    return t if 6 <= len(t) <= 70 else None
+
+
 def _data(valor: str | None) -> date | None:
     valor = (valor or "").strip()
     try:
@@ -164,6 +205,51 @@ def _int(valor: str | None) -> int | None:
 def _txt(valor: str | None, tamanho: int) -> str | None:
     valor = " ".join((valor or "").split())
     return valor[:tamanho] or None
+
+
+# PARA ONDE FOI O PAPEL. A CVM publica a quantidade de títulos que ficou
+# com cada tipo de investidor na oferta encerrada. Juntamos em grupos que
+# respondem a pergunta de crédito -- "o banco ficou com o papel ou
+# distribuiu?" -- em vez de repetir as 12 categorias do formulário:
+#
+#   bancos_consorcio  instituições financeiras da emissora/coordenadoras e os
+#                     intermediários do consórcio de distribuição. É o
+#                     encarteiramento do próprio sindicato da oferta.
+#   outras_if         demais instituições financeiras (banco que comprou sem
+#                     estar no consórcio).
+#   fundos            fundos de investimento -- o comprador natural do mercado.
+#   pessoa_natural    varejo, que é quem sustenta incentivada, CRI e CRA.
+#   institucionais    previdência privada e seguradoras.
+#   estrangeiro       investidor não residente.
+#   outros            demais PJ, clubes e sociedades administradoras.
+GRUPOS_INVESTIDOR = {
+    "qtd_bancos_consorcio": ("Qtde_VM_Instit_Financ_Emissora_Partic_Consorcio",
+                             "Qtde_VM_Instit_Intermed_Partic_Consorcio_Distrib"),
+    "qtd_outras_if": ("Qtde_VM_Demais_Instit_Financ",),
+    "qtd_fundos": ("Qtde_VM_Fundos_Investimento",),
+    "qtd_pessoa_natural": ("Qtde_VM_Pessoa_Natural",),
+    "qtd_institucionais": ("Qtde_VM_Entidade_Previdencia_Privada",
+                           "Qtde_VM_Companhia_Seguradora"),
+    "qtd_estrangeiro": ("Qtde_VM_Investidor_Estrangeiro",),
+    "qtd_outros": ("Qtde_VM_Clube_Investimento", "Qtde_VM_Demais_Pessoa_Juridica",
+                   "Qtde_VM_Demais_Pessoa_Juridica_Emissora_Partic_Con",
+                   "Qdte_VM_Soc_Adm_Emp_Prop_Demais_Pess_Jurid_Emiss_P"),
+}
+
+
+def _quebra_investidores(linha: dict) -> dict:
+    """Quantidades por grupo de investidor, mais o total de investidores.
+
+    Zero e vazio viram None: oferta que ainda não encerrou não tem quebra, e
+    gravar 0 diria "ninguém comprou", que é diferente de "ainda não há dado".
+    """
+    saida: dict[str, float | int | None] = {}
+    for grupo, colunas in GRUPOS_INVESTIDOR.items():
+        soma = sum(_float(linha.get(c)) or 0.0 for c in colunas)
+        saida[grupo] = soma or None
+    investidores = sum(_int(v) or 0 for c, v in linha.items() if c.startswith("Num_Invest"))
+    saida["n_investidores"] = investidores or None
+    return saida
 
 
 @dataclass
@@ -233,15 +319,12 @@ def parse(texto_csv: str) -> list[Oferta]:
             "reabertura": _txt(linha.get("Reabertura_serie"), 5),
             "incentivado": _txt(linha.get("Titulo_incentivado"), 5),
             "sustentavel": _txt(linha.get("Titulo_classificado_como_sustentavel"), 5),
+            "devedor": _txt(linha.get("Identificacao_devedores_coobrigados"), 2000),
+            "devedor_curto": resumir_devedor(linha.get("Identificacao_devedores_coobrigados")),
             "destinacao": _txt(linha.get("Destinacao_recursos"), 4000),
             "tipo_lastro": _txt(linha.get("Tipo_lastro"), 120),
             "agente_fiduciario": _txt(linha.get("Agente_fiduciario"), 250),
-            "invest_pf_n": _int(linha.get("Num_Invest_Pessoa_Natural")),
-            "invest_pf_qtd": _float(linha.get("Qtde_VM_Pessoa_Natural")),
-            "invest_fundos_n": _int(linha.get("Num_Invest_Fundos_Investimento")),
-            "invest_fundos_qtd": _float(linha.get("Qtde_VM_Fundos_Investimento")),
-            "invest_prev_n": _int(linha.get("Num_Invest_Entidade_Previdencia_Privada")),
-            "invest_prev_qtd": _float(linha.get("Qtde_VM_Entidade_Previdencia_Privada")),
+            **_quebra_investidores(linha),
         }))
     return ofertas
 

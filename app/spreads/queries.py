@@ -12,9 +12,10 @@ from __future__ import annotations
 
 import itertools
 from datetime import date, datetime, timedelta
+from typing import NamedTuple
 from zoneinfo import ZoneInfo
 
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
 from ..models import (
@@ -63,6 +64,108 @@ COMPARACAO_BASES = {
     "SoS": 126,
     "YoY": 252,
 }
+
+
+class Filtros(NamedTuple):
+    """Recorte de carteira aplicado a TODA a Visão Geral (24/09/2026).
+
+    Setor, subsetor e grupo econômico entram por listas -- vazio significa
+    "tudo", nunca "nada". Os três se somam com E entre categorias e OU
+    dentro de cada uma: escolher dois setores e um grupo mostra os papéis
+    daquele grupo dentro daqueles setores.
+
+    POR QUE UM TIPO E NÃO TRÊS PARÂMETROS SOLTOS: eles precisam chegar
+    juntos e iguais em oito consultas diferentes (KPI, série, composição,
+    dispersão, setor, movers, deságios, base comparável). Um objeto só
+    torna impossível uma tela mostrar um recorte e a de baixo mostrar
+    outro -- que é exatamente o tipo de erro que ninguém percebe olhando.
+    """
+    setores: tuple[str, ...] = ()
+    subsetores: tuple[str, ...] = ()
+    grupos: tuple[str, ...] = ()
+
+    @property
+    def vazio(self) -> bool:
+        return not (self.setores or self.subsetores or self.grupos)
+
+
+SEM_FILTROS = Filtros()
+
+
+def _aplicar_filtros(q, filtros: Filtros | None):
+    """Aplica o recorte numa consulta que JÁ tem join com `debentures`.
+
+    `SEM_CLASSIFICACAO` é o rótulo que a tela usa no lugar de um campo
+    vazio; aqui ele vira `IS NULL`, senão filtrar por "Sem classificação"
+    devolveria tabela vazia (mesma armadilha já documentada em
+    `spread_por_setor`).
+    """
+    if filtros is None or filtros.vazio:
+        return q
+    for coluna, valores in ((Debenture.setor, filtros.setores),
+                            (Debenture.subsetor, filtros.subsetores),
+                            (Debenture.grupo_economico, filtros.grupos)):
+        if not valores:
+            continue
+        nomes = [v for v in valores if v != SEM_CLASSIFICACAO]
+        condicao = coluna.in_(nomes) if nomes else None
+        if len(nomes) != len(valores):   # "Sem classificação" foi escolhido
+            condicao = coluna.is_(None) if condicao is None else or_(condicao, coluna.is_(None))
+        q = q.filter(condicao)
+    return q
+
+
+def opcoes_filtro(db: Session, classe: str) -> dict:
+    """Setores, subsetores e grupos que EXISTEM na classe, para as listas
+    da segunda linha de filtros.
+
+    Vem da própria base de papéis (e não de uma tabela de taxonomia) para a
+    lista nunca oferecer uma opção que devolveria tela vazia. O subsetor vem
+    com o setor ao lado: é assim que a tela mostra só os subsetores dos
+    setores escolhidos.
+    """
+    linhas = (
+        db.query(Debenture.setor, Debenture.subsetor, Debenture.grupo_economico)
+        .join(DebentureSpread, DebentureSpread.codigo == Debenture.codigo)
+        .filter(Debenture.classe == classe)
+        .distinct()
+        .all()
+    )
+    setores, subsetores, grupos = set(), {}, set()
+    for setor, subsetor, grupo in linhas:
+        setores.add(setor or SEM_CLASSIFICACAO)
+        subsetores[subsetor or SEM_CLASSIFICACAO] = setor or SEM_CLASSIFICACAO
+        if grupo:
+            grupos.add(grupo)
+    ordenar = lambda nomes: sorted(nomes, key=lambda x: (x == SEM_CLASSIFICACAO, x.lower()))
+    return {
+        "setores": ordenar(setores),
+        "subsetores": [{"subsetor": sub, "setor": setores_do}
+                       for sub, setores_do in sorted(subsetores.items(),
+                                                     key=lambda kv: (kv[0] == SEM_CLASSIFICACAO,
+                                                                     kv[0].lower()))],
+        "grupos": ordenar(grupos),
+    }
+
+
+def passos_ate(dates_desc: list[date], hoje: date, data_inicial: date) -> int | None:
+    """Quantos pregões com dado separam `data_inicial` de `hoje`.
+
+    É o que permite a base "Personalizado" reusar TODO o resto do código:
+    em vez de um caminho paralelo para data escolhida à mão, converte-se a
+    data no mesmo `dias_comparacao` (posições no histórico) que d-1, WoW e
+    MoM já usam. Data anterior à série inteira vira a posição mais antiga
+    que existe; data igual ou posterior a `hoje` não tem comparação.
+    """
+    if hoje not in dates_desc:
+        return None
+    idx_hoje = dates_desc.index(hoje)
+    # `dates_desc` é do mais recente para o mais antigo: a data escolhida é
+    # a primeira que for <= a ela (a mais próxima para trás, com dado).
+    for i in range(idx_hoje + 1, len(dates_desc)):
+        if dates_desc[i] <= data_inicial:
+            return i - idx_hoje
+    return (len(dates_desc) - 1 - idx_hoje) or None
 
 
 def distinct_dates(db: Session, classe: str) -> list[date]:
@@ -121,6 +224,7 @@ def _index_from(dates_desc: list[date], hoje: date, n: int) -> date | None:
 
 def kpi_summary(
     db: Session, classe: str, dias_comparacao: int = 5, data_referencia: date | None = None,
+    filtros: Filtros | None = None,
 ) -> dict:
     dates_desc = distinct_dates(db, classe)
     hoje = _resolve_hoje(dates_desc, data_referencia)
@@ -135,10 +239,12 @@ def kpi_summary(
     anterior = _index_from(dates_desc, hoje, dias_comparacao)
     excluidos = tickers_excluidos_spread(db)
 
-    q_n = (
+    q_n = _aplicar_filtros(
         db.query(func.count(DebentureSpread.id))
         .join(Debenture, Debenture.codigo == DebentureSpread.codigo)
-        .filter(Debenture.classe == classe, DebentureSpread.data == hoje, DebentureSpread.spread.isnot(None))
+        .filter(Debenture.classe == classe, DebentureSpread.data == hoje,
+                DebentureSpread.spread.isnot(None)),
+        filtros,
     )
     if excluidos:
         q_n = q_n.filter(DebentureSpread.codigo.notin_(excluidos))
@@ -155,27 +261,28 @@ def kpi_summary(
     # `_weighted_avg_spread`, a mesma lógica/fallback de
     # `_weighted_avg_duration` (cai pra média simples só se NENHUM ticker
     # da data tiver Estoque cruzado).
-    media_hoje, spread_fallback = _weighted_avg_spread(db, classe, hoje, excluidos)
+    media_hoje, spread_fallback = _weighted_avg_spread(db, classe, hoje, excluidos, filtros)
 
     variacao = None
     if anterior is not None and media_hoje is not None:
-        media_anterior, _ = _weighted_avg_spread(db, classe, anterior, excluidos)
+        media_anterior, _ = _weighted_avg_spread(db, classe, anterior, excluidos, filtros)
         if media_anterior is not None:
             variacao = media_hoje - media_anterior
 
-    duration_pond, fallback = _weighted_avg_duration(db, classe, hoje, excluidos)
+    duration_pond, fallback = _weighted_avg_duration(db, classe, hoje, excluidos, filtros)
 
     # Estoque total e quantos ativos têm estoque cruzado -- a cobertura de
     # debentures.com.br é esparsa em datas antigas (ver fetch.py), então o
     # total só é interpretável junto com a contagem que o compõe.
-    q_est = (
+    q_est = _aplicar_filtros(
         db.query(func.sum(DebentureSpread.estoque), func.count(DebentureSpread.estoque))
         .join(Debenture, Debenture.codigo == DebentureSpread.codigo)
         .filter(
             Debenture.classe == classe,
             DebentureSpread.data == hoje,
             DebentureSpread.estoque.isnot(None),
-        )
+        ),
+        filtros,
     )
     if excluidos:
         q_est = q_est.filter(DebentureSpread.codigo.notin_(excluidos))
@@ -206,16 +313,19 @@ def kpi_summary(
 
 def _weighted_avg_spread(
     db: Session, classe: str, data: date, excluidos: set[str] | None = None,
+    filtros: Filtros | None = None,
 ) -> tuple[float | None, bool]:
     """Spread médio ponderado por Estoque na data -- MESMA metodologia
     usada em `emissor_taxas`/`emissor_series`/`_weighted_avg_duration`
     (nunca média simples: papel com Estoque maior pesa mais). Sem nenhum
     Estoque disponível na classe/data, cai pra média simples (sem peso)
     -- devolve (valor, fallback_usado)."""
-    q = (
+    q = _aplicar_filtros(
         db.query(DebentureSpread.spread, DebentureSpread.estoque)
         .join(Debenture, Debenture.codigo == DebentureSpread.codigo)
-        .filter(Debenture.classe == classe, DebentureSpread.data == data, DebentureSpread.spread.isnot(None))
+        .filter(Debenture.classe == classe, DebentureSpread.data == data,
+                DebentureSpread.spread.isnot(None)),
+        filtros,
     )
     if excluidos:
         q = q.filter(DebentureSpread.codigo.notin_(excluidos))
@@ -233,6 +343,7 @@ def _weighted_avg_spread(
 
 def _weighted_avg_duration(
     db: Session, classe: str, data: date, excluidos: set[str] | None = None,
+    filtros: Filtros | None = None,
 ) -> tuple[float | None, bool]:
     """Duration média ponderada por Estoque na data. Sem nenhum Estoque
     disponível na classe/data, cai pra média simples (sem peso) — devolve
@@ -240,13 +351,14 @@ def _weighted_avg_duration(
     -- papel sem taxa publicada pela Anbima nesse dia não deve entrar em
     nenhuma conta da base (pedido do Allan, 27/07/2026), mesmo se por
     algum motivo tivesse `duration` sem `spread`."""
-    q = (
+    q = _aplicar_filtros(
         db.query(DebentureSpread.duration, DebentureSpread.estoque)
         .join(Debenture, Debenture.codigo == DebentureSpread.codigo)
         .filter(
             Debenture.classe == classe, DebentureSpread.data == data,
             DebentureSpread.duration.isnot(None), DebentureSpread.spread.isnot(None),
-        )
+        ),
+        filtros,
     )
     if excluidos:
         q = q.filter(DebentureSpread.codigo.notin_(excluidos))
@@ -262,7 +374,8 @@ def _weighted_avg_duration(
     return (sum(durations) / len(durations) if durations else None), True
 
 
-def time_series(db: Session, classe: str, codigo: str | None = None) -> list[dict]:
+def time_series(db: Session, classe: str, codigo: str | None = None,
+                filtros: Filtros | None = None) -> list[dict]:
     """Série diária. Sem `codigo`: spread médio da classe inteira por dia
     (linha "Total" do relatório do Allan). Com `codigo`: a série do próprio
     papel (spread + taxa indicativa), pro drill-down de um ativo específico."""
@@ -292,11 +405,12 @@ def time_series(db: Session, classe: str, codigo: str | None = None) -> list[dic
     # mediana no mesmo dia, pedido do próprio Allan -- revertida no dia
     # seguinte, "não gostei", ver CLAUDE.md.)
     excluidos = tickers_excluidos_spread(db)
-    q = (
+    q = _aplicar_filtros(
         db.query(DebentureSpread.data, DebentureSpread.codigo,
                  DebentureSpread.spread, DebentureSpread.estoque)
         .join(Debenture, Debenture.codigo == DebentureSpread.codigo)
-        .filter(Debenture.classe == classe, DebentureSpread.spread.isnot(None))
+        .filter(Debenture.classe == classe, DebentureSpread.spread.isnot(None)),
+        filtros,
     )
     if excluidos:
         q = q.filter(DebentureSpread.codigo.notin_(excluidos))
@@ -369,7 +483,8 @@ def _serie_base_comparavel(
 
 
 def movers(
-    db: Session, classe: str, dias_comparacao: int = 5, top_n: int = 10, data_referencia: date | None = None,
+    db: Session, classe: str, dias_comparacao: int = 5, top_n: int = 10,
+    data_referencia: date | None = None, filtros: Filtros | None = None,
 ) -> dict:
     """Maiores aberturas/fechamentos de spread no período + o dataset
     completo (spread x duration) pro scatter de variação — réplica das
@@ -494,6 +609,7 @@ def _indice_faixa(variacao: float, limiar: int) -> int:
 
 def _variacoes_no_par(
     db: Session, classe: str, d: date, anterior: date, excluidos: set[str],
+    filtros: Filtros | None = None,
 ) -> list[dict]:
     """Variação de spread (bps) de cada papel entre `anterior` e `d`.
 
@@ -507,7 +623,7 @@ def _variacoes_no_par(
     e a composição mudaria de uma coluna para outra por causa de quem ENTROU
     na base, não de quem se MOVEU.
     """
-    q_hoje = (
+    q_hoje = _aplicar_filtros(
         db.query(DebentureSpread.codigo, DebentureSpread.spread,
                  DebentureSpread.duration, Debenture.nome)
         .join(Debenture, Debenture.codigo == DebentureSpread.codigo)
@@ -517,19 +633,21 @@ def _variacoes_no_par(
             DebentureSpread.spread.isnot(None),
             DebentureSpread.duration.isnot(None),
             DebentureSpread.duration >= DURATION_MINIMA_VARIACAO,
-        )
+        ),
+        filtros,
     )
     # Mesma junção com `debentures` na data anterior, em vez de um
     # `codigo IN (...)` com mil códigos: o filtro por classe já restringe o
     # conjunto, e a consulta fica do mesmo tamanho qualquer que seja a base.
-    q_antes = (
+    q_antes = _aplicar_filtros(
         db.query(DebentureSpread.codigo, DebentureSpread.spread)
         .join(Debenture, Debenture.codigo == DebentureSpread.codigo)
         .filter(
             Debenture.classe == classe,
             DebentureSpread.data == anterior,
             DebentureSpread.spread.isnot(None),
-        )
+        ),
+        filtros,
     )
     if excluidos:
         q_hoje = q_hoje.filter(DebentureSpread.codigo.notin_(excluidos))
@@ -537,7 +655,9 @@ def _variacoes_no_par(
 
     antes = {codigo: spread for codigo, spread in q_antes.all()}
     return [
-        {"codigo": codigo, "nome": nome, "duration": duration,
+        # `spread` é o da data analisada -- é o que o gráfico usa no modo
+        # "Spread x Duration" (24/09/2026); a variação é o outro modo.
+        {"codigo": codigo, "nome": nome, "duration": duration, "spread": spread,
          "variacao": spread - antes[codigo]}
         for codigo, spread, duration, nome in q_hoje.all()
         if codigo in antes
@@ -546,6 +666,7 @@ def _variacoes_no_par(
 
 def movement_distribution(
     db: Session, classe: str, dias_comparacao: int = 5, n_snapshots: int = 4,
+    filtros: Filtros | None = None,
     data_referencia: date | None = None,
 ) -> list[dict]:
     """Composição da base por faixa de abertura/fechamento -- o gráfico de
@@ -588,7 +709,7 @@ def movement_distribution(
         anterior = _date_n_back(dates_desc, idx + dias_comparacao)
         if anterior is None:
             break  # sem histórico para comparar esta coluna
-        variacoes = _variacoes_no_par(db, classe, d, anterior, excluidos)
+        variacoes = _variacoes_no_par(db, classe, d, anterior, excluidos, filtros)
         contagem = [0, 0, 0, 0]
         for v in variacoes:
             contagem[_indice_faixa(v["variacao"], limiar)] += 1
@@ -609,6 +730,7 @@ def movement_distribution(
 def variacao_por_duration(
     db: Session, classe: str, dias_comparacao: int = 5,
     data_referencia: date | None = None, top_n: int = TOP_DESTAQUES_DISPERSAO,
+    filtros: Filtros | None = None,
 ) -> dict:
     """Dispersão "Variação Spreads (bps)" x duration, na data analisada contra
     uma janela antes -- a mesma base do gráfico de composição (duration >= 1,
@@ -631,7 +753,7 @@ def variacao_por_duration(
         return vazio
 
     variacoes = _variacoes_no_par(
-        db, classe, hoje, anterior, tickers_excluidos_spread(db))
+        db, classe, hoje, anterior, tickers_excluidos_spread(db), filtros)
     ordenadas = sorted(variacoes, key=lambda v: v["variacao"])
     fechamentos = {v["codigo"] for v in ordenadas[:top_n] if v["variacao"] < 0}
     aberturas = {v["codigo"] for v in ordenadas[::-1][:top_n] if v["variacao"] > 0}
@@ -644,6 +766,7 @@ def variacao_por_duration(
             "codigo": v["codigo"], "nome": v["nome"],
             "duration": round(v["duration"], 2),
             "variacao": round(v["variacao"], 1),
+            "spread": round(v["spread"], 1),
             "destaque": destaque,
         })
     return {
@@ -657,6 +780,7 @@ def variacao_por_duration(
 
 def maiores_desagios(
     db: Session, classe: str, data_referencia: date | None = None, top_n: int = 15,
+    filtros: Filtros | None = None,
 ) -> dict:
     """Os papéis negociando mais abaixo do par -- menor % do PU par na
     precificação ANBIMA da data analisada (pedido do Allan, 21/09/2026: "deixar
@@ -676,12 +800,13 @@ def maiores_desagios(
     vazio = {"data_referencia": None, "papeis": []}
     if hoje is None:
         return vazio
-    q = (
+    q = _aplicar_filtros(
         db.query(DebentureSpread.codigo, Debenture.nome, DebentureSpread.pct_pu_par,
                  DebentureSpread.spread, DebentureSpread.duration)
         .join(Debenture, Debenture.codigo == DebentureSpread.codigo)
         .filter(Debenture.classe == classe, DebentureSpread.data == hoje,
-                DebentureSpread.pct_pu_par.isnot(None))
+                DebentureSpread.pct_pu_par.isnot(None)),
+        filtros,
     )
     excluidos = tickers_excluidos_spread(db)
     if excluidos:
@@ -1806,6 +1931,7 @@ def spread_por_setor(
     setor: str | None = None,
     subsetor: str | None = None,
     emissor: str | None = None,
+    filtros: Filtros | None = None,
 ) -> dict:
     """Agrega spread e estoque por setor / subsetor / emissor / ticker.
 
@@ -1856,6 +1982,7 @@ def spread_por_setor(
             .filter(Debenture.classe == classe,
                     DebentureSpread.spread.isnot(None), *filtros_de_data)
         )
+        q = _aplicar_filtros(q, filtros)
         if excluidos:
             q = q.filter(DebentureSpread.codigo.notin_(excluidos))
         # Cada nível herda os filtros dos níveis acima dele. `SEM_CLASSIFICACAO`
