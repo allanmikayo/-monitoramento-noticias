@@ -317,6 +317,166 @@ class Session(Base):
     user: Mapped["User"] = relationship(back_populates="sessions")
 
 
+class LoginCode(Base):
+    """Código de 6 dígitos mandado por e-mail para entrar (22/09/2026).
+
+    O TI do Allan pediu para o Hub não guardar senha de ninguém. A pessoa
+    digita o e-mail, recebe o código, confirma e entra -- o e-mail vira a
+    identidade (e é o que o painel de uso mostra).
+
+    Guardamos só o HASH do código. Com 1 milhão de combinações o hash
+    sozinho não segura um ataque de força bruta offline; quem segura é o
+    conjunto validade curta (10 min) + máximo de tentativas por código +
+    limite de envios por e-mail e por IP (ver `app/login_codigo.py`).
+    """
+    __tablename__ = "login_codes"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    email: Mapped[str] = mapped_column(String(200), nullable=False)
+    code_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    attempts: Mapped[int] = mapped_column(Integer, default=0)
+    used: Mapped[bool] = mapped_column(Boolean, default=False)
+    ip_address: Mapped[str | None] = mapped_column(String(64))
+
+    __table_args__ = (
+        Index("ix_login_codes_email_criado", "email", "created_at"),
+        Index("ix_login_codes_ip_criado", "ip_address", "created_at"),
+    )
+
+
+class UsoEvento(Base):
+    """Um clique/filtro/visita no Hub, para o painel de uso do admin
+    (22/09/2026).
+
+    Vocabulário curto e fixo em `acao` (ver `app/uso.py::ACOES`) de
+    propósito: é o que permite o painel somar "empresa" vinda do
+    Repositório, das Notícias e dos Emissores numa lista só.
+    `user_id` vazio = visitante sem login (só o Repositório é público);
+    `visitante` é um id aleatório do navegador, só para contar pessoas
+    distintas -- não identifica ninguém.
+    """
+    __tablename__ = "uso_eventos"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    criado_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+    user_id: Mapped[str | None] = mapped_column(String(36))
+    visitante: Mapped[str | None] = mapped_column(String(40))
+    aba: Mapped[str] = mapped_column(String(40), nullable=False)
+    acao: Mapped[str] = mapped_column(String(20), nullable=False)
+    alvo: Mapped[str] = mapped_column(String(200), default="")
+
+    __table_args__ = (
+        Index("ix_uso_eventos_criado", "criado_em"),
+        Index("ix_uso_eventos_acao_criado", "acao", "criado_em"),
+    )
+
+
+# ---------------------------------------------------------------------------
+# Mercado primário — ofertas públicas (CVM Dados Abertos)
+# ---------------------------------------------------------------------------
+
+class OfertaCVM(Base):
+    """Uma oferta pública de dívida registrada na CVM (23/09/2026).
+
+    Fonte: `oferta_resolucao_160.csv`, dentro do zip de Ofertas de
+    Distribuição do Portal de Dados Abertos. O arquivo é reescrito INTEIRO
+    toda madrugada e é uma FOTO, não um extrato: a mesma linha muda de
+    status ao longo do tempo (Registro Concedido -> Oferta Encerrada) e o
+    estado anterior desaparece da origem. Por isso a chave é o número do
+    requerimento (a oferta, não o dia) e toda troca de status vai para
+    `OfertaCVMStatus` antes de ser sobrescrita aqui.
+
+    Guardamos só debêntures, CRI e CRA (pedido do Allan) e só os campos que
+    a aba usa -- das 71 colunas do arquivo, a maioria é preenchimento de
+    formulário de fundo, sem uso para crédito corporativo.
+    """
+    __tablename__ = "ofertas_cvm"
+
+    numero_requerimento: Mapped[str] = mapped_column(String(40), primary_key=True)
+    numero_processo: Mapped[str | None] = mapped_column(String(50))
+
+    data_requerimento: Mapped[date | None] = mapped_column(Date)
+    data_registro: Mapped[date | None] = mapped_column(Date)
+    data_encerramento: Mapped[date | None] = mapped_column(Date)
+    status: Mapped[str] = mapped_column(String(40), default="")
+
+    instrumento: Mapped[str] = mapped_column(String(3), default="")   # DEB | CRI | CRA
+    valor_mobiliario: Mapped[str | None] = mapped_column(String(80))  # texto cru da CVM
+
+    cnpj_emissor: Mapped[str | None] = mapped_column(String(20))
+    nome_emissor: Mapped[str] = mapped_column(String(250), default="")
+    cnpj_lider: Mapped[str | None] = mapped_column(String(20))
+    nome_lider: Mapped[str | None] = mapped_column(String(250))
+    # Nome do líder já limpo ("Itaú BBA"), para a league table não somar o
+    # mesmo banco em três grafias diferentes. Ver primario/coleta.py.
+    lider: Mapped[str | None] = mapped_column(String(80))
+
+    valor_total: Mapped[float | None] = mapped_column(Float)
+    quantidade: Mapped[float | None] = mapped_column(Float)
+    emissao: Mapped[str | None] = mapped_column(String(20))
+
+    tipo_oferta: Mapped[str | None] = mapped_column(String(30))        # PRIMARIA | SECUNDARIA | MISTA
+    tipo_requerimento: Mapped[str | None] = mapped_column(String(150))
+    publico_alvo: Mapped[str | None] = mapped_column(String(30))
+    regime_distribuicao: Mapped[str | None] = mapped_column(String(40))
+    bookbuilding: Mapped[str | None] = mapped_column(String(5))
+    oferta_inicial: Mapped[str | None] = mapped_column(String(5))
+    reabertura: Mapped[str | None] = mapped_column(String(5))
+    # S / N / vazio -- a CVM deixa em branco em ~26% das linhas, então
+    # "não incentivada" e "não informado" NÃO são a mesma coisa na tela.
+    incentivado: Mapped[str | None] = mapped_column(String(5))
+    sustentavel: Mapped[str | None] = mapped_column(String(5))
+
+    destinacao: Mapped[str | None] = mapped_column(Text)
+    tipo_lastro: Mapped[str | None] = mapped_column(String(120))
+    agente_fiduciario: Mapped[str | None] = mapped_column(String(250))
+
+    # Quem comprou. Vem preenchido em menos da metade das ofertas (fundos em
+    # ~42%, pessoa natural em ~9% das debêntures de 2026), então serve de
+    # tendência e nunca de número fechado -- a tela diz isso.
+    invest_pf_n: Mapped[int | None] = mapped_column(Integer)
+    invest_pf_qtd: Mapped[float | None] = mapped_column(Float)
+    invest_fundos_n: Mapped[int | None] = mapped_column(Integer)
+    invest_fundos_qtd: Mapped[float | None] = mapped_column(Float)
+    invest_prev_n: Mapped[int | None] = mapped_column(Integer)
+    invest_prev_qtd: Mapped[float | None] = mapped_column(Float)
+
+    coletado_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+    atualizado_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+
+    __table_args__ = (
+        Index("ix_ofertas_cvm_registro", "data_registro"),
+        Index("ix_ofertas_cvm_instr_registro", "instrumento", "data_registro"),
+        Index("ix_ofertas_cvm_status", "status"),
+        Index("ix_ofertas_cvm_emissor", "nome_emissor"),
+    )
+
+
+class OfertaCVMStatus(Base):
+    """Trilha de mudanças das ofertas (23/09/2026).
+
+    Uma linha por novidade: oferta que apareceu (`status_anterior` vazio) ou
+    que trocou de status. É o que permite responder "o que entrou na fila
+    esta semana" e "quanto tempo essa oferta levou do registro ao
+    encerramento" -- perguntas que o arquivo da CVM, sendo sobrescrito, não
+    responde sozinho. Cresce ~1.000 linhas por ano; é barato de propósito.
+    """
+    __tablename__ = "ofertas_cvm_status"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    numero_requerimento: Mapped[str] = mapped_column(String(40), nullable=False)
+    status_anterior: Mapped[str | None] = mapped_column(String(40))
+    status_novo: Mapped[str] = mapped_column(String(40), nullable=False)
+    visto_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+
+    __table_args__ = (
+        Index("ix_ofertas_cvm_status_visto", "visto_em"),
+        Index("ix_ofertas_cvm_status_req", "numero_requerimento"),
+    )
+
+
 # ---------------------------------------------------------------------------
 # Config e log de execuções
 # ---------------------------------------------------------------------------

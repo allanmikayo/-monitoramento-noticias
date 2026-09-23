@@ -6,6 +6,8 @@
   <p class="muted">{{ user.name }} — {{ user.email }}</p>
   {% if erro %}<p class="alert alert-error">{{ erro }}</p>{% endif %}
   {% if msg %}<p class="alert alert-ok">{{ msg }}</p>{% endif %}
+  {% if user.role == 'admin' %}
+  <p class="muted small">A senha é só a sua porta de emergência, caso o envio de código por e-mail caia.</p>
   <form method="post" action="/minha-conta/senha">
     <label>Senha atual</label>
     <input type="password" name="current_password" required>
@@ -13,5 +15,8 @@
     <input type="password" name="new_password" required minlength="6">
     <button type="submit" class="btn-primary">Trocar senha</button>
   </form>
+  {% else %}
+  <p class="muted small">Você entra com um código enviado ao seu e-mail — não há senha para guardar.</p>
+  {% endif %}
 </div>
 {% endblock %}

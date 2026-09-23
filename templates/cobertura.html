@@ -154,9 +154,27 @@
     Object.keys(tipos).sort().forEach(function(t){ $('#cobTipo').add(new Option(t,t)); });
     Object.keys(cats).sort().forEach(function(c){ $('#cobCat').add(new Option(c,c)); });
     ['#cobQ','#cobTipo','#cobCat','#cobDe','#cobAte'].forEach(function(s){ $(s).addEventListener('input',render); });
+    // Registro de uso (22/09/2026) -- ver static/uso.js.
+    $('#cobQ').addEventListener('input',function(){ registrarBusca($('#cobQ').value); });
+    $('#cobTipo').addEventListener('change',function(){ if(this.value) registrarUso('filtro','Tipo: '+this.value); });
+    $('#cobCat').addEventListener('change',function(){ if(this.value) registrarUso('filtro','Categoria: '+this.value); });
+    $('#cobBody').addEventListener('click',function(ev){
+      var a=ev.target.closest('a[href]'); if(!a) return;
+      var tr=a.closest('tr'), t=tr&&tr.querySelector('.cob-ttl');
+      registrarUso('relatorio', t? t.textContent : a.textContent);
+    });
     $('#cobReset').onclick=function(){ ['#cobQ','#cobTipo','#cobCat','#cobDe','#cobAte'].forEach(function(s){$(s).value='';}); sel=null; render(); };
     document.querySelectorAll('#cobTabs .cob-tab').forEach(function(t){ t.onclick=function(){ setView(t.dataset.v); }; });
     render();
+  }
+  // Escolher uma empresa conta interesse na empresa E no setor dela: é
+  // assim que o Repositório alimenta o ranking de setores do painel.
+  function registrarEmpresa(nome){
+    if(!nome) return;
+    if(nome===MERCADO){ registrarUso('setor','Mercado'); return; }
+    registrarUso('empresa', nome);
+    var e=DB.empresas.filter(function(x){return x.empresa===nome;})[0];
+    if(e && e.setor) registrarUso('setor', e.setor);
   }
   function setView(v){ if(v==='rev'&&!IS_ADMIN) v='idx'; view=v;
     document.querySelectorAll('#cobTabs .cob-tab').forEach(function(x){ x.classList.toggle('on', x.dataset.v===v); }); render(); }
@@ -197,7 +215,7 @@
     });
     $('#cobList').innerHTML=h||'<div class="cob-none">Nada encontrado.</div>';
     $('#cobList').querySelectorAll('.cob-co').forEach(function(el){
-      el.onclick=function(){ sel=(sel===el.dataset.co)?null:el.dataset.co; setView(view==='idx'?'rel':view); };
+      el.onclick=function(){ sel=(sel===el.dataset.co)?null:el.dataset.co; if(sel) registrarEmpresa(sel); setView(view==='idx'?'rel':view); };
     });
   }
 
@@ -273,7 +291,7 @@
       th.onclick=function(){ if(sortKey===th.dataset.k) sortDir*=-1; else {sortKey=th.dataset.k;sortDir=-1;} render(); };
     });
     $('#cobBody').querySelectorAll('[data-co]').forEach(function(el){
-      el.onclick=function(){ sel=el.dataset.co; setView('rel'); window.scrollTo({top:0,behavior:'smooth'}); };
+      el.onclick=function(){ sel=el.dataset.co; registrarEmpresa(sel); setView('rel'); window.scrollTo({top:0,behavior:'smooth'}); };
     });
     $('#cobBody').querySelectorAll('.cobEd').forEach(function(b){ b.onclick=function(){ editar(b.dataset.id); }; });
   }

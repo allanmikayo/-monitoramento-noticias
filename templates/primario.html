@@ -1,0 +1,134 @@
+{% extends "base.html" %}
+{% block title %}Mercado Primário{% endblock %}
+{% block content %}
+{# ABA MERCADO PRIMÁRIO (23/09/2026, pedido do Allan).
+
+   Fonte única: ofertas públicas registradas na CVM (Dados Abertos, arquivo
+   da Resolução 160, jan/2023 em diante). A base traz valor, emissor,
+   coordenador e datas -- NÃO traz taxa, prazo nem rating. Por isso nenhum
+   bloco aqui fala de spread: isso é a aba Spreads.
+
+   Duas metades: fluxo (o que já saiu) e fila (o que está registrado e ainda
+   não encerrou), na ordem em que se lê um semanal. #}
+
+<div class="page-head">
+  <h1 style="margin:0;">Mercado Primário</h1>
+  <span class="kpi-tag" id="primario-ate">Dados até: —</span>
+</div>
+
+<div class="filters-bar barra-fixa" id="primario-barra">
+  <div class="window-tabs" id="primario-janela">
+    <button class="win-btn active" data-janela="12m">12 meses</button>
+    <button class="win-btn" data-janela="24m">24 meses</button>
+    <button class="win-btn" data-janela="ano">Ano</button>
+    <button class="win-btn" data-janela="tudo">Desde 2023</button>
+  </div>
+  <div class="window-tabs" id="primario-instrumentos">
+    {% for sigla, rotulo in instrumentos.items() %}
+    <button class="win-btn active" data-instrumento="{{ sigla }}">{{ rotulo }}</button>
+    {% endfor %}
+  </div>
+  <label class="muted small uso-rotulo">Incentivadas
+    <select id="primario-incentivada">
+      <option value="">Todas</option>
+      <option value="S">Só incentivadas</option>
+      <option value="N">Só não incentivadas</option>
+    </select>
+  </label>
+  <div class="ferramentas-barra">
+    <a class="btn-small" id="primario-csv" href="/api/primario/ofertas.csv?janela=12m">Baixar ofertas (CSV)</a>
+  </div>
+</div>
+
+<div class="kpi-row kpi-compacto">
+  <div class="kpi-card kpi-highlight"><span class="kpi-label">VOLUME REGISTRADO</span>
+    <span class="kpi-value" id="pk-volume">—</span><span class="kpi-delta muted" id="pk-volume-sub">na janela</span></div>
+  <div class="kpi-card"><span class="kpi-label">OFERTAS</span>
+    <span class="kpi-value" id="pk-ofertas">—</span><span class="kpi-delta muted">registradas na janela</span></div>
+  <div class="kpi-card"><span class="kpi-label">TICKET MEDIANO</span>
+    <span class="kpi-value" id="pk-ticket">—</span><span class="kpi-delta muted">R$ milhões por oferta</span></div>
+  <div class="kpi-card"><span class="kpi-label">GARANTIA FIRME</span>
+    <span class="kpi-value" id="pk-firme">—</span><span class="kpi-delta muted">do volume da janela</span></div>
+</div>
+<p class="fonte-visual" style="margin:-4px 0 16px;" id="primario-nota">
+  Valor registrado na oferta, não o efetivamente distribuído. Fonte: CVM (Dados Abertos) e Itaú BBA</p>
+
+<div class="chart-card" style="margin-bottom:16px;">
+  <h2 style="margin:0;">Volume registrado por mês</h2>
+  <p class="muted small" style="margin:2px 0 8px;">R$ bilhões, pela data de registro na CVM</p>
+  <canvas id="chart-primario-mes" height="52"></canvas>
+  <p class="fonte-visual" id="fonte-primario-mes">Fonte: CVM (Dados Abertos) e Itaú BBA</p>
+</div>
+
+<div class="emissor-duplo" style="margin-bottom:16px;">
+  <div class="chart-card">
+    <h2 style="margin:0;">Debêntures incentivadas (Lei 12.431)</h2>
+    <p class="muted small" style="margin:2px 0 8px;">R$ bilhões por trimestre · a CVM deixa o campo em branco em parte das ofertas, e esse pedaço aparece à parte</p>
+    <canvas id="chart-primario-inc" height="210"></canvas>
+    <p class="fonte-visual" id="fonte-primario-inc">Fonte: CVM (Dados Abertos) e Itaú BBA</p>
+  </div>
+  <div class="chart-card">
+    <h2 style="margin:0;">Coordenadores líderes</h2>
+    <p class="muted small" style="margin:2px 0 8px;">volume da janela pelo líder da oferta · razões sociais agrupadas por banco</p>
+    <table class="table tabela-casa uso-ranking" id="tabela-lideres"></table>
+    <p class="fonte-visual">Fonte: CVM (Dados Abertos) e Itaú BBA</p>
+  </div>
+</div>
+
+<div class="emissor-duplo" style="margin-bottom:16px;">
+  <div class="chart-card">
+    <h2 style="margin:0;">Ofertas em andamento</h2>
+    <p class="muted small" style="margin:2px 0 8px;" id="sub-pipeline">registro concedido e ainda sem encerramento</p>
+    <div class="tabela-rolagem">
+    <table class="table tabela-casa" id="tabela-pipeline">
+      {# Sem coluna de status: por definição TODAS aqui estão com registro
+         concedido e sem encerramento. O status exato e o público-alvo ficam
+         na dica da linha, e a coluna que sobra vira espaço para o emissor. #}
+      <thead><tr><th>Registro</th><th>Dias</th><th class="col-texto">Emissor</th><th>Instr.</th>
+        <th>R$ mn</th><th class="col-texto">Líder</th></tr></thead>
+      <tbody></tbody>
+    </table>
+    </div>
+    <p class="fonte-visual" id="fonte-pipeline">Fonte: CVM (Dados Abertos) e Itaú BBA</p>
+  </div>
+  <div class="chart-card">
+    <h2 style="margin:0;">Novidades dos últimos 7 dias</h2>
+    <p class="muted small" style="margin:2px 0 8px;">o que apareceu ou mudou de status desde a semana passada</p>
+    <div class="tabela-rolagem">
+    <table class="table tabela-casa" id="tabela-novidades">
+      <thead><tr><th>Visto em</th><th class="col-texto">Emissor</th><th>Instr.</th>
+        <th>R$ mn</th><th class="col-texto">Mudança</th></tr></thead>
+      <tbody></tbody>
+    </table>
+    </div>
+    <p class="fonte-visual">Fonte: CVM (Dados Abertos) e Itaú BBA</p>
+  </div>
+</div>
+
+<div class="emissor-duplo">
+  <div class="chart-card">
+    <h2 style="margin:0;">Maiores ofertas da janela</h2>
+    <p class="muted small" style="margin:2px 0 8px;">pelo valor registrado</p>
+    <table class="table tabela-casa" id="tabela-maiores">
+      <thead><tr><th>Registro</th><th class="col-texto">Emissor</th><th>Instr.</th>
+        <th>R$ mn</th><th>Inc.</th><th class="col-texto">Líder</th></tr></thead>
+      <tbody></tbody>
+    </table>
+    <p class="fonte-visual">Fonte: CVM (Dados Abertos) e Itaú BBA</p>
+  </div>
+  <div class="chart-card">
+    <h2 style="margin:0;">Emissores estreantes</h2>
+    <p class="muted small" style="margin:2px 0 8px;">primeira oferta desde jan/2023, que é onde a série começa</p>
+    <table class="table tabela-casa" id="tabela-estreantes">
+      <thead><tr><th>Registro</th><th class="col-texto">Emissor</th><th>Instr.</th>
+        <th>R$ mn</th><th class="col-texto">Líder</th></tr></thead>
+      <tbody></tbody>
+    </table>
+    <p class="fonte-visual">Fonte: CVM (Dados Abertos) e Itaú BBA</p>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+<script src="/static/chart-padrao.js?v={{ v }}"></script>
+<script src="/static/primario.js?v={{ v }}"></script>
+{% endblock %}

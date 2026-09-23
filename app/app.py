@@ -16,7 +16,7 @@ from fastapi.templating import Jinja2Templates
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session, selectinload
 
-from . import auth, config, refresh_state, store
+from . import auth, config, email_utils, login_codigo, refresh_state, store
 from .db import Base, SessionLocal, engine, get_db, run_migrations
 from .models import AppSetting, Company, RunLog, Sector, SectorKeyword, Session as SessionModel, Source, User
 from .pipeline import run_pipeline
@@ -225,6 +225,18 @@ app.include_router(register_balcao_routes(require_user))
 # tag exige role admin, conferido dentro do módulo em `_exige_admin`.
 app.include_router(register_cobertura_routes(current_user))
 
+# Aba "Mercado Primário" (23/09/2026) -- ofertas públicas de dívida
+# registradas na CVM (Dados Abertos). Atrás de login, como as demais.
+from .primario_routes import register_primario_routes  # noqa: E402
+
+app.include_router(register_primario_routes(require_user, templates))
+
+# Registro de uso + painel "Uso do Hub" (22/09/2026) -- ver app/uso.py.
+# `current_user` (opcional) no registro porque o Repositório é público.
+from .uso_routes import register_uso_routes  # noqa: E402
+
+app.include_router(register_uso_routes(current_user, require_admin, templates))
+
 # A ABA "BANCO DE DADOS" SAIU (11/09/2026, pedido do Allan). Ela existia
 # desde 12/08 para consultar e extrair o que está armazenado, com SQL livre
 # atrás de `require_admin` e uma lista de barreiras (somente leitura, limite
@@ -285,12 +297,106 @@ async def _redirect_on_303(request: Request, exc: HTTPException):
 # Login / cadastro
 # ---------------------------------------------------------------------------
 
+# LOGIN POR CÓDIGO NO E-MAIL (22/09/2026). O TI do Allan pediu para o Hub
+# não coletar senha. Três etapas na mesma página /login, escolhidas por
+# `?etapa=`: "email" (padrão) -> "codigo" -> entra. "senha" é a porta de
+# emergência só do admin (ver `auth.authenticate_admin`). Regras e travas
+# em app/login_codigo.py.
+COOKIE_LOGIN_EMAIL = "login_email"
+COOKIE_LOGIN_NOVO = "login_novo"
+
+
+def _ip(request: Request) -> str | None:
+    # Na Vercel o IP real vem no x-forwarded-for; request.client é o proxy.
+    fwd = request.headers.get("x-forwarded-for", "")
+    if fwd:
+        return fwd.split(",")[0].strip()[:64]
+    return request.client.host if request.client else None
+
+
+def _redir_login(etapa: str = "", **q: str) -> RedirectResponse:
+    from urllib.parse import urlencode
+    params = {"etapa": etapa} if etapa else {}
+    params.update({k: v for k, v in q.items() if v})
+    return RedirectResponse(url="/login" + ("?" + urlencode(params) if params else ""), status_code=303)
+
+
+def _abrir_sessao(request: Request, db: Session, user: User) -> RedirectResponse:
+    sess = auth.create_session(db, user, ip=_ip(request), user_agent=request.headers.get("user-agent"))
+    resp = RedirectResponse(url="/", status_code=303)
+    resp.set_cookie(
+        SESSION_COOKIE, sess.token, httponly=True, samesite="lax",
+        secure=IS_VERCEL, max_age=60 * 60 * 24,
+    )
+    resp.delete_cookie(COOKIE_LOGIN_EMAIL)
+    resp.delete_cookie(COOKIE_LOGIN_NOVO)
+    return resp
+
+
 @app.get("/login", response_class=HTMLResponse)
 def login_form(
-    request: Request, erro: str | None = None, msg: str | None = None,
+    request: Request, etapa: str = "email", erro: str | None = None, msg: str | None = None,
     user: User | None = Depends(current_user),
 ):
-    return templates.TemplateResponse(request, "login.html", {"erro": erro, "msg": msg, "user": user})
+    email = request.cookies.get(COOKIE_LOGIN_EMAIL, "")
+    if etapa == "codigo" and not email:
+        etapa = "email"
+    if etapa not in ("email", "codigo", "senha"):
+        etapa = "email"
+    return templates.TemplateResponse(request, "login.html", {
+        "erro": erro, "msg": msg, "user": user, "etapa": etapa, "email": email,
+        "novo": request.cookies.get(COOKIE_LOGIN_NOVO) == "1",
+    })
+
+
+@app.post("/login/codigo")
+def login_pedir_codigo(request: Request, email: str = Form(...), db: Session = Depends(get_db)):
+    try:
+        email_ok = login_codigo.normalizar_email(email)
+        codigo = login_codigo.pedir_codigo(db, email_ok, _ip(request))
+    except login_codigo.CodigoErro as e:
+        return _redir_login("email", erro=str(e))
+
+    msg = f"Enviamos um código para {email_ok}. Confira também a caixa de spam."
+    if codigo is not None:
+        try:
+            email_utils.send_login_code(email_ok, codigo)
+        except email_utils.EnvioIndisponivel:
+            if not IS_VERCEL and not email_utils.smtp_configurado():
+                # Rodando local sem SMTP: mostra o código na tela para dar
+                # para testar o fluxo. Nunca acontece na Vercel.
+                msg = f"Modo local, sem e-mail configurado. Seu código: {codigo}"
+            else:
+                return _redir_login("email", erro=(
+                    "Não consegui enviar o e-mail agora. Tente de novo em alguns minutos "
+                    "ou fale com o administrador."))
+
+    novo = login_codigo.usuario_por_email(db, email_ok) is None
+    resp = _redir_login("codigo", msg=msg)
+    opts = dict(httponly=True, samesite="lax", secure=IS_VERCEL, max_age=15 * 60)
+    resp.set_cookie(COOKIE_LOGIN_EMAIL, email_ok, **opts)
+    resp.set_cookie(COOKIE_LOGIN_NOVO, "1" if novo else "0", **opts)
+    return resp
+
+
+@app.post("/login/confirmar")
+def login_confirmar(
+    request: Request, codigo: str = Form(...), nome: str = Form(""),
+    db: Session = Depends(get_db),
+):
+    email = request.cookies.get(COOKIE_LOGIN_EMAIL, "")
+    if not email:
+        return _redir_login("email", erro="O código expirou. Digite seu e-mail de novo.")
+    try:
+        user = login_codigo.confirmar_codigo(db, email, codigo, nome)
+    except login_codigo.CodigoErro as e:
+        return _redir_login("codigo", erro=str(e))
+    except auth.AuthError as e:
+        resp = _redir_login("email", msg=str(e))
+        resp.delete_cookie(COOKIE_LOGIN_EMAIL)
+        resp.delete_cookie(COOKIE_LOGIN_NOVO)
+        return resp
+    return _abrir_sessao(request, db, user)
 
 
 @app.post("/login")
@@ -300,22 +406,12 @@ def login_submit(
     password: str = Form(...),
     db: Session = Depends(get_db),
 ):
+    """Entrada por senha: só admin (porta de emergência)."""
     try:
-        user = auth.authenticate(db, email, password)
+        user = auth.authenticate_admin(db, email, password)
     except auth.AuthError as e:
-        return RedirectResponse(url=f"/login?erro={e}", status_code=303)
-
-    sess = auth.create_session(
-        db, user,
-        ip=request.client.host if request.client else None,
-        user_agent=request.headers.get("user-agent"),
-    )
-    resp = RedirectResponse(url="/", status_code=303)
-    resp.set_cookie(
-        SESSION_COOKIE, sess.token, httponly=True, samesite="lax",
-        secure=IS_VERCEL, max_age=60 * 60 * 24,
-    )
-    return resp
+        return _redir_login("senha", erro=str(e))
+    return _abrir_sessao(request, db, user)
 
 
 @app.get("/logout")
@@ -327,30 +423,13 @@ def logout(response: RedirectResponse, session_token: str | None = Cookie(defaul
     return resp
 
 
-@app.get("/cadastro", response_class=HTMLResponse)
-def signup_form(
-    request: Request, erro: str | None = None, msg: str | None = None,
-    user: User | None = Depends(current_user),
-):
-    return templates.TemplateResponse(request, "signup.html", {"erro": erro, "msg": msg, "user": user})
-
-
+# /cadastro SAIU (22/09/2026): com o login por código, o primeiro acesso
+# JÁ é o cadastro (a tela pede o nome junto com o código). O endereço
+# antigo continua respondendo para não quebrar link salvo.
+@app.get("/cadastro")
 @app.post("/cadastro")
-def signup_submit(
-    name: str = Form(...),
-    email: str = Form(...),
-    password: str = Form(...),
-    db: Session = Depends(get_db),
-):
-    try:
-        auth.register_user(db, name=name, email=email, password=password)
-    except auth.AuthError as e:
-        return RedirectResponse(url=f"/cadastro?erro={e}", status_code=303)
-    # MUDOU (27/07/2026): sem confirmação por e-mail -- cadastro fica
-    # pendente até o Allan aprovar manualmente na aba Administração (ver
-    # docstring de auth.register_user).
-    msg = "Cadastro enviado! Sua conta fica pendente até o administrador aprovar o acesso."
-    return RedirectResponse(url=f"/login?msg={msg}", status_code=303)
+def signup_antigo():
+    return RedirectResponse(url="/login", status_code=303)
 
 
 # ---------------------------------------------------------------------------
@@ -759,27 +838,28 @@ def admin_page(request: Request, user: User = Depends(require_admin), db: Sessio
         {
             "user": user, "users": users, "sessions": sessions, "session_ttl_minutes": ttl, "now": now,
             "spread_tickers_excluidos": spread_tickers_excluidos,
+            "exige_aprovacao": login_codigo.exige_aprovacao(db),
+            "smtp_ok": email_utils.smtp_configurado(),
         },
     )
 
 
 @app.post("/admin/usuarios")
 def admin_create_user(
-    name: str = Form(...), email: str = Form(...), password: str = Form(...),
+    name: str = Form(...), email: str = Form(...),
     role: str = Form("user"), user: User = Depends(require_admin), db: Session = Depends(get_db),
 ):
+    """Pré-cadastra alguém (22/09/2026: sem senha -- a pessoa entra pelo
+    código no e-mail). Criado pelo admin já nasce aprovado."""
     try:
-        new_user = auth.register_user(db, name=name, email=email, password=password)
-        # `register_user` agora nasce com active=False por padrão (pendente
-        # de aprovação -- pedido do Allan, 27/07/2026, ver docstring da
-        # função) pensando no cadastro de auto-atendimento em /cadastro.
-        # Criado AQUI pelo próprio admin já é "aprovado" na hora -- não faz
-        # sentido o Allan aprovar uma conta que ele mesmo acabou de criar.
-        new_user.active = True
-        new_user.role = role if role in ("admin", "user") else "user"
+        email_ok = login_codigo.normalizar_email(email)
+    except login_codigo.CodigoErro:
+        return RedirectResponse(url="/admin", status_code=303)
+    if login_codigo.usuario_por_email(db, email_ok) is None and name.strip():
+        db.add(User(name=name.strip()[:120], email=email_ok, password_hash="",
+                    role=role if role in ("admin", "user") else "user",
+                    email_confirmed=True, active=True))
         db.commit()
-    except auth.AuthError:
-        pass
     return RedirectResponse(url="/admin", status_code=303)
 
 
@@ -808,6 +888,11 @@ def admin_toggle_active(user_id: str, user: User = Depends(require_admin), db: S
     target = db.get(User, user_id)
     if target and target.id != user.id:
         target.active = not target.active
+        # Aprovado uma vez = e-mail confirmado. A partir daí, "inativo"
+        # passa a significar BLOQUEADO (não recebe mais código) em vez de
+        # "pedido pendente" -- ver login_codigo.pedir_codigo.
+        if target.active:
+            target.email_confirmed = True
         db.commit()
     return RedirectResponse(url="/admin", status_code=303)
 
@@ -818,6 +903,14 @@ def admin_revoke_session(session_id: str, user: User = Depends(require_admin), d
     if sess:
         sess.revoked = True
         db.commit()
+    return RedirectResponse(url="/admin", status_code=303)
+
+
+@app.post("/admin/configuracoes/aprovacao")
+def admin_toggle_aprovacao(user: User = Depends(require_admin), db: Session = Depends(get_db)):
+    atual = login_codigo.exige_aprovacao(db)
+    auth.set_setting(db, login_codigo.EXIGE_APROVACAO_KEY, "0" if atual else "1")
+    db.commit()
     return RedirectResponse(url="/admin", status_code=303)
 
 

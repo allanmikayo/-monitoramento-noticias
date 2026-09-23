@@ -100,6 +100,19 @@ def authenticate(db: Session, email: str, password: str) -> User:
     return user
 
 
+def authenticate_admin(db: Session, email: str, password: str) -> User:
+    """Entrada por senha -- SÓ para admin (22/09/2026).
+
+    Com o login por código no e-mail, ninguém mais usa senha. O admin
+    mantém a dele como porta de emergência: se o envio de e-mail cair, é
+    por aqui que ele entra para consertar. Para qualquer outra conta a
+    resposta é a mesma de senha errada, para não revelar quem é admin."""
+    user = authenticate(db, email, password)
+    if user.role != "admin":
+        raise AuthError("E-mail ou senha inválidos.")
+    return user
+
+
 def create_session(db: Session, user: User, *, ip: str | None, user_agent: str | None) -> SessionModel:
     ttl_minutes = get_setting_int(db, "session_ttl_minutes", config.DEFAULT_SESSION_TTL_MINUTES)
     sess = SessionModel(

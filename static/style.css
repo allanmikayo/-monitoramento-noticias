@@ -545,3 +545,31 @@ h3.bloco-noticias:first-of-type { margin-top: 10px; }
 /* Coluna do haltere na tabela de setor. */
 .tabela-casa th.col-haltere, .tabela-casa td.col-haltere { width: 190px; padding-top: 4px; padding-bottom: 4px; }
 .tabela-casa td.col-haltere svg { display: block; margin: 0 auto; overflow: visible; }
+
+/* ------------------------------------------------------------------ */
+/* Login por código e painel "Uso do Hub" (22/09/2026)                 */
+/* ------------------------------------------------------------------ */
+.campo-codigo { font-size: 1.4rem; letter-spacing: 0.35em; text-align: center; font-variant-numeric: tabular-nums; }
+.login-links { margin-top: 10px; }
+.aviso-uso {
+  margin: 18px 0 0; padding-top: 10px; border-top: 1px solid var(--border);
+  font-size: 0.68rem; color: #4a4a4a; line-height: 1.4;
+}
+.admin-abas { display: flex; gap: 18px; margin-bottom: 14px; border-bottom: 1px solid var(--border); }
+.admin-abas a { padding: 6px 0; color: var(--muted); text-decoration: none; font-weight: 600; font-size: 0.88rem; }
+.admin-abas a.on { color: #111111; border-bottom: 2px solid #FF6200; }
+.uso-rotulo { display: flex; align-items: center; gap: 6px; }
+.uso-rotulo select { padding: 5px 8px; border: 1px solid var(--border); border-radius: 6px; max-width: 260px; }
+.uso-ranking td.col-texto:first-child {
+  max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.uso-ranking .col-barra { width: 28%; }
+.uso-barra { display: block; height: 8px; border-radius: 0 4px 4px 0; background: #FF6200; min-width: 2px; }
+#uso-pessoas tr.linha-clicavel { cursor: pointer; }
+#uso-pessoas tr.selecionada td { background: #fff1e8; }
+
+/* Tabela longa dentro de um card (fila de ofertas do Mercado Primário, que
+   passa de 200 linhas): rola dentro do card em vez de esticar a página. O
+   cabeçalho fica preso no topo para não se perder na rolagem. */
+.tabela-rolagem { max-height: 360px; overflow: auto; }
+.tabela-rolagem thead th { position: sticky; top: 0; z-index: 1; }

@@ -5,6 +5,9 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>{% block title %}Hub Credit Research{% endblock %}</title>
   <link rel="stylesheet" href="/static/style.css?v={{ v }}">
+  {# Registro de uso (22/09/2026): antes dos scripts das páginas, que
+     chamam registrarUso(). Ver static/uso.js e app/uso.py. #}
+  <script src="/static/uso.js?v={{ v }}"></script>
 </head>
 <body>
   {# Header sempre visível (27/07/2026): Notícias e Spreads viraram
@@ -28,10 +31,12 @@
         {% if user %}<a href="/">Notícias</a>{% endif %}
         {% if user %}<a href="/spreads">Spreads</a>{% endif %}
         {% if user %}<a href="/balcao">Balcão B3</a>{% endif %}
+        {% if user %}<a href="/primario">Mercado Primário</a>{% endif %}
         {% if user %}<a href="/fontes">Fontes &amp; Empresas</a>{% endif %}
         {# Administração: só admin. A rota já exige `require_admin`; este
            `if` é só pra não mostrar link que levaria a um 403. #}
         {% if user and user.role == 'admin' %}<a href="/admin">Administração</a>{% endif %}
+        {% if user and user.role == 'admin' %}<a href="/admin/uso">Uso do Hub</a>{% endif %}
       </nav>
       <div class="user-box">
         {% if user %}

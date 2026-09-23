@@ -5,13 +5,46 @@
   <h1>Entrar</h1>
   {% if erro %}<p class="alert alert-error">{{ erro }}</p>{% endif %}
   {% if msg %}<p class="alert alert-ok">{{ msg }}</p>{% endif %}
+
+  {% if etapa == "codigo" %}
+  <form method="post" action="/login/confirmar">
+    <p class="muted small">Código enviado para <b>{{ email }}</b>. Vale por 10 minutos.</p>
+    {% if novo %}
+    <label>Seu nome</label>
+    <input type="text" name="nome" required maxlength="120" autocomplete="name">
+    {% endif %}
+    <label>Código de 6 dígitos</label>
+    <input type="text" name="codigo" required inputmode="numeric" autocomplete="one-time-code"
+           pattern="[0-9 ]{6,7}" maxlength="7" class="campo-codigo" {% if not novo %}autofocus{% endif %}>
+    <button type="submit" class="btn-primary">Entrar</button>
+  </form>
+  <p class="muted small login-links">
+    Não chegou? <a href="/login?etapa=email">Pedir outro código ou usar outro e-mail</a>
+  </p>
+
+  {% elif etapa == "senha" %}
   <form method="post" action="/login">
+    <p class="muted small">Acesso por senha, só para o administrador.</p>
     <label>E-mail</label>
     <input type="email" name="email" required autofocus>
     <label>Senha</label>
     <input type="password" name="password" required>
     <button type="submit" class="btn-primary">Entrar</button>
   </form>
-  <p class="muted">Não tem conta? <a href="/cadastro">Cadastre-se</a></p>
+  <p class="muted small login-links"><a href="/login">Voltar para o código por e-mail</a></p>
+
+  {% else %}
+  <form method="post" action="/login/codigo">
+    <label>E-mail</label>
+    <input type="email" name="email" required autofocus autocomplete="email" value="{{ email }}">
+    <button type="submit" class="btn-primary">Receber código</button>
+  </form>
+  <p class="muted small">Sem senha: mandamos um código de 6 dígitos para o seu e-mail.
+     No primeiro acesso pedimos só o seu nome.</p>
+  <p class="muted small login-links"><a href="/login?etapa=senha">Entrar com senha (administrador)</a></p>
+  {% endif %}
+
+  <p class="aviso-uso">Registramos quais páginas e filtros você usa, vinculados ao seu e-mail,
+     só para melhorar o Hub. Nada disso é compartilhado.</p>
 </div>
 {% endblock %}

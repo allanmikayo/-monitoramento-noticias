@@ -49,3 +49,56 @@ def send_confirmation_email(to_email: str, name: str, token: str) -> str:
         logger.exception("Falha ao enviar e-mail para %s — link: %s", to_email, link)
 
     return link
+
+
+class EnvioIndisponivel(Exception):
+    """SMTP não configurado, ou o servidor de e-mail recusou/caiu."""
+
+
+def smtp_configurado() -> bool:
+    return _smtp_configured()
+
+
+def send_login_code(to_email: str, codigo: str) -> None:
+    """Manda o código de acesso (22/09/2026). Diferente do e-mail de
+    confirmação antigo, aqui falhar NÃO pode ser silencioso: sem o e-mail a
+    pessoa fica esperando um código que nunca chega. Por isso levanta
+    `EnvioIndisponivel` e a tela mostra o problema."""
+    if not _smtp_configured():
+        raise EnvioIndisponivel("envio de e-mail não configurado")
+
+    msg = EmailMessage()
+    msg["Subject"] = f"{codigo} é o seu código de acesso — Hub Credit Research"
+    msg["From"] = config.FROM_EMAIL
+    msg["To"] = to_email
+    msg.set_content(
+        f"Seu código de acesso ao Hub Credit Research é:\n\n"
+        f"    {codigo}\n\n"
+        f"Ele vale por 10 minutos. Se não foi você que pediu, ignore este e-mail "
+        f"— ninguém entra sem o código.\n"
+    )
+    msg.add_alternative(
+        f"""<div style="font-family:Arial,sans-serif;max-width:420px;color:#111">
+  <p style="font-size:15px;font-weight:bold;color:#FF6200;margin:0 0 16px">Hub Credit Research</p>
+  <p style="margin:0 0 8px">Seu código de acesso:</p>
+  <p style="font-size:30px;letter-spacing:6px;font-weight:bold;margin:0 0 16px">{codigo}</p>
+  <p style="font-size:13px;color:#4a4a4a;margin:0">Vale por 10 minutos. Se não foi você que pediu,
+  ignore este e-mail — ninguém entra sem o código.</p>
+</div>""",
+        subtype="html",
+    )
+    try:
+        porta = config.SMTP_PORT
+        if porta == 465:
+            with smtplib.SMTP_SSL(config.SMTP_HOST, porta, timeout=15) as server:
+                server.login(config.SMTP_USER, config.SMTP_PASSWORD)
+                server.send_message(msg)
+        else:
+            with smtplib.SMTP(config.SMTP_HOST, porta, timeout=15) as server:
+                server.starttls()
+                server.login(config.SMTP_USER, config.SMTP_PASSWORD)
+                server.send_message(msg)
+    except Exception as e:  # noqa: BLE001
+        logger.exception("Falha ao enviar código para %s", to_email)
+        raise EnvioIndisponivel(str(e)) from e
+    logger.info("Código de acesso enviado para %s", to_email)

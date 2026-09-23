@@ -121,7 +121,7 @@
     );
   }
 
-  function initMultiSelect({ msId, btnId, panelId, prefix, allLabel, selectedSet, nameLookup, onChange }) {
+  function initMultiSelect({ msId, btnId, panelId, prefix, allLabel, selectedSet, nameLookup, onChange, acaoUso }) {
     const wrap = document.getElementById(msId);
     const btn = document.getElementById(btnId);
     const panel = document.getElementById(panelId);
@@ -144,6 +144,8 @@
       if (!cb.matches('input[type="checkbox"]')) return;
       if (cb.checked) selectedSet.add(cb.value);
       else selectedSet.delete(cb.value);
+      // Registro de uso (22/09/2026): só quando MARCA -- desmarcar não é interesse.
+      if (cb.checked && acaoUso && window.registrarUso) registrarUso(acaoUso, nameLookup(cb.value));
       updateMsButtonLabel(btn, prefix, selectedSet, allLabel, nameLookup);
       if (onChange) onChange();
     });
@@ -376,7 +378,7 @@
 
   initMultiSelect({
     msId: "ms-sector", btnId: "ms-sector-btn", panelId: "ms-sector-panel",
-    prefix: "Setor", allLabel: "Todos", selectedSet: selectedSectors,
+    prefix: "Setor", allLabel: "Todos", selectedSet: selectedSectors, acaoUso: "setor",
     nameLookup: (id) => {
       const cb = document.querySelector(`#ms-sector-panel input[value="${id}"]`);
       return cb ? cb.parentElement.textContent.trim() : id;
@@ -386,7 +388,7 @@
 
   initMultiSelect({
     msId: "ms-company", btnId: "ms-company-btn", panelId: "ms-company-panel",
-    prefix: "Empresa", allLabel: "Todas", selectedSet: selectedCompanies,
+    prefix: "Empresa", allLabel: "Todas", selectedSet: selectedCompanies, acaoUso: "empresa",
     nameLookup: (id) => (companiesData.find((c) => String(c.id) === id) || {}).name || id,
     onChange: () => loadArticles(),
   });
@@ -397,7 +399,7 @@
   // usuário está vendo na tela.
   initMultiSelect({
     msId: "ms-source", btnId: "ms-source-btn", panelId: "ms-source-panel",
-    prefix: "Fonte", allLabel: "Todas", selectedSet: selectedSources,
+    prefix: "Fonte", allLabel: "Todas", selectedSet: selectedSources, acaoUso: "fonte",
     nameLookup: (v) => v,
     onChange: () => loadArticles(),
   });
@@ -438,6 +440,10 @@
   });
 
   typeSelect.addEventListener("change", loadArticles);
+  typeSelect.addEventListener("change", () => {
+    const op = typeSelect.options[typeSelect.selectedIndex];
+    if (typeSelect.value && window.registrarUso) registrarUso("filtro", "Tipo: " + op.textContent.trim());
+  });
   if (refreshBtn) refreshBtn.addEventListener("click", forceRefresh);
 
   setInterval(() => {

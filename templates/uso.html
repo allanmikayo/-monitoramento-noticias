@@ -1,0 +1,112 @@
+{% extends "base.html" %}
+{% block title %}Uso do Hub{% endblock %}
+{% block content %}
+{# PAINEL DE USO (22/09/2026, pedido do Allan) -- só admin. Responde três
+   perguntas: quais abas são usadas, o que as pessoas procuram (setores,
+   empresas, relatórios, buscas) e quem usa. Dados de app/uso.py; o
+   registro vem de static/uso.js. #}
+<div class="admin-abas">
+  <a href="/admin">Usuários e configurações</a>
+  <a href="/admin/uso" class="on">Uso do Hub</a>
+</div>
+
+<div class="page-head">
+  <h1 style="margin:0;">Uso do Hub</h1>
+  <a class="btn-small" id="uso-csv" href="/api/admin/uso.csv?dias=30">Baixar eventos (CSV)</a>
+</div>
+
+<div class="filters-bar barra-fixa" id="uso-barra">
+  <div class="window-tabs" id="uso-periodo">
+    <button class="win-btn" data-dias="7">7 dias</button>
+    <button class="win-btn active" data-dias="30">30 dias</button>
+    <button class="win-btn" data-dias="90">90 dias</button>
+  </div>
+  <label class="muted small uso-rotulo">Pessoa
+    <select id="uso-pessoa"><option value="">Todas</option></select>
+  </label>
+  <label class="muted small uso-rotulo">
+    <input type="checkbox" id="uso-admin"> incluir administradores
+  </label>
+</div>
+
+<div class="kpi-row kpi-compacto">
+  <div class="kpi-card kpi-highlight"><span class="kpi-label">PESSOAS COM LOGIN</span>
+    <span class="kpi-value" id="uso-k-pessoas">—</span><span class="kpi-delta muted">usaram no período</span></div>
+  <div class="kpi-card"><span class="kpi-label">VISITANTES SEM LOGIN</span>
+    <span class="kpi-value" id="uso-k-anonimos">—</span><span class="kpi-delta muted">navegadores no Repositório</span></div>
+  <div class="kpi-card"><span class="kpi-label">VISITAS ÀS ABAS</span>
+    <span class="kpi-value" id="uso-k-visitas">—</span><span class="kpi-delta muted">aberturas de página</span></div>
+  <div class="kpi-card"><span class="kpi-label">CLIQUES E FILTROS</span>
+    <span class="kpi-value" id="uso-k-interacoes">—</span><span class="kpi-delta muted">além das visitas</span></div>
+</div>
+<p class="fonte-visual" style="margin:-4px 0 16px;" id="uso-nota">Administradores fora da conta.</p>
+
+<div class="chart-card" style="margin-bottom:16px;">
+  <h2 style="margin:0;">Pessoas por dia</h2>
+  <p class="muted small" style="margin:2px 0 8px;">pessoas distintas que abriram o Hub, com e sem login</p>
+  <canvas id="uso-chart-dia" height="46"></canvas>
+  <p class="fonte-visual">Fonte: registro de uso do Hub</p>
+</div>
+
+<div class="emissor-duplo" style="margin-bottom:16px;">
+  <div class="chart-card">
+    <h2 style="margin:0;">Abas mais usadas</h2>
+    <p class="muted small" style="margin:2px 0 8px;">visitas no período</p>
+    <table class="table tabela-casa uso-ranking" id="uso-abas"></table>
+    <p class="fonte-visual">Fonte: registro de uso do Hub</p>
+  </div>
+  <div class="chart-card">
+    <h2 style="margin:0;">Setores mais procurados</h2>
+    <p class="muted small" style="margin:2px 0 8px;">filtros de setor, drill-down e setor das empresas clicadas</p>
+    <table class="table tabela-casa uso-ranking" id="uso-setores"></table>
+    <p class="fonte-visual">Fonte: registro de uso do Hub</p>
+  </div>
+</div>
+
+<div class="emissor-duplo" style="margin-bottom:16px;">
+  <div class="chart-card">
+    <h2 style="margin:0;">Empresas mais procuradas</h2>
+    <p class="muted small" style="margin:2px 0 8px;">cliques no Repositório, filtros nas Notícias e emissores nos Spreads</p>
+    <table class="table tabela-casa uso-ranking" id="uso-empresas"></table>
+    <p class="fonte-visual">Fonte: registro de uso do Hub</p>
+  </div>
+  <div class="chart-card">
+    <h2 style="margin:0;">Relatórios mais abertos</h2>
+    <p class="muted small" style="margin:2px 0 8px;">cliques para abrir no Smart, a partir do Repositório</p>
+    <table class="table tabela-casa uso-ranking" id="uso-relatorios"></table>
+    <p class="fonte-visual">Fonte: registro de uso do Hub</p>
+  </div>
+</div>
+
+<div class="emissor-duplo" style="margin-bottom:16px;">
+  <div class="chart-card">
+    <h2 style="margin:0;">Buscas mais feitas</h2>
+    <p class="muted small" style="margin:2px 0 8px;">o que foi digitado na busca do Repositório</p>
+    <table class="table tabela-casa uso-ranking" id="uso-buscas"></table>
+    <p class="fonte-visual">Fonte: registro de uso do Hub</p>
+  </div>
+  <div class="chart-card">
+    <h2 style="margin:0;">Outros filtros e funções</h2>
+    <p class="muted small" style="margin:2px 0 8px;">fontes, tipos, classe, base, grupos, tickers, sub-abas</p>
+    <table class="table tabela-casa uso-ranking" id="uso-outros"></table>
+    <p class="fonte-visual">Fonte: registro de uso do Hub</p>
+  </div>
+</div>
+
+<div class="chart-card">
+  <h2 style="margin:0;">Por pessoa</h2>
+  <p class="muted small" style="margin:2px 0 8px;">só quem entrou com e-mail · clique numa linha para ver o painel só dessa pessoa</p>
+  <table class="table tabela-casa" id="uso-pessoas">
+    <thead><tr>
+      <th class="col-texto">E-mail</th><th class="col-texto">Nome</th><th>Último uso</th>
+      <th>Dias ativos</th><th>Visitas</th><th>Aba preferida</th><th class="col-texto">Mais procurou</th>
+    </tr></thead>
+    <tbody></tbody>
+  </table>
+  <p class="fonte-visual">Fonte: registro de uso do Hub</p>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+<script src="/static/chart-padrao.js?v={{ v }}"></script>
+<script src="/static/uso-painel.js?v={{ v }}"></script>
+{% endblock %}

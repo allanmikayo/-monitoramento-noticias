@@ -363,7 +363,7 @@ def test_versao_estatica_ignora_ambiente(monkeypatch):
     assert A._versao_estatica() == v and v != "0"
 
 
-@pytest.mark.parametrize("pagina", ["/", "/spreads", "/balcao", "/cobertura", "/minha-conta"])
+@pytest.mark.parametrize("pagina", ["/", "/spreads", "/balcao", "/primario", "/cobertura", "/minha-conta"])
 def test_paginas_renderizam_versao_estatica(cliente_emissores, pagina):
     """O teste de template acima só garante que o `?v={{ v }}` está escrito.
     Em 21/09/2026 descobrimos que Spreads/Balcão/Cobertura usam um Jinja

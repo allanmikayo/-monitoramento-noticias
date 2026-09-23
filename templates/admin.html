@@ -1,6 +1,14 @@
 {% extends "base.html" %}
 {% block title %}Administração{% endblock %}
 {% block content %}
+<div class="admin-abas">
+  <a href="/admin" class="on">Usuários e configurações</a>
+  <a href="/admin/uso">Uso do Hub</a>
+</div>
+{% if not smtp_ok %}
+<p class="alert alert-error">O envio de e-mail não está configurado: ninguém consegue receber o código de acesso.
+  Configure SMTP_HOST, SMTP_USER, SMTP_PASSWORD e FROM_EMAIL nas variáveis de ambiente da Vercel.</p>
+{% endif %}
 <h1>Usuários</h1>
 <table class="table">
   <thead><tr><th>Nome</th><th>E-mail</th><th>Papel</th><th>Status</th><th>Criado em</th><th></th></tr></thead>
@@ -13,7 +21,8 @@
         <span class="tag {{ 'tag-ok' if u.role == 'admin' else '' }}">{{ 'admin' if u.role == 'admin' else 'usuário' }}</span>
       </td>
       <td>
-        {% if not u.active %}<span class="tag tag-off">pendente de aprovação / inativo</span>
+        {% if not u.active and not u.email_confirmed %}<span class="tag tag-off">aguardando aprovação</span>
+        {% elif not u.active %}<span class="tag tag-off">bloqueado</span>
         {% else %}<span class="tag tag-ok">ativo</span>{% endif %}
       </td>
       <td class="muted">{{ u.created_at | brt("%d/%m/%Y %H:%M") }}</td>
@@ -23,7 +32,7 @@
           <button type="submit" class="btn-small">{{ 'Tornar usuário' if u.role == 'admin' else 'Tornar admin' }}</button>
         </form>
         <form method="post" action="/admin/usuarios/{{ u.id }}/ativo" class="inline-form">
-          <button type="submit" class="btn-small">{{ 'Desativar' if u.active else 'Aprovar' }}</button>
+          <button type="submit" class="btn-small">{{ 'Bloquear' if u.active else 'Aprovar' }}</button>
         </form>
         <form method="post" action="/admin/usuarios/{{ u.id }}/remover" class="inline-form" onsubmit="return confirm('Remover este usuário?');">
           <button type="submit" class="btn-small btn-danger">Remover</button>
@@ -39,11 +48,17 @@
 <form method="post" action="/admin/usuarios" class="form-row">
   <input type="text" name="name" placeholder="Nome" required>
   <input type="email" name="email" placeholder="E-mail" required>
-  <input type="password" name="password" placeholder="Senha inicial" required minlength="6">
   <select name="role"><option value="user">Usuário</option><option value="admin">Admin</option></select>
   <button type="submit" class="btn-primary">Adicionar</button>
 </form>
-<p class="muted small">Usuários criados aqui já entram aprovados. Quem se cadastra sozinho em /cadastro fica "pendente de aprovação" na tabela acima até você clicar em "Aprovar".</p>
+<p class="muted small">Ninguém tem senha: a pessoa entra com o código que chega no e-mail. Pré-cadastrar aqui só serve para já deixar nome e papel prontos.</p>
+
+<h2>Quem pode entrar</h2>
+<form method="post" action="/admin/configuracoes/aprovacao" class="form-row">
+  <span>{% if exige_aprovacao %}<b>Só com aprovação:</b> e-mail novo confirma o código e fica "aguardando aprovação" até você aprovar acima.
+        {% else %}<b>Aberto:</b> qualquer e-mail que confirmar o código entra direto. Para tirar alguém, use "Bloquear".{% endif %}</span>
+  <button type="submit" class="btn-small">{{ 'Abrir para qualquer e-mail' if exige_aprovacao else 'Passar a exigir aprovação' }}</button>
+</form>
 
 <h1>Sessões ativas</h1>
 <table class="table">

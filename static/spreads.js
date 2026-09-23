@@ -454,9 +454,9 @@
         <td class="${varCls}">${l.variacao_bps !== null ? fmtBps(l.variacao_bps) : "—"}</td>
       `;
       tr.addEventListener("click", () => {
-        if (setorNivel === "setor") { setorAtual = l.rotulo; irParaNivel("subsetor"); }
-        else if (setorNivel === "subsetor") { subsetorAtual = l.rotulo; irParaNivel("emissor"); }
-        else if (setorNivel === "emissor") { emissorAtual = l.rotulo; irParaNivel("ticker"); }
+        if (setorNivel === "setor") { setorAtual = l.rotulo; registrarUso("setor", l.rotulo); irParaNivel("subsetor"); }
+        else if (setorNivel === "subsetor") { subsetorAtual = l.rotulo; registrarUso("filtro", "Subsetor: " + l.rotulo); irParaNivel("emissor"); }
+        else if (setorNivel === "emissor") { emissorAtual = l.rotulo; registrarUso("emissor", l.rotulo); irParaNivel("ticker"); }
         else { openDrilldown(l.rotulo, l.nome); }
       });
       tbody.appendChild(tr);
@@ -464,6 +464,7 @@
   }
 
   async function openDrilldown(codigo, nome) {
+    registrarUso("ticker", codigo);
     currentDrilldownCodigo = codigo;
     drilldownWrap.style.display = "block";
     document.getElementById("drilldown-titulo").textContent = `${codigo}${nome ? " — " + nome : ""}`;
@@ -946,6 +947,7 @@
       classeTabs.forEach((b) => b.classList.remove("active"));
       btn.classList.add("active");
       currentClasse = btn.dataset.classe;
+      registrarUso("filtro", "Classe: " + btn.textContent.trim());
       // Trocar de classe volta o drill-down para o topo: os setores de
       // "IPCA + Incentivadas" e "CDI + Tradicionais" não são os mesmos, e
       // ficar dentro de um subsetor que não existe na outra classe daria
@@ -962,6 +964,7 @@
       baseTabs.forEach((b) => b.classList.remove("active"));
       btn.classList.add("active");
       currentBase = btn.dataset.base;
+      registrarUso("filtro", "Base: " + btn.dataset.base);
       loadKPI();
       loadSetor();
       loadMovers();
@@ -1038,6 +1041,7 @@
       secaoTabs.forEach((b) => b.classList.remove("active"));
       btn.classList.add("active");
       const secao = btn.dataset.secao;
+      registrarUso("subaba", btn.textContent.trim());
       painelVisaoGeral.style.display = secao === "visao-geral" ? "block" : "none";
       painelEmissores.style.display = secao === "emissores" ? "block" : "none";
       if (secao === "emissores" && !emissoresCarregados) {
@@ -1092,6 +1096,7 @@
         if (todos) {
           currentEmissores = currentEmissores.filter((n) => !g.emissores.includes(n));
         } else {
+          registrarUso("grupo", g.grupo);
           g.emissores.forEach((n) => {
             if (!currentEmissores.includes(n)) currentEmissores.push(n);
           });
@@ -1188,6 +1193,7 @@
         div.innerHTML = `<span>${nome}</span>`;
         div.addEventListener("click", () => {
           currentEmissores.push(nome);
+          registrarUso("emissor", nome);
           emissorBusca.value = "";
           emissorBuscaResultados.style.display = "none";
           renderChips();
