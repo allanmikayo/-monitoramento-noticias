@@ -32,11 +32,13 @@
         {% if user %}<a href="/spreads">Spreads</a>{% endif %}
         {% if user %}<a href="/balcao">Balcão B3</a>{% endif %}
         {% if user %}<a href="/primario">Mercado Primário</a>{% endif %}
-        {% if user %}<a href="/fontes">Fontes &amp; Empresas</a>{% endif %}
         {# Administração: só admin. A rota já exige `require_admin`; este
-           `if` é só pra não mostrar link que levaria a um 403. #}
+           `if` é só pra não mostrar link que levaria a um 403.
+           "Fontes & Empresas" e "Uso do Hub" SAÍRAM DO MENU (01/10/2026,
+           pedido do Allan): são ferramentas de manutenção, não de análise,
+           e agora se chega a elas pelas abas internas da Administração
+           (ver o bloco `admin-abas` em admin.html, uso.html e sources.html). #}
         {% if user and user.role == 'admin' %}<a href="/admin">Administração</a>{% endif %}
-        {% if user and user.role == 'admin' %}<a href="/admin/uso">Uso do Hub</a>{% endif %}
       </nav>
       <div class="user-box">
         {% if user %}

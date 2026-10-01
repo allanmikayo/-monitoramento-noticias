@@ -222,27 +222,16 @@
           pointRadius: 0,
           tension: 0.15,
           fill: true,
-        }, {
-          // BASE COMPARÁVEL (21/09/2026) -- índice encadeado só com papéis
-          // presentes nos dois dias de cada passo, ancorado no spread de
-          // hoje (ver queries._serie_base_comparavel). A distância entre as
-          // duas linhas numa data passada é quanto do movimento de lá até
-          // hoje veio da MUDANÇA DE BASE, e não de repricing. Preta e fina,
-          // sem preenchimento: é a linha de controle, a laranja segue sendo
-          // o protagonista.
-          label: "Base comparável",
-          data: series.map((r) => r.spread_comparavel ?? null),
-          borderColor: "#111111",
-          backgroundColor: "transparent",
-          borderWidth: 1.5,
-          pointRadius: 0,
-          tension: 0.15,
-          fill: false,
         }],
+        // A linha "Base comparável" SAIU DO GRÁFICO (01/10/2026, pedido do
+        // Allan: "vamos ter que pensar melhor nessa métrica"). O servidor
+        // continua devolvendo `spread_comparavel` em /api/spreads/series
+        // (queries._serie_base_comparavel, coberta por
+        // tests/test_base_comparavel.py) -- só não é desenhada.
       },
       options: PADRAO_GRAFICO.eixoData(datasIso, {
         responsive: true,
-        plugins: { legend: { display: true, position: "bottom" } },
+        plugins: { legend: { display: false } },
         scales: { y: { title: { display: true, text: "bps" } } },
       }),
     });
@@ -1000,10 +989,262 @@
       data.data_referencia);
   }
 
+  // ------------------------------------------------------------------
+  // DE ONDE VEIO O MOVIMENTO (01/10/2026, pedido do Allan) -- treemap.
+  //
+  // Reparte a variação do card SPREAD MÉDIO entre grupos/setores/emissores
+  // (conta em queries.atribuicao_variacao: a soma dos blocos é a variação
+  // do card). Área = |contribuição em bps|; laranja abriu, preto fechou,
+  // cinza = papel que entrou ou saiu da base.
+  //
+  // SEM BIBLIOTECA: o layout "squarify" abaixo tem ~40 linhas e os blocos
+  // são divs, o que deixa a dica de ferramenta ser HTML comum (tabela de
+  // papéis) em vez de texto de canvas.
+  // ------------------------------------------------------------------
+  let atribuicaoNivel = "grupo";
+  let atribuicaoDados = null;
+  // Blocos de grupo desenhados um a um; o resto vira "Outros que abriram"
+  // e "Outros que fecharam". Com ~250 grupos, desenhar todos daria
+  // centenas de blocos de 2 px -- ninguém lê, e o que importa some.
+  const ATRIBUICAO_MAX_BLOCOS = 30;
+  const COR_BLOCO = {
+    abriu: { fundo: "#FF6200", texto: "#ffffff" },
+    fechou: { fundo: "#111111", texto: "#ffffff" },
+    composicao: { fundo: "#c9c9c9", texto: "#111111" },
+  };
+
+  function escHtml(s) {
+    return String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+  }
+
+  function bps2(v) {
+    if (v === null || v === undefined) return "—";
+    const s = v > 0 ? "+" : "";
+    return `${s}${v.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  }
+
+  // Squarified treemap (Bruls, Huizing & van Wijk). `itens` com `valor` > 0,
+  // já em ordem decrescente; devolve cada item com x, y, w, h em px.
+  function squarify(itens, x, y, w, h) {
+    const total = itens.reduce((a, i) => a + i.valor, 0);
+    if (!total || w <= 0 || h <= 0) return [];
+    const escala = (w * h) / total;
+    const fila = itens.map((i) => ({ ...i, area: i.valor * escala }));
+    const saida = [];
+    let linha = [];
+    const pior = (l, lado) => {
+      const s = l.reduce((a, i) => a + i.area, 0);
+      const max = Math.max(...l.map((i) => i.area)), min = Math.min(...l.map((i) => i.area));
+      return Math.max((lado * lado * max) / (s * s), (s * s) / (lado * lado * min));
+    };
+    const assentar = () => {
+      const s = linha.reduce((a, i) => a + i.area, 0);
+      if (w >= h) {               // coluna à esquerda
+        const larg = s / h;
+        let yy = y;
+        linha.forEach((i) => { const alt = i.area / larg; saida.push({ ...i, x, y: yy, w: larg, h: alt }); yy += alt; });
+        x += larg; w -= larg;
+      } else {                    // faixa no topo
+        const alt = s / w;
+        let xx = x;
+        linha.forEach((i) => { const larg = i.area / alt; saida.push({ ...i, x: xx, y, w: larg, h: alt }); xx += larg; });
+        y += alt; h -= alt;
+      }
+      linha = [];
+    };
+    fila.forEach((item) => {
+      const lado = Math.min(w, h);
+      if (!linha.length || pior(linha.concat(item), lado) <= pior(linha, lado)) linha.push(item);
+      else { assentar(); linha.push(item); }
+    });
+    if (linha.length) assentar();
+    return saida;
+  }
+
+  // Quais blocos vão para a tela: os maiores grupos, os dois "Outros" e os
+  // blocos de composição (sempre visíveis -- são a outra metade da
+  // explicação, mesmo quando pequenos).
+  function montarBlocosAtribuicao(dados) {
+    const grupos = dados.blocos.filter((b) => b.tipo === "grupo" && b.contribuicao_bps !== 0);
+    const comp = dados.blocos.filter((b) => b.tipo !== "grupo" && b.contribuicao_bps !== 0);
+    const visiveis = grupos.slice(0, ATRIBUICAO_MAX_BLOCOS);
+    const resto = grupos.slice(ATRIBUICAO_MAX_BLOCOS);
+    const outros = [];
+    [["Outros que abriram", (b) => b.contribuicao_bps > 0], ["Outros que fecharam", (b) => b.contribuicao_bps < 0]]
+      .forEach(([rotulo, lado]) => {
+        const membros = resto.filter(lado);
+        if (!membros.length) return;
+        const contrib = membros.reduce((a, b) => a + b.contribuicao_bps, 0);
+        outros.push({
+          rotulo: `${rotulo} (${membros.length})`, tipo: "outros", contribuicao_bps: contrib,
+          pct_variacao: dados.variacao_bps && Math.abs(dados.variacao_bps) >= 0.05
+            ? Math.round(1000 * contrib / dados.variacao_bps) / 10 : null,
+          membros,
+        });
+      });
+    // "Outros" vai SEMPRE por último no layout (canto inferior direito),
+    // mesmo quando é o maior: o olho começa no canto superior esquerdo, e
+    // ali tem que estar um nome que explica alguma coisa, não um resto.
+    const comValor = (l) => l.map((b) => ({ ...b, valor: Math.abs(b.contribuicao_bps) }))
+      .sort((a, b) => b.valor - a.valor);
+    return comValor(visiveis.concat(comp)).concat(comValor(outros));
+  }
+
+  function corDoBloco(b) {
+    if (b.tipo === "entrada" || b.tipo === "saida") return COR_BLOCO.composicao;
+    // "Outros" listrado na cor do lado: lê-se "abriu"/"fechou" sem confundir
+    // com o cinza de entradas e saídas.
+    if (b.tipo === "outros") {
+      const base = b.contribuicao_bps > 0 ? "#FF6200" : "#111111";
+      const claro = b.contribuicao_bps > 0 ? "#ffb380" : "#6b6b6b";
+      return { fundo: `repeating-linear-gradient(135deg, ${base} 0 8px, ${claro} 8px 16px)`, texto: "#ffffff" };
+    }
+    return b.contribuicao_bps > 0 ? COR_BLOCO.abriu : COR_BLOCO.fechou;
+  }
+
+  function textoPct(b) {
+    return b.pct_variacao === null || b.pct_variacao === undefined ? ""
+      : `${b.pct_variacao.toLocaleString("pt-BR", { maximumFractionDigits: 0 })}%`;
+  }
+
+  function htmlDica(b, dados) {
+    const variacao = dados.variacao_bps;
+    let h = `<div class="dica-titulo">${escHtml(b.rotulo)}</div>`;
+    h += `<div>${bps2(b.contribuicao_bps)} bps`;
+    if (b.pct_variacao !== null && b.pct_variacao !== undefined) {
+      h += ` · ${textoPct(b)} da variação de ${bps2(variacao)} bps`;
+    }
+    h += "</div>";
+    if (b.tipo === "grupo" && b.peso_bps !== null && Math.abs(b.peso_bps) >= 0.005) {
+      h += `<div class="muted">repricing ${bps2(b.repricing_bps)} · mudança de peso ${bps2(b.peso_bps)}</div>`;
+    }
+    if (b.sem_grupo) h += '<div class="muted">sem grupo econômico cadastrado — agrupado pelo emissor</div>';
+
+    if (b.tipo === "outros") {
+      // "Outros" lista os grupos que ele junta, não papéis.
+      h += "<table><thead><tr><th>Grupo</th><th>bps</th><th>Papéis</th></tr></thead><tbody>";
+      b.membros.slice(0, 5).forEach((m) => {
+        h += `<tr><td>${escHtml(m.rotulo)}</td><td>${bps2(m.contribuicao_bps)}</td><td>${m.n_tickers}</td></tr>`;
+      });
+      if (b.membros.length > 5) h += `<tr><td class="mais" colspan="3">… mais ${b.membros.length - 5}</td></tr>`;
+      return h + "</tbody></table>";
+    }
+
+    const composicao = b.tipo === "entrada" || b.tipo === "saida";
+    // Saída: o papel não tem dado na data analisada, então spread e
+    // estoque são os da data INICIAL -- o cabeçalho diz isso.
+    if (b.tipo === "saida") {
+      h += `<div class="muted">spread e estoque de ${fmtData(dados.data_comparacao)}, último dia em que o papel pesava no card</div>`;
+    }
+    h += "<table><thead><tr><th>Código</th>"
+      + (composicao || atribuicaoNivel !== "emissor" ? "<th style=\"text-align:left;\">Emissor</th>" : "")
+      + "<th>Spread</th><th>Abertura</th><th>Estoque (R$ mi)</th></tr></thead><tbody>";
+    b.tickers.forEach((t) => {
+      // Entrada/saída não tem abertura: no lugar dela vai o porquê
+      // ("sem spread" = estreou/venceu/parou de ser precificado; "sem
+      // estoque" = tinha spread mas não pesava no card naquela data).
+      const abertura = composicao
+        ? `${b.tipo === "entrada" ? "entrou" : "saiu"} · ${(t.motivo || "").startsWith("sem estoque") ? "sem estoque" : "sem spread"}`
+        : fmtBps(t.variacao_bps);
+      h += `<tr><td>${escHtml(t.codigo)}</td>`
+        + (composicao || atribuicaoNivel !== "emissor"
+          ? `<td style="text-align:left;max-width:150px;overflow:hidden;text-overflow:ellipsis;">${escHtml(t.emissor)}</td>` : "")
+        + `<td>${num1(t.spread)}</td><td>${abertura}</td>`
+        + `<td>${t.estoque === null || t.estoque === undefined ? "—" : fmtNum(t.estoque, 0)}</td></tr>`;
+    });
+    if (b.n_tickers > b.tickers.length) {
+      h += `<tr><td class="mais" colspan="5">… mais ${b.n_tickers - b.tickers.length} papéis</td></tr>`;
+    }
+    h += "</tbody></table>";
+    return h;
+  }
+
+  function desenharAtribuicao() {
+    const area = document.getElementById("atribuicao-mapa");
+    const dica = document.getElementById("atribuicao-dica");
+    const card = document.getElementById("atribuicao-card");
+    area.innerHTML = "";
+    dica.style.display = "none";
+    const dados = atribuicaoDados;
+    const vazio = !dados || !dados.blocos || !dados.blocos.length;
+    document.getElementById("atribuicao-vazio").style.display = vazio ? "" : "none";
+    area.style.display = vazio ? "none" : "";
+    if (vazio) return;
+
+    const blocos = squarify(montarBlocosAtribuicao(dados), 0, 0, area.clientWidth, area.clientHeight);
+    blocos.forEach((b) => {
+      const el = document.createElement("div");
+      const cor = corDoBloco(b);
+      el.className = "treemap-bloco";
+      Object.assign(el.style, {
+        left: `${b.x}px`, top: `${b.y}px`, width: `${b.w}px`, height: `${b.h}px`,
+        background: cor.fundo, color: cor.texto,
+      });
+      if (b.w > 60 && b.h > 28) {
+        const pct = textoPct(b);
+        el.innerHTML = `<b>${escHtml(b.rotulo)}</b>${bps2(b.contribuicao_bps)} bps${pct && b.h > 40 ? `<br>${pct}` : ""}`;
+      }
+      const posicionar = (ev) => {
+        // A dica segue o mouse e vira para o outro lado perto das bordas.
+        const r = card.getBoundingClientRect();
+        let x = ev.clientX - r.left + 14, y = ev.clientY - r.top + 14;
+        if (x + dica.offsetWidth > r.width) x = ev.clientX - r.left - dica.offsetWidth - 14;
+        if (y + dica.offsetHeight > r.height) y = ev.clientY - r.top - dica.offsetHeight - 14;
+        dica.style.left = `${Math.max(0, x)}px`;
+        dica.style.top = `${Math.max(0, y)}px`;
+      };
+      el.addEventListener("mouseenter", (ev) => {
+        dica.innerHTML = htmlDica(b, dados);
+        dica.style.display = "";
+        posicionar(ev);
+      });
+      el.addEventListener("mousemove", posicionar);
+      el.addEventListener("mouseleave", () => { dica.style.display = "none"; });
+      area.appendChild(el);
+    });
+  }
+
+  async function loadAtribuicao() {
+    if (!baseValida()) return;
+    const dados = await fetchJSON("/api/spreads/atribuicao", paramsComuns({ nivel: atribuicaoNivel }));
+    atribuicaoDados = dados;
+    const sub = document.getElementById("atribuicao-sub");
+    const totais = document.getElementById("atribuicao-totais");
+    if (dados.variacao_bps === null || dados.variacao_bps === undefined) {
+      sub.textContent = "—";
+      totais.textContent = "";
+    } else {
+      sub.textContent = `bps · spread médio ${num1(dados.spread_inicial)} → ${num1(dados.spread_final)} `
+        + `(${bps2(dados.variacao_bps)} bps) de ${fmtData(dados.data_comparacao)} a ${fmtData(dados.data_referencia)} `
+        + `(${currentBase}) · área = tamanho da contribuição · passe o mouse para ver os papéis`;
+      totais.textContent = `fecharam ${bps2(dados.total_fechou_bps)} · abriram ${bps2(dados.total_abriu_bps)} · `
+        + `entradas/saídas ${bps2(dados.composicao_bps)} = ${bps2(dados.variacao_bps)} bps`;
+    }
+    escreverFonte("fonte-atribuicao", "Fonte: Anbima, Debentures.com e Itaú BBA", dados.data_referencia);
+    desenharAtribuicao();
+  }
+
+  document.querySelectorAll("#atribuicao-tabs .win-btn").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      document.querySelectorAll("#atribuicao-tabs .win-btn").forEach((b) => b.classList.remove("active"));
+      btn.classList.add("active");
+      atribuicaoNivel = btn.dataset.nivel;
+      registrarUso("filtro", "Movimento: " + btn.textContent.trim());
+      loadAtribuicao();
+    });
+  });
+
+  // Blocos em px: redesenha quando a largura muda (sem nova consulta).
+  let atribuicaoResize = null;
+  window.addEventListener("resize", () => {
+    clearTimeout(atribuicaoResize);
+    atribuicaoResize = setTimeout(desenharAtribuicao, 150);
+  });
+
   async function reloadAll() {
     await Promise.all([
       loadKPI(), loadSeriesChart(), loadSetor(), loadMovers(),
-      loadComposicao(), loadDispersao(), loadDesagios(),
+      loadComposicao(), loadDispersao(), loadDesagios(), loadAtribuicao(),
     ]);
   }
 
@@ -1041,6 +1282,7 @@
     loadMovers();
     loadComposicao();
     loadDispersao();
+    loadAtribuicao();
   }
 
   baseTabs.forEach((btn) => {
@@ -1224,6 +1466,7 @@
     loadComposicao();
     loadDispersao();
     loadDesagios();
+    loadAtribuicao();
   });
 
   reloadAll();
@@ -1283,6 +1526,9 @@
       const secao = btn.dataset.secao;
       registrarUso("subaba", btn.textContent.trim());
       painelVisaoGeral.style.display = secao === "visao-geral" ? "block" : "none";
+      // O treemap é desenhado em px: se a página abriu em outra subaba, o
+      // painel estava escondido (largura 0) quando os dados chegaram.
+      if (secao === "visao-geral") desenharAtribuicao();
       painelEmissores.style.display = secao === "emissores" ? "block" : "none";
       if (secao === "emissores" && !emissoresCarregados) {
         carregarListaEmissores();

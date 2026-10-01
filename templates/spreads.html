@@ -168,7 +168,7 @@
    muda de uma semana para outra; ocupava uma tela inteira. #}
 <div class="chart-card" style="margin-bottom:16px;">
   <h2 style="margin:0;">Evolução do spread médio</h2>
-  <p class="muted small" style="margin:2px 0 8px;">bps, ponderado por estoque · a linha preta mostra só o repricing, sem o efeito de papéis entrando e saindo da base</p>
+  <p class="muted small" style="margin:2px 0 8px;">bps, ponderado por estoque</p>
   <canvas id="chart-series" height="52"></canvas>
   <p class="fonte-visual" id="fonte-series">Fonte: Anbima, Debentures.com e Itaú BBA</p>
 </div>
@@ -264,6 +264,35 @@
     </table>
     <p class="fonte-visual" id="fonte-movers">Fonte: Anbima, Debentures.com e Itaú BBA</p>
   </div>
+</div>
+
+{# DE ONDE VEIO O MOVIMENTO (01/10/2026, pedido do Allan). Treemap que
+   reparte a variação do card SPREAD MÉDIO -- mesma classe, base, data e
+   recorte -- entre grupos econômicos (ou setores, ou emissores). A área de
+   cada bloco é o tamanho da contribuição em bps; laranja abriu, preto
+   fechou, cinza é papel que entrou ou saiu da base (não reprecificou). A
+   soma dos blocos é a variação do card. Conta em
+   queries.atribuicao_variacao. #}
+<div class="chart-card" style="margin-bottom:16px;" id="atribuicao-card">
+  <div class="titulo-com-acao" style="margin-bottom:2px;">
+    <h2 style="margin:0;">De onde veio o movimento</h2>
+    <div class="window-tabs" id="atribuicao-tabs">
+      <button data-nivel="grupo" class="win-btn active">Grupo econômico</button>
+      <button data-nivel="setor" class="win-btn">Setor</button>
+      <button data-nivel="emissor" class="win-btn">Emissor</button>
+    </div>
+  </div>
+  <p class="muted small" style="margin:2px 0 6px;" id="atribuicao-sub">—</p>
+  <div class="treemap-legenda">
+    <span><i style="background:#FF6200;"></i>Abriu</span>
+    <span><i style="background:#111111;"></i>Fechou</span>
+    <span><i style="background:#c9c9c9;"></i>Entrou ou saiu da base</span>
+    <span class="muted" id="atribuicao-totais"></span>
+  </div>
+  <div class="treemap-area" id="atribuicao-mapa"></div>
+  <div class="treemap-dica" id="atribuicao-dica" style="display:none;"></div>
+  <p class="muted small" id="atribuicao-vazio" style="display:none;">Sem as duas datas da comparação para repartir o movimento.</p>
+  <p class="fonte-visual" id="fonte-atribuicao">Fonte: Anbima, Debentures.com e Itaú BBA</p>
 </div>
 
 <div id="drilldown-wrap" class="chart-card" style="display:none;">

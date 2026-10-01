@@ -62,5 +62,20 @@ def test_os_arquivos_da_aba_foram_removidos():
 def test_o_menu_mantem_as_abas_que_ficaram():
     base = (RAIZ / "templates" / "base.html").read_text(encoding="utf-8")
     for rotulo in ("Repositório", "Notícias", "Spreads", "Balcão B3",
-                   "Fontes &amp; Empresas", "Administração"):
+                   "Administração"):
         assert rotulo in base, f"sumiu do menu: {rotulo}"
+
+
+def test_fontes_e_uso_sairam_do_menu_e_moram_na_administracao():
+    """01/10/2026, pedido do Allan: "Uso do Hub" e "Fontes & Empresas" não
+    ficam no menu superior; chega-se a elas pelas abas da Administração, e
+    cada uma das três telas mostra as três abas."""
+    base = (RAIZ / "templates" / "base.html").read_text(encoding="utf-8")
+    import re
+    links_menu = re.findall(r'<a href="([^"]+)"', base)
+    assert "/fontes" not in links_menu
+    assert "/admin/uso" not in links_menu
+    for tela in ("admin.html", "uso.html", "sources.html"):
+        html = (RAIZ / "templates" / tela).read_text(encoding="utf-8")
+        for rota in ('href="/admin"', 'href="/admin/uso"', 'href="/fontes"'):
+            assert rota in html, f"{tela} sem a aba {rota}"

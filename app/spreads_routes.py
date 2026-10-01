@@ -183,6 +183,30 @@ def register_spreads_routes(require_user_dep) -> APIRouter:
         return {"series": queries.time_series(db, _validar_classe(classe), codigo=codigo,
                                               filtros=filtros)}
 
+    # DE ONDE VEIO O MOVIMENTO (01/10/2026, pedido do Allan) -- treemap no fim
+    # da Visão Geral. Mesma classe, base, data e recorte do card SPREAD MÉDIO,
+    # e a soma dos blocos bate com a variação dele (ver
+    # queries.atribuicao_variacao).
+    @router.get("/api/spreads/atribuicao")
+    def api_spreads_atribuicao(
+        classe: str, base: str = "WoW", data: str | None = None, inicio: str | None = None,
+        nivel: str = "grupo",
+        setor: list[str] = Query(default=[]), subsetor: list[str] = Query(default=[]),
+        grupo: list[str] = Query(default=[]),
+        user: User | None = Depends(require_user_dep), db: Session = Depends(get_db),
+    ):
+        if nivel not in queries.NIVEIS_ATRIBUICAO:
+            raise HTTPException(
+                status_code=400,
+                detail=f"nivel inválido — use um de {list(queries.NIVEIS_ATRIBUICAO)}",
+            )
+        classe = _validar_classe(classe)
+        return queries.atribuicao_variacao(
+            db, classe, dias_comparacao=_base_em_dias(db, classe, base, data, inicio),
+            data_referencia=_parse_data(data), nivel=nivel,
+            filtros=_filtros(setor, subsetor, grupo),
+        )
+
     # Opções das listas suspensas da segunda linha de filtros (24/09/2026).
     @router.get("/api/spreads/opcoes-filtro")
     def api_spreads_opcoes_filtro(

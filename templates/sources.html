@@ -1,6 +1,16 @@
 {% extends "base.html" %}
 {% block title %}Fontes & Empresas{% endblock %}
 {% block content %}
+{# Aberta pela Administração desde 01/10/2026 (saiu do menu superior). As
+   abas só aparecem para admin: quem não é admin e abrir /fontes pelo
+   endereço não deve ver links que levam a 403. #}
+{% if user and user.role == 'admin' %}
+<div class="admin-abas">
+  <a href="/admin">Usuários e configurações</a>
+  <a href="/admin/uso">Uso do Hub</a>
+  <a href="/fontes" class="on">Fontes &amp; Empresas</a>
+</div>
+{% endif %}
 <h1>Fontes monitoradas</h1>
 <p class="muted">Sites que o robô varre a cada {{ 5 }} minutos. Fontes desabilitadas não são coletadas.</p>
 <table class="table">

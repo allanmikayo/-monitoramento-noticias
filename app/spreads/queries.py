@@ -2060,3 +2060,194 @@ def spread_por_setor(
         "nivel": nivel, "setor": setor, "subsetor": subsetor, "emissor": emissor,
         "linhas": linhas,
     }
+
+
+# ---------------------------------------------------------------------------
+# DE ONDE VEIO O MOVIMENTO (01/10/2026, pedido do Allan)
+# ---------------------------------------------------------------------------
+
+NIVEIS_ATRIBUICAO = ("grupo", "setor", "emissor")
+
+# Quantos papéis a dica de ferramenta mostra por bloco. O resto vira "...".
+TICKERS_NA_DICA = 5
+
+
+def _base_ponderada(linhas: list[tuple]) -> tuple[dict[str, float], dict[str, tuple]]:
+    """Pesos da data na MESMA regra do card SPREAD MÉDIO (`_weighted_avg_spread`).
+
+    `linhas`: [(codigo, spread, estoque, nome, grupo, setor), ...].
+    Se algum papel tem estoque > 0, SÓ esses entram e o peso é estoque/total;
+    sem nenhum estoque na data, todos entram com peso igual. Devolve
+    ({codigo: peso}, {codigo: linha}). Usar a mesma regra do card é o que faz
+    a soma das contribuições bater com a variação do card até a última casa.
+    """
+    por_codigo = {l[0]: l for l in linhas}
+    com_estoque = {c: l for c, l in por_codigo.items() if l[2] is not None and l[2] > 0}
+    if com_estoque:
+        total = sum(l[2] for l in com_estoque.values())
+        return {c: l[2] / total for c, l in com_estoque.items()}, por_codigo
+    n = len(por_codigo)
+    return ({c: 1 / n for c in por_codigo} if n else {}), por_codigo
+
+
+def atribuicao_variacao(
+    db: Session, classe: str, dias_comparacao: int = 5,
+    data_referencia: date | None = None, nivel: str = "grupo",
+    filtros: Filtros | None = None,
+) -> dict:
+    """Quanto da variação do spread médio veio de cada grupo / setor / emissor.
+
+    O spread médio é S = soma(w_i * s_i), w_i = fatia do estoque do papel i.
+    Entre a data de comparação (0) e a data analisada (1), cada papel
+    contribui com um destes termos -- e a soma de TODOS é exatamente S1 - S0
+    (porque os pesos somam 1 nas duas datas):
+
+      está nas duas datas   repricing  w1 * (s1 - s0)
+                            peso       (w1 - w0) * (s0 - S0)
+      entrou na base                   w1 * (s1 - S0)
+      saiu da base                     -w0 * (s0 - S0)
+
+    Repricing + peso ficam no bloco do grupo do papel. Entradas e saídas
+    viram dois blocos próprios ("Entradas na base", "Saídas da base"):
+    um papel que vence ou estreia move a média sem que ninguém tenha
+    reprecificado, e misturá-lo no grupo faria "a Aegea explica 30%" querer
+    dizer outra coisa.
+
+    O efeito peso é medido contra S0, e não contra zero, de propósito: um
+    papel que só ganhou fatia do estoque só puxa a média se estiver acima
+    (ou abaixo) dela. Contra zero, todo ganho de peso pareceria abertura.
+
+    "Entrou"/"saiu" segue a regra do card: um papel com spread nas duas
+    datas mas sem estoque numa delas também conta como entrada/saída (ele
+    não pesava no card naquela data). O campo `motivo` diz qual dos dois.
+    """
+    if nivel not in NIVEIS_ATRIBUICAO:
+        raise ValueError(f"nivel inválido: {nivel}")
+    dates_desc = distinct_dates(db, classe)
+    hoje = _resolve_hoje(dates_desc, data_referencia)
+    vazio = {"data_referencia": hoje.isoformat() if hoje else None,
+             "data_comparacao": None, "nivel": nivel, "spread_inicial": None,
+             "spread_final": None, "variacao_bps": None, "blocos": []}
+    if hoje is None:
+        return vazio
+    anterior = _index_from(dates_desc, hoje, dias_comparacao)
+    if anterior is None:
+        return vazio
+    excluidos = tickers_excluidos_spread(db)
+
+    def _linhas(d: date) -> list[tuple]:
+        q = _aplicar_filtros(
+            db.query(DebentureSpread.codigo, DebentureSpread.spread, DebentureSpread.estoque,
+                     Debenture.nome, Debenture.grupo_economico, Debenture.setor)
+            .join(Debenture, Debenture.codigo == DebentureSpread.codigo)
+            .filter(Debenture.classe == classe, DebentureSpread.data == d,
+                    DebentureSpread.spread.isnot(None)),
+            filtros,
+        )
+        if excluidos:
+            q = q.filter(DebentureSpread.codigo.notin_(excluidos))
+        return q.all()
+
+    w0, l0 = _base_ponderada(_linhas(anterior))
+    w1, l1 = _base_ponderada(_linhas(hoje))
+    if not w0 or not w1:
+        return vazio
+    s0_medio = sum(w * l0[c][1] for c, w in w0.items())
+    s1_medio = sum(w * l1[c][1] for c, w in w1.items())
+
+    def _rotulo(linha: tuple) -> tuple[str, bool]:
+        """(rótulo do bloco, caiu no nome do emissor por falta de grupo)."""
+        _c, _s, _e, nome, grupo, setor = linha
+        if nivel == "setor":
+            return setor or SEM_CLASSIFICACAO, False
+        if nivel == "grupo" and grupo:
+            return grupo, False
+        # Papel sem grupo cadastrado fica com o nome do emissor, em vez de ir
+        # todo para um bloco "Sem classificação" que juntaria dezenas de
+        # empresas sem relação e pareceria um "grupo" grande.
+        return nome or SEM_CLASSIFICACAO, nivel == "grupo"
+
+    blocos: dict[str, dict] = {}
+
+    def _bloco(rotulo: str, tipo: str) -> dict:
+        return blocos.setdefault(rotulo, {
+            "rotulo": rotulo, "tipo": tipo, "contribuicao": 0.0, "repricing": 0.0,
+            "peso": 0.0, "sem_grupo": False, "tickers": [],
+        })
+
+    for codigo in w0.keys() | w1.keys():
+        if codigo in w0 and codigo in w1:
+            linha0, linha1 = l0[codigo], l1[codigo]
+            rep = w1[codigo] * (linha1[1] - linha0[1])
+            pes = (w1[codigo] - w0[codigo]) * (linha0[1] - s0_medio)
+            rotulo, sem_grupo = _rotulo(linha1)
+            b = _bloco(rotulo, "grupo")
+            b["sem_grupo"] = b["sem_grupo"] or sem_grupo
+            b["repricing"] += rep
+            b["peso"] += pes
+            b["contribuicao"] += rep + pes
+            b["tickers"].append({
+                "codigo": codigo, "emissor": linha1[3], "spread": linha1[1],
+                "variacao_bps": linha1[1] - linha0[1], "estoque": linha1[2],
+                "contribuicao": rep + pes,
+            })
+        elif codigo in w1:
+            linha1 = l1[codigo]
+            contrib = w1[codigo] * (linha1[1] - s0_medio)
+            b = _bloco("Entradas na base", "entrada")
+            b["contribuicao"] += contrib
+            b["tickers"].append({
+                "codigo": codigo, "emissor": linha1[3], "spread": linha1[1],
+                "variacao_bps": None, "estoque": linha1[2], "contribuicao": contrib,
+                "motivo": "sem estoque na data inicial" if codigo in l0 else "sem spread na data inicial",
+            })
+        else:
+            linha0 = l0[codigo]
+            contrib = -w0[codigo] * (linha0[1] - s0_medio)
+            b = _bloco("Saídas da base", "saida")
+            b["contribuicao"] += contrib
+            b["tickers"].append({
+                "codigo": codigo, "emissor": linha0[3], "spread": linha0[1],
+                "variacao_bps": None, "estoque": linha0[2], "contribuicao": contrib,
+                "motivo": "sem estoque na data analisada" if codigo in l1 else "sem spread na data analisada",
+            })
+
+    variacao = s1_medio - s0_medio
+
+    def _r(v, casas=2):
+        return round(v, casas) if v is not None else None
+
+    saida = []
+    for b in blocos.values():
+        tickers = sorted(b["tickers"], key=lambda t: -abs(t["contribuicao"]))
+        saida.append({
+            "rotulo": b["rotulo"], "tipo": b["tipo"], "sem_grupo": b["sem_grupo"],
+            "contribuicao_bps": _r(b["contribuicao"], 3),
+            "repricing_bps": _r(b["repricing"], 3) if b["tipo"] == "grupo" else None,
+            "peso_bps": _r(b["peso"], 3) if b["tipo"] == "grupo" else None,
+            # % do movimento LÍQUIDO (a variação do card). Com variação ~0 o
+            # percentual explode e não quer dizer nada -- vai como None.
+            "pct_variacao": (_r(100 * b["contribuicao"] / variacao, 1)
+                             if abs(variacao) >= 0.05 else None),
+            "n_tickers": len(tickers),
+            "tickers": [
+                {**t, "spread": _r(t["spread"], 1), "variacao_bps": _r(t["variacao_bps"], 1),
+                 "estoque": _r(t["estoque"], 1), "contribuicao": _r(t["contribuicao"], 3)}
+                for t in tickers[:TICKERS_NA_DICA]
+            ],
+        })
+    saida.sort(key=lambda b: -abs(b["contribuicao_bps"]))
+
+    soma = lambda f: _r(sum(b["contribuicao_bps"] for b in saida if f(b)), 2)
+    return {
+        "data_referencia": hoje.isoformat(),
+        "data_comparacao": anterior.isoformat(),
+        "nivel": nivel,
+        "spread_inicial": _r(s0_medio, 1),
+        "spread_final": _r(s1_medio, 1),
+        "variacao_bps": _r(variacao, 2),
+        "total_abriu_bps": soma(lambda b: b["tipo"] == "grupo" and b["contribuicao_bps"] > 0),
+        "total_fechou_bps": soma(lambda b: b["tipo"] == "grupo" and b["contribuicao_bps"] < 0),
+        "composicao_bps": soma(lambda b: b["tipo"] != "grupo"),
+        "blocos": saida,
+    }
