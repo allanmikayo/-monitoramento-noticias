@@ -2312,7 +2312,10 @@
   // só quando há poucos pontos na tela -- com centenas, vira borrão.
   // ==================================================================
   const PALETA_SETOR = ["#FF6200", "#1F4E79", "#2A9D8F", "#7B3FA0", "#C0392B", "#B8860B",
-                        "#3A7D44", "#0B7285", "#8D5524", "#D6336C", "#4C6EF5", "#5C6B73", "#868E96"];
+                        "#3A7D44", "#0B7285", "#8D5524", "#D6336C", "#4C6EF5", "#5C6B73"];
+  // Restos de classificação ficam em cinza: não disputam atenção com setor
+  // de verdade.
+  const COR_NEUTRA_SETOR = { "Sem classificação": "#9AA0A6", "Outros": "#B8BEC4" };
   const ROTULO_NIVEL_DISP = { ativo: "Ativo", emissor: "Emissor", grupo: "Grupo Econômico",
                               setor: "Setor", subsetor: "Subsetor" };
   const MAX_ROTULOS_DISP = 25;
@@ -2357,7 +2360,8 @@
     // Cores novas vão para os setores ainda sem cor, na ordem de estoque.
     setores.forEach((s) => {
       if (!disp.corSetor.has(s.setor)) {
-        disp.corSetor.set(s.setor, PALETA_SETOR[disp.corSetor.size % PALETA_SETOR.length]);
+        const usadas = [...disp.corSetor.keys()].filter((k) => !COR_NEUTRA_SETOR[k]).length;
+        disp.corSetor.set(s.setor, COR_NEUTRA_SETOR[s.setor] || PALETA_SETOR[usadas % PALETA_SETOR.length]);
       }
       s.cor = disp.corSetor.get(s.setor);
       s.itens = [...s.itens.values()].sort((a, b) => b.estoque - a.estoque);
@@ -2455,12 +2459,28 @@
       ctx.font = `11px ${Chart.defaults.font.family}`;
       ctx.fillStyle = "#333";
       ctx.textBaseline = "middle";
+      // Cada nome tenta direita, esquerda, acima e abaixo do ponto e fica na
+      // primeira posição livre (sem encostar noutro nome nem sair da área).
+      // Sem posição livre, não escreve -- a dica do mouse continua lá.
+      const ocupados = [];
+      const livre = (r) => r.x0 >= chartArea.left && r.x1 <= chartArea.right
+        && r.y0 >= chartArea.top && r.y1 <= chartArea.bottom
+        && ocupados.every((o) => r.x1 < o.x0 || r.x0 > o.x1 || r.y1 < o.y0 || r.y0 > o.y1);
+      visiveis.sort((a, b) => (b[1].p.estoque || 0) - (a[1].p.estoque || 0));
       visiveis.forEach(([el, d]) => {
         const nome = d.p.rotulo.length > 26 ? d.p.rotulo.slice(0, 25) + "…" : d.p.rotulo;
-        const largura = ctx.measureText(nome).width;
-        const direita = el.x + 9 + largura < chartArea.right;
-        ctx.textAlign = direita ? "left" : "right";
-        ctx.fillText(nome, el.x + (direita ? 9 : -9), el.y);
+        const w = ctx.measureText(nome).width, h = 12, g = 9;
+        const opcoes = [
+          { x: el.x + g, y: el.y, a: "left", r: { x0: el.x + g, x1: el.x + g + w, y0: el.y - h / 2, y1: el.y + h / 2 } },
+          { x: el.x - g, y: el.y, a: "right", r: { x0: el.x - g - w, x1: el.x - g, y0: el.y - h / 2, y1: el.y + h / 2 } },
+          { x: el.x, y: el.y - 13, a: "center", r: { x0: el.x - w / 2, x1: el.x + w / 2, y0: el.y - 19, y1: el.y - 7 } },
+          { x: el.x, y: el.y + 13, a: "center", r: { x0: el.x - w / 2, x1: el.x + w / 2, y0: el.y + 7, y1: el.y + 19 } },
+        ];
+        const pos = opcoes.find((o) => livre(o.r));
+        if (!pos) return;
+        ocupados.push(pos.r);
+        ctx.textAlign = pos.a;
+        ctx.fillText(nome, pos.x, pos.y);
       });
       ctx.restore();
     },
@@ -2496,9 +2516,11 @@
         interaction: { mode: "nearest", intersect: true },
         layout: { padding: { right: 8, top: 6 } },
         scales: {
-          x: { title: { display: true, text: "Duration (anos)" }, grid: { color: PADRAO_GRAFICO.GRADE },
+          // Folga nas pontas para nenhum ponto ficar cortado no eixo; só a
+          // grade horizontal, no padrão dos painéis do time.
+          x: { grace: "6%", title: { display: true, text: "Duration (anos)" }, grid: { display: false },
                ticks: { callback: (v) => fmtDisp(v, 1) } },
-          y: { title: { display: true, text: medio ? "Spread médio (bps)" : "Mediana do spread (bps)" },
+          y: { grace: "8%", title: { display: true, text: medio ? "Spread médio (bps)" : "Mediana do spread (bps)" },
                grid: { color: PADRAO_GRAFICO.GRADE } },
         },
         plugins: {
