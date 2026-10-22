@@ -308,12 +308,12 @@ def register_spreads_routes(require_user_dep) -> APIRouter:
     def api_spreads_desagios(
         classe: str, data: str | None = None,
         setor: list[str] = Query(default=[]), subsetor: list[str] = Query(default=[]),
-        grupo: list[str] = Query(default=[]),
+        grupo: list[str] = Query(default=[]), so_precificados: bool = False,
         user: User | None = Depends(require_user_dep), db: Session = Depends(get_db),
     ):
         return queries.maiores_desagios(
             db, _validar_classe(classe), data_referencia=_parse_data(data),
-            filtros=_filtros(setor, subsetor, grupo))
+            filtros=_filtros(setor, subsetor, grupo), so_precificados=so_precificados)
 
     # Dispersão de aberturas/fechamentos por duration (21/09/2026) -- ao lado
     # do gráfico de composição na Visão Geral, sobre a MESMA base (ver

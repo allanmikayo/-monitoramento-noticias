@@ -831,7 +831,7 @@ def variacao_por_duration(
 
 def maiores_desagios(
     db: Session, classe: str, data_referencia: date | None = None, top_n: int = 15,
-    filtros: Filtros | None = None,
+    filtros: Filtros | None = None, so_precificados: bool = False,
 ) -> dict:
     """Os papéis negociando mais abaixo do par -- menor % do PU par na
     precificação ANBIMA da data analisada (pedido do Allan, 21/09/2026: "deixar
@@ -853,7 +853,7 @@ def maiores_desagios(
         return vazio
     q = _aplicar_filtros(
         db.query(DebentureSpread.codigo, Debenture.nome, DebentureSpread.pct_pu_par,
-                 DebentureSpread.spread, DebentureSpread.duration)
+                 DebentureSpread.spread, DebentureSpread.duration, DebentureSpread.pu)
         .join(Debenture, Debenture.codigo == DebentureSpread.codigo)
         .filter(Debenture.classe == classe, DebentureSpread.data == hoje,
                 DebentureSpread.pct_pu_par.isnot(None)),
@@ -862,14 +862,19 @@ def maiores_desagios(
     excluidos = tickers_excluidos_spread(db)
     if excluidos:
         q = q.filter(DebentureSpread.codigo.notin_(excluidos))
+    # "Só precificados" (22/10/2026): mesma regra PRECIFICADO das contas de
+    # spread. Sem o filtro, o papel fora dela vem marcado (`precificado`).
+    if so_precificados:
+        q = q.filter(PRECIFICADO)
     linhas = q.order_by(DebentureSpread.pct_pu_par.asc()).limit(top_n).all()
     return {
         "data_referencia": hoje.isoformat(),
         "papeis": [
             {"codigo": c, "emissor": nome, "pct_pu_par": round(pu, 2),
              "spread": round(sp, 1) if sp is not None else None,
-             "duration": round(du, 2) if du is not None else None}
-            for c, nome, pu, sp, du in linhas
+             "duration": round(du, 2) if du is not None else None,
+             "precificado": sp is not None and du is not None and pu_abs is not None}
+            for c, nome, pu, sp, du, pu_abs in linhas
         ],
     }
 

@@ -71,3 +71,15 @@ def test_detalhes_e_setor_seguem_a_mesma_regra():
     assert [r["codigo"] for r in queries.detalhes_rows(db, IPCA, D1)["rows"]] == ["A", "B", "C"]
     [linha] = queries.spread_por_setor(db, IPCA, dias_comparacao=1, nivel="setor")["linhas"]
     assert linha["n_ativos"] == 3
+
+
+def test_desagios_marca_e_filtra_nao_precificado():
+    db = _banco()
+    db.add(Debenture(codigo="SEMTAXA", nome="EMISSOR SEMTAXA", classe=IPCA))
+    db.add(DebentureSpread(codigo="SEMTAXA", data=D1, spread=None, pct_pu_par=40.0, pu=400.0))
+    db.commit()
+    todos = queries.maiores_desagios(db, IPCA)["papeis"]
+    assert todos[0]["codigo"] == "SEMTAXA" and todos[0]["precificado"] is False
+    so = queries.maiores_desagios(db, IPCA, so_precificados=True)["papeis"]
+    assert "SEMTAXA" not in [p["codigo"] for p in so]
+    assert all(p["precificado"] for p in so)

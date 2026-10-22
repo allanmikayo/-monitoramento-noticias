@@ -616,3 +616,12 @@ h3.bloco-noticias:first-of-type { margin-top: 10px; }
 .treemap-dica th:first-child, .treemap-dica td:first-child { text-align: left; padding-left: 0; }
 .treemap-dica .mais { color: var(--muted); text-align: left; }
 #atribuicao-card { position: relative; }
+
+/* Série do papel aberta DENTRO da tabela, logo abaixo da linha clicada
+   (22/10/2026). A linha clicada fica marcada enquanto a série está aberta. */
+tr.linha-aberta td { background: #fff3ea; }
+tr.linha-serie > td { padding: 6px 0 10px; background: #fafafa; }
+tr.linha-serie .chart-card { margin: 0; box-shadow: none; }
+/* Números da tabela de setor não quebram em duas linhas quando o rótulo é
+   um nome de emissor longo. */
+#tabela-setor td:not(.col-texto) { white-space: nowrap; }

@@ -256,7 +256,7 @@
    os comprimentos serem comparáveis entre si. #}
 <div class="chart-card" style="margin-bottom:16px;">
   <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;">
-    <h2 style="margin:0;">Spread por Setor, Subsetor e Grupo Econômico</h2>
+    <h2 style="margin:0;">Spread por Setor, Subsetor e Emissor</h2>
     <span class="muted small" id="setor-trilha"></span>
   </div>
   <p class="muted small" style="margin:2px 0 10px;" id="setor-sub">bps, ponderado por estoque · clique numa linha para abrir o nível seguinte</p>
@@ -285,7 +285,13 @@
    tabela é o lugar de LER os nomes, não de revê-los. #}
 <div class="emissor-duplo" style="margin-bottom:16px;">
   <div class="chart-card">
-    <h2 style="margin:0;" id="titulo-desagios">Maiores Deságios</h2>
+    <div class="titulo-com-acao" style="margin-bottom:2px;">
+      <h2 style="margin:0;" id="titulo-desagios">Maiores Deságios</h2>
+      <div class="window-tabs" id="desagios-tabs">
+        <button data-modo="todos" class="win-btn active">Todos</button>
+        <button data-modo="precificados" class="win-btn" title="Só papéis precificados pela Anbima (entram nas contas de spread)">Só precificados</button>
+      </div>
+    </div>
     <p class="muted small" style="margin:2px 0 8px;">% do PU par · os 15 papéis mais abaixo do par, do maior deságio para o menor · clique numa barra para ver a série</p>
     <div style="position:relative;height:372px;">
       <canvas id="chart-desagios"></canvas>

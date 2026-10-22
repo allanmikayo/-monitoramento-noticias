@@ -356,7 +356,7 @@ def test_visao_geral_tem_o_que_ficou(cliente):
         # Textos revistos em 22/10/2026 (pedido do Allan) + card de mediana.
         "SPREAD MÉDIO", "MEDIANA DO SPREAD", "DURATION", "ATIVOS", "ESTOQUE",
         "precificados pela Anbima", "Evolução do Spread Médio", "chart-composicao",
-        "chart-dispersao", "Spread por Setor, Subsetor e Grupo Econômico", "Média 3M",
+        "chart-dispersao", "Spread por Setor, Subsetor e Emissor", "desagios-tabs", "Média 3M",
         "chart-desagios", "Decomposição do Movimento do Spread",
         "Top 10 Aberturas", 'data-lado="fechamentos"', "barra-fixa",
     ):

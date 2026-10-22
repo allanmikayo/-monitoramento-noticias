@@ -314,6 +314,7 @@
 
   function renderMoversTable(tableId, rows, cellClass) {
     const tbody = document.querySelector(`#${tableId} tbody`);
+    if (tbody.contains(drilldownWrap)) recolherDrilldown();
     tbody.innerHTML = "";
     if (rows.length === 0) {
       tbody.innerHTML = '<tr><td colspan="4" class="muted">Sem dado suficiente para esse período ainda.</td></tr>';
@@ -329,7 +330,7 @@
         <td>${num1(r.spread)}</td>
         <td class="${cellClass}">${fmtBps(r.variacao_bps)}</td>
       `;
-      tr.addEventListener("click", () => openDrilldown(r.codigo, r.nome));
+      tr.addEventListener("click", () => openDrilldown(r.codigo, r.nome, tr));
       tbody.appendChild(tr);
     });
   }
@@ -465,6 +466,7 @@
 
     const tbody = document.querySelector("#tabela-setor tbody");
     const vazio = document.getElementById("setor-vazio");
+    if (tbody.contains(drilldownWrap)) recolherDrilldown();
     tbody.innerHTML = "";
     const linhas = data.linhas || [];
     vazio.style.display = linhas.length ? "none" : "";
@@ -514,15 +516,57 @@
         if (setorNivel === "setor") { setorAtual = l.rotulo; registrarUso("setor", l.rotulo); irParaNivel("subsetor"); }
         else if (setorNivel === "subsetor") { subsetorAtual = l.rotulo; registrarUso("filtro", "Subsetor: " + l.rotulo); irParaNivel("emissor"); }
         else if (setorNivel === "emissor") { emissorAtual = l.rotulo; registrarUso("emissor", l.rotulo); irParaNivel("ticker"); }
-        else { openDrilldown(l.rotulo, l.nome); }
+        else { openDrilldown(l.rotulo, l.nome, tr); }
       });
       tbody.appendChild(tr);
     });
   }
 
-  async function openDrilldown(codigo, nome) {
+  // SÉRIE DO PAPEL PERTO DO CLIQUE (22/10/2026, pedido do Allan). Antes o
+  // card da série abria no fim da página, longe de onde se clicou. Agora:
+  //  - clique numa LINHA de tabela (ticker da tabela de setor, Top 10):
+  //    a série abre numa linha logo abaixo dela, dentro da própria tabela;
+  //    clicar de novo no mesmo papel fecha;
+  //  - clique num GRÁFICO (dispersão, deságios): o card vai para logo
+  //    abaixo do bloco do gráfico.
+  // `casaDrilldown` guarda o lugar original do card para ele voltar antes
+  // de qualquer tabela ser redesenhada (senão some junto com o tbody).
+  const casaDrilldown = document.createComment("casa do drill-down");
+  drilldownWrap.before(casaDrilldown);
+
+  function recolherDrilldown() {
+    drilldownWrap.style.display = "none";
+    casaDrilldown.after(drilldownWrap);
+    document.querySelectorAll("tr.linha-serie").forEach((l) => l.remove());
+    document.querySelectorAll("tr.linha-aberta").forEach((l) => l.classList.remove("linha-aberta"));
+    destroyChart("drilldown");
+    currentDrilldownCodigo = null;
+  }
+
+  function posicionarDrilldown(ancora) {
+    if (ancora && ancora.tagName === "TR") {
+      const linha = document.createElement("tr");
+      linha.className = "linha-serie";
+      const td = document.createElement("td");
+      td.colSpan = ancora.children.length;
+      linha.appendChild(td);
+      ancora.after(linha);
+      ancora.classList.add("linha-aberta");
+      td.appendChild(drilldownWrap);
+    } else if (ancora) {
+      const bloco = ancora.closest(".emissor-duplo") || ancora.closest(".chart-card");
+      (bloco || casaDrilldown).after(drilldownWrap);
+    }
+  }
+
+  async function openDrilldown(codigo, nome, ancora) {
+    // Segundo clique no mesmo papel da mesma linha: fecha.
+    const mesmaLinha = ancora && ancora.tagName === "TR" && ancora.classList.contains("linha-aberta");
+    recolherDrilldown();
+    if (mesmaLinha) return;
     registrarUso("ticker", codigo);
     currentDrilldownCodigo = codigo;
+    posicionarDrilldown(ancora);
     drilldownWrap.style.display = "block";
     document.getElementById("drilldown-titulo").textContent = `${codigo}${nome ? " — " + nome : ""}`;
     drilldownWrap.scrollIntoView({ behavior: "smooth", block: "nearest" });
@@ -554,11 +598,7 @@
     });
   }
 
-  btnFecharDrilldown.addEventListener("click", () => {
-    drilldownWrap.style.display = "none";
-    destroyChart("drilldown");
-    currentDrilldownCodigo = null;
-  });
+  btnFecharDrilldown.addEventListener("click", recolherDrilldown);
 
   // ------------------------------------------------------------------
   // Botão "Detalhes" -- tabela granular (Código+Data) de UM DIA + export
@@ -826,7 +866,10 @@
           },
         },
         plugins: {
+          // Legenda só no modo "Abertura" (22/10/2026): no modo "Spread"
+          // todos os pontos são cinza e a legenda não descrevia nada.
           legend: {
+            display: !porSpread,
             position: "bottom",
             labels: { filter: (item) => !datasets[item.datasetIndex].semLegenda },
           },
@@ -856,7 +899,7 @@
           if (!elementos.length) return;
           const { datasetIndex, index } = elementos[0];
           const p = datasets[datasetIndex].data[index].p;
-          openDrilldown(p.codigo, p.nome);
+          openDrilldown(p.codigo, p.nome, el);
         },
       },
     });
@@ -881,8 +924,23 @@
   // deságio tem a MENOR barra e aparece primeiro, no topo. A linha do par
   // (100%) continua como referência. Nomes alinhados à esquerda.
   // ------------------------------------------------------------------
+  // "Todos" x "Só precificados" (22/10/2026, pedido do Allan). Em "Todos"
+  // o * marca papel com PU publicado mas fora das contas de spread; em "Só
+  // precificados" a lista vem do servidor já sem eles (continua com 15).
+  let desagiosSoPrecificados = false;
+  document.querySelectorAll("#desagios-tabs .win-btn").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      document.querySelectorAll("#desagios-tabs .win-btn").forEach((b) => b.classList.remove("active"));
+      btn.classList.add("active");
+      desagiosSoPrecificados = btn.dataset.modo === "precificados";
+      registrarUso("filtro", "Deságios: " + btn.textContent.trim());
+      loadDesagios();
+    });
+  });
+
   async function loadDesagios() {
     const data = await fetchJSON("/api/spreads/desagios", {
+      so_precificados: desagiosSoPrecificados ? 1 : undefined,
       classe: currentClasse, data: visaoDataInput.value || undefined,
       setor: filtros.setor, subsetor: filtros.subsetor, grupo: filtros.grupo,
     });
@@ -912,9 +970,9 @@
     const rotulo = (p) => {
       const nome = (p.emissor || "").replace(/\s+(S\.?\/?A\.?|LTDA\.?)$/i, "");
       const curto = nome.length > 28 ? nome.slice(0, 27) + "…" : nome;
-      return `${curto} · ${p.codigo}${p.spread === null ? " *" : ""}`;
+      return `${curto} · ${p.codigo}${p.precificado ? "" : " *"}`;
     };
-    const semTaxa = papeis.filter((p) => p.spread === null).length;
+    const semTaxa = papeis.filter((p) => !p.precificado).length;
 
     charts.desagios = new Chart(el.getContext("2d"), {
       type: "bar",
@@ -1001,7 +1059,7 @@
         onClick(evento, elementos) {
           if (!elementos.length) return;
           const p = papeis[elementos[0].index];
-          openDrilldown(p.codigo, p.emissor);
+          openDrilldown(p.codigo, p.emissor, el);
         },
       },
     });
@@ -1009,7 +1067,7 @@
     // ressalvas de base nesta página.
     escreverFonte("fonte-desagios",
       semTaxa
-        ? "* papel com PU publicado e sem taxa indicativa na data — fica fora das contas de spread. "
+        ? "* papel não precificado pela Anbima na data (PU publicado, sem taxa indicativa) — fica fora das contas de spread. "
           + "Fonte: Anbima e Itaú BBA"
         : "Fonte: Anbima e Itaú BBA",
       data.data_referencia);
@@ -1326,8 +1384,7 @@
       opcoesFiltro = { setores: [], subsetores: [], grupos: [] };
       atualizarMenus();
       if (barraFiltros2.style.display !== "none") carregarOpcoesFiltro();
-      drilldownWrap.style.display = "none";
-      destroyChart("drilldown");
+      recolherDrilldown();
       reloadAll();
     });
   });
