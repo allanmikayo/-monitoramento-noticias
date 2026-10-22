@@ -620,7 +620,7 @@ h3.bloco-noticias:first-of-type { margin-top: 10px; }
 /* Série do papel aberta DENTRO da tabela, logo abaixo da linha clicada
    (22/10/2026). A linha clicada fica marcada enquanto a série está aberta. */
 tr.linha-aberta td { background: #fff3ea; }
-tr.linha-serie > td { padding: 6px 0 10px; background: #fafafa; }
+tr.linha-serie > td { padding: 6px 0 10px; background: #fafafa; text-align: left; }
 tr.linha-serie .chart-card { margin: 0; box-shadow: none; }
 /* Números da tabela de setor não quebram em duas linhas quando o rótulo é
    um nome de emissor longo. */
