@@ -2318,7 +2318,7 @@
   const COR_NEUTRA_SETOR = { "Sem classificação": "#9AA0A6", "Outros": "#B8BEC4" };
   const ROTULO_NIVEL_DISP = { ativo: "Ativo", emissor: "Emissor", grupo: "Grupo Econômico",
                               setor: "Setor", subsetor: "Subsetor" };
-  const MAX_ROTULOS_DISP = 25;
+  const MAX_ROTULOS_DISP = 40;
   const disp = {
     classe: document.querySelector("#disp-classe-tabs .win-btn.active")?.dataset.classe || "IPCA + Incentivadas",
     metrica: "spread_medio",
