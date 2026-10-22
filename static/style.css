@@ -782,7 +782,7 @@ button.perfil-tag:hover { outline: 1px solid currentColor; }
 #tabela-emissor-tickers .grupo-classe .resumo { font-weight: 400; color: var(--muted); margin-left: 8px; }
 #tabela-emissor-tickers .total-geral td { font-weight: 700; border-top: 2px solid #111; }
 #tabela-emissor-tickers .defasado { color: var(--muted); font-size: 0.72rem; margin-left: 4px; }
-#tabela-emissor-tickers.sem-emissor .col-emissor-perfil { display: none; }
+#tabela-emissor-tickers.sem-emissor th.col-emissor-perfil { display: none; }
 .selo-12431 { font-size: 0.62rem; background: #ececec; border-radius: 3px; padding: 1px 4px; margin-left: 6px; color: #555; }
 @media (max-width: 760px) {
   .perfil-metricas { grid-template-columns: 1fr 1fr; }

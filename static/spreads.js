@@ -1987,7 +1987,8 @@
       span.textContent = s;
       tags.appendChild(span);
     });
-    somaPor("subsetor").forEach((s) => {
+    const setoresMostrados = new Set(somaPor("setor"));
+    somaPor("subsetor").filter((s) => !setoresMostrados.has(s)).forEach((s) => {
       const span = document.createElement("span");
       span.className = "perfil-tag";
       span.textContent = s;
@@ -2124,11 +2125,15 @@
       if (!porClasse.has(c)) porClasse.set(c, []);
       porClasse.get(c).push(t);
     });
-    porClasse.forEach((lista, classe) => {
+    // Colunas visíveis: a de Emissor só existe no perfil de grupo.
+    const nCols = grupo ? 7 : 6;
+    // Mesma ordem das colunas de cima: IPCA+ antes de CDI+, o resto depois.
+    const ordemClasse = (c) => (c === "IPCA + Incentivadas" ? 0 : c === "CDI + Tradicionais" ? 1 : 2);
+    [...porClasse.entries()].sort((a, b) => ordemClasse(a[0]) - ordemClasse(b[0])).forEach(([classe, lista]) => {
       const tot = totalPorClasse[classe] || {};
       const cab = document.createElement("tr");
       cab.className = "grupo-classe";
-      cab.innerHTML = `<td colspan="7">${classe}<span class="resumo">${tot.n_ativos || lista.length} papéis · ${fmtReais(tot.estoque)}</span></td>`;
+      cab.innerHTML = `<td colspan="${nCols}">${classe}<span class="resumo">${tot.n_ativos || lista.length} papéis · ${fmtReais(tot.estoque)}</span></td>`;
       tbody.appendChild(cab);
       lista.sort((a, b) => (a.duration === null) - (b.duration === null) || (a.duration || 0) - (b.duration || 0));
       lista.forEach((t) => {
@@ -2140,7 +2145,7 @@
           ? '<span class="selo-12431" title="Lei 12.431 — incentivada">12.431</span>' : "";
         tr.innerHTML = `
           <td class="col-texto"><strong>${t.codigo}</strong>${defasado}</td>
-          <td class="col-texto col-emissor-perfil">${t.emissor || "—"}</td>
+          ${grupo ? `<td class="col-texto">${t.emissor || "—"}</td>` : ""}
           <td class="col-texto">${t.taxa_emissao || t.indexador || "—"}${selo}</td>
           <td>${t.data_emissao ? fmtData(t.data_emissao) : "—"}</td>
           <td>${num(t.duration, 2)}</td>
@@ -2156,7 +2161,7 @@
       const tr = document.createElement("tr");
       tr.className = "total-geral";
       tr.innerHTML = `
-        <td class="col-texto" colspan="6">Total · ${geral.n_ativos} papéis</td>
+        <td class="col-texto" colspan="${nCols - 1}">Total · ${geral.n_ativos} papéis</td>
         <td>${num(geral.estoque, 1)}</td>
       `;
       tbody.appendChild(tr);
