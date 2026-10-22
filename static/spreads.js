@@ -2384,11 +2384,12 @@
   }
 
   // ORDEM DA LISTA (22/10/2026, pedido do Allan): sempre alfabética, sem
-  // diferenciar acento nem caixa. Só "Sem classificação" e "Outros" vão
-  // para o fim, por serem restos e não setores. As cores e tons continuam
+  // diferenciar acento nem caixa. Só "Sem classificação" vai para o fim
+  // (é a ausência de setor, não um setor) -- mesma regra dos menus de
+  // filtro da Visão Geral. As cores e tons continuam
   // decididos pelo estoque (estruturaDisp) -- a ordem da lista não muda
   // nenhuma cor.
-  const RESTOS_SETOR = new Set(["Sem classificação", "Outros"]);
+  const RESTOS_SETOR = new Set(["Sem classificação"]);
   const alfabetica = (a, b) => a.localeCompare(b, "pt-BR", { sensitivity: "base" });
 
   function desenharListaDisp(setoresPorEstoque) {
