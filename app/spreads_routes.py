@@ -446,7 +446,7 @@ def register_spreads_routes(require_user_dep) -> APIRouter:
     def api_spreads_emissores(
         user: User | None = Depends(require_user_dep), db: Session = Depends(get_db),
     ):
-        return {"emissores": queries.list_emissores(db)}
+        return {"emissores": queries.list_emissores(db), "padrao": queries.emissor_padrao(db)}
 
     # Tela inicial da aba Emissores, antes de selecionar algum emissor
     # (pedido do Allan, 27/07/2026): ranking de diferença B3 vs. Anbima

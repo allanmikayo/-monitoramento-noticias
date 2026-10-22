@@ -132,3 +132,12 @@ def test_perfil_series_media_mediana_e_mercado():
     assert [p["data"] for p in r["mercado"]] == [D0.isoformat(), D1.isoformat()]
     # Papel incompleto (NOVO) não entra nem quando o emissor é pedido.
     assert queries.perfil_series(db, ["EMISSOR NOVO"], IPCA) == {"series": [], "mercado": []}
+
+
+def test_emissor_padrao_e_spread_por_papel():
+    db = _banco()
+    # B tem o maior estoque precificado (300); NOVO (500) não conta.
+    assert queries.emissor_padrao(db) == "EMISSOR B"
+    linhas = {t["codigo"]: t for t in queries.emissor_tickers(db, ["EMISSOR B", "EMISSOR NOVO"])["tickers"]}
+    assert linhas["B"]["spread"] == 200.0
+    assert linhas["NOVO"]["spread"] is None

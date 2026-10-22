@@ -921,6 +921,24 @@ def search_debentures(db: Session, q: str, classe: str | None = None, limit: int
     return [{"codigo": d.codigo, "nome": d.nome, "classe": d.classe} for d in rows]
 
 
+def emissor_padrao(db: Session) -> str | None:
+    """Emissor que a aba Emissor abre selecionado (22/10/2026): o de maior
+    estoque precificado no boletim mais recente, somando as classes."""
+    ultima = db.query(func.max(DebentureSpread.data)).scalar()
+    if ultima is None:
+        return None
+    row = (
+        db.query(Debenture.nome, func.sum(DebentureSpread.estoque).label("total"))
+        .join(Debenture, Debenture.codigo == DebentureSpread.codigo)
+        .filter(DebentureSpread.data == ultima, PRECIFICADO, Debenture.nome.isnot(None),
+                Debenture.classe.in_(CLASSES))
+        .group_by(Debenture.nome)
+        .order_by(func.sum(DebentureSpread.estoque).desc())
+        .first()
+    )
+    return row[0] if row else None
+
+
 def list_emissores(db: Session) -> list[str]:
     """Nomes de emissor distintos (`Debenture.nome`) -- opções do filtro de
     emissor na aba 'Marcação Emissores' (pedido do Allan, 24/07/2026)."""
@@ -1238,6 +1256,12 @@ def emissor_tickers(db: Session, nomes_emissor: list[str]) -> dict:
                 d.indice_emissao, d.percentual_emissao, d.taxa_emissao),
             "duration": round(u.duration, 2) if u and u.duration is not None else None,
             "data_estoque": u.data.isoformat() if u else None,
+            # Spread do último boletim (22/10/2026) -- só se o papel estava
+            # PRECIFICADO nele (spread, PU, % par e duration), a mesma regra
+            # das médias. A tabela do perfil ordena por duration para se ler
+            # a curva do emissor.
+            "spread": (round(u.spread, 1) if u and u.spread is not None and u.pu is not None
+                       and u.pct_pu_par is not None and u.duration is not None else None),
             # Taxonomia (22/10/2026): o cabeçalho do perfil do emissor monta
             # as etiquetas de grupo, setor e subsetor a partir daqui.
             "setor": d.setor,

@@ -1764,30 +1764,26 @@
   const emissorBusca = document.getElementById("emissor-busca");
   const emissorBuscaResultados = document.getElementById("emissor-busca-resultados");
   const emissorRecolher = document.getElementById("emissor-recolher");
-  const emissorVazio = document.getElementById("emissor-vazio");
-  const emissorConteudo = document.getElementById("emissor-conteudo");
 
   // ------------------------------------------------------------------
-  // PERFIL DO EMISSOR (22/10/2026, pedido do Allan). Um perfil por vez: um
-  // emissor, ou um grupo econômico consolidado. `currentEmissores` continua
-  // sendo a lista de nomes que as rotas recebem -- um nome para emissor,
-  // todos os do grupo para grupo -- e `perfilAtual` diz o que se escolheu.
+  // PERFIL DO EMISSOR (22/10/2026; redesenho clean no mesmo dia). Um
+  // perfil por vez: um emissor ou um grupo econômico consolidado.
+  // `currentEmissores` é a lista de nomes que as rotas recebem -- um nome
+  // para emissor, todos os do grupo para grupo.
   // ------------------------------------------------------------------
   let emissoresDisponiveis = [];
   let gruposEconomicos = [];
+  let emissorPadrao = null;
   let currentEmissores = [];
   let perfilAtual = null;   // { tipo: "emissor" | "grupo", nome }
   const CLASSES_EMISSOR = [
-    { classe: "IPCA + Incentivadas", canvas: "chart-emissor-ipca", chave: "emissorIpca", fonte: "fonte-grafico-ipca" },
-    { classe: "CDI + Tradicionais", canvas: "chart-emissor-cdi", chave: "emissorCdi", fonte: "fonte-grafico-cdi" },
+    { classe: "IPCA + Incentivadas", curto: "ipca", canvas: "chart-emissor-ipca", chave: "emissorIpca" },
+    { classe: "CDI + Tradicionais", curto: "cdi", canvas: "chart-emissor-cdi", chave: "emissorCdi" },
   ];
-  // Estado do "Recolher linhas" da tabela de dívidas. Guardado aqui, e não
-  // lido do DOM, para sobreviver ao redesenho da tabela.
   let tickersRecolhidos = false;
   let emissoresCarregados = false;
 
-  // Linha de fonte de cada visual. A data é a DO PRÓPRIO VISUAL, não a do
-  // cabeçalho da página: cada bloco pode se apoiar num dia diferente.
+  // Linha de fonte de cada visual (Visão Geral e Dispersão também usam).
   function escreverFonte(id, texto, iso) {
     const el = document.getElementById(id);
     if (!el) return;
@@ -1799,7 +1795,7 @@
     return v !== null && v !== undefined ? v.toLocaleString("pt-BR", { minimumFractionDigits: 1, maximumFractionDigits: 1 }) : "—";
   }
 
-  // R$ milhões -> "R$ 1,35 bi" / "R$ 640 mi" (mesma regra do card da Visão Geral).
+  // R$ milhões -> "R$ 1,35 bi" / "R$ 640 mi".
   function fmtReais(mi) {
     if (mi === null || mi === undefined) return "—";
     return mi >= 1000
@@ -1838,16 +1834,17 @@
       fetchJSON("/api/spreads/grupos", {}),
     ]);
     emissoresDisponiveis = lista.emissores || [];
+    emissorPadrao = lista.padrao || emissoresDisponiveis[0] || null;
     gruposEconomicos = grupos.grupos || [];
-    // A lista pode ter sido aberta antes de os nomes chegarem.
     if (emissorBuscaResultados.style.display === "block") listarBusca();
+    // A aba nunca abre vazia: o maior emissor por estoque já vem selecionado.
+    if (!perfilAtual && emissorPadrao) abrirPerfil("emissor", emissorPadrao);
   }
 
-  // BUSCA COM TIPO (22/10/2026, pedido do Allan). O seletor ao lado escolhe
-  // o que a lista mostra -- emissores ou grupos econômicos, nunca os dois
-  // juntos. Clicar na caixa já abre a lista inteira, em ordem alfabética;
-  // digitar filtra (sem diferenciar acento), quem começa com o termo
-  // primeiro.
+  // BUSCA COM TIPO: o seletor ao lado escolhe o que a lista mostra --
+  // emissores ou grupos econômicos, nunca os dois juntos. Clicar na caixa
+  // abre a lista inteira em ordem alfabética; digitar filtra (sem acento),
+  // quem começa com o termo primeiro.
   let tipoBusca = "emissor";
   const tipoBuscaTabs = document.querySelectorAll("#perfil-tipo-tabs .win-btn");
 
@@ -1874,6 +1871,7 @@
         div.addEventListener("click", () => {
           emissorBusca.value = "";
           emissorBuscaResultados.style.display = "none";
+          emissorBusca.blur();
           abrirPerfil(tipoBusca, c.nome);
         });
         frag.appendChild(div);
@@ -1917,11 +1915,10 @@
     } else {
       currentEmissores = [nome];
     }
+    if (!currentEmissores.length) return;
     perfilAtual = { tipo, nome };
     registrarUso(tipo === "grupo" ? "grupo" : "emissor", nome);
-    emissorVazio.style.display = currentEmissores.length ? "none" : "block";
-    emissorConteudo.style.display = currentEmissores.length ? "block" : "none";
-    if (currentEmissores.length) reloadEmissor();
+    reloadEmissor();
   }
 
   emissorRecolher.addEventListener("click", () => {
@@ -1929,8 +1926,6 @@
     aplicarRecolhimento();
   });
 
-  // Esconde/mostra as linhas de papel, deixando cabeçalho de classe, totais
-  // por classe e total geral sempre visíveis.
   function aplicarRecolhimento() {
     emissorRecolher.textContent = tickersRecolhidos ? "Expandir linhas" : "Recolher linhas";
     document
@@ -1939,21 +1934,25 @@
   }
 
   async function reloadEmissor() {
-    // Cabeçalho, cards e tabela saem das mesmas duas respostas; os gráficos
-    // vêm em paralelo.
-    const [tabela, cards] = await Promise.all([
+    const [tabela, cards, ...series] = await Promise.all([
       fetchJSON("/api/spreads/emissor", { nome: currentEmissores }),
       fetchJSON("/api/spreads/emissor/cards", { nome: currentEmissores }),
-      loadEmissorCharts(),
+      ...CLASSES_EMISSOR.map((c) => fetchJSON("/api/spreads/emissor/perfil-series",
+                                              { nome: currentEmissores, classe: c.classe })),
     ]);
     renderCabecalhoPerfil(tabela);
-    renderCardsPerfil(tabela, cards);
+    CLASSES_EMISSOR.forEach((c, i) => renderClassePerfil(c, tabela, cards, series[i]));
     renderTabelaEmissor(tabela);
+    const datas = [...(tabela.tickers || []).map((t) => t.data_estoque), ...(cards.classes || []).map((c) => c.data)]
+      .filter(Boolean).sort();
+    escreverFonte("fonte-perfil",
+      "Spread médio ponderado por estoque; mediana sem peso. Fonte: Anbima, Debentures.com e Itaú BBA",
+      datas[datas.length - 1]);
   }
 
   // ------------------------------------------------------------------
-  // CABEÇALHO: tipo, grupo econômico, setores e subsetores (do maior
-  // estoque para o menor), nome, e uma linha com CNPJ e contagem de papéis.
+  // 1. QUEM É: tipo, grupo (atalho para o perfil do grupo), setor e
+  // subsetor; nome; uma linha com CNPJ, dívida em circulação e papéis.
   // ------------------------------------------------------------------
   function renderCabecalhoPerfil(tabela) {
     const tickers = tabela.tickers || [];
@@ -1968,16 +1967,18 @@
     };
     const tags = document.getElementById("perfil-tags");
     tags.innerHTML = "";
-    // Grupo do emissor vira atalho: clicar abre o perfil do grupo inteiro.
     if (!grupo) {
       somaPor("grupo_economico").forEach((g) => {
-        const b = document.createElement("button");
-        b.type = "button";
-        b.className = "perfil-tag grupo";
-        b.title = "Abrir o perfil do grupo econômico";
-        b.textContent = `Grupo ${g}`;
-        if (gruposEconomicos.some((x) => x.grupo === g)) b.addEventListener("click", () => abrirPerfil("grupo", g));
-        tags.appendChild(b);
+        const temPerfil = gruposEconomicos.some((x) => x.grupo === g);
+        const el = document.createElement(temPerfil ? "button" : "span");
+        el.className = "perfil-tag grupo";
+        el.textContent = `Grupo ${g}`;
+        if (temPerfil) {
+          el.type = "button";
+          el.title = "Abrir o perfil do grupo econômico";
+          el.addEventListener("click", () => abrirPerfil("grupo", g));
+        }
+        tags.appendChild(el);
       });
     }
     somaPor("setor").forEach((s) => {
@@ -1993,181 +1994,93 @@
       tags.appendChild(span);
     });
 
-    const porClasse = (c) => tickers.filter((t) => t.classe === c).length;
-    const nIpca = porClasse("IPCA + Incentivadas"), nCdi = porClasse("CDI + Tradicionais");
-    const nOutros = tickers.length - nIpca - nCdi;
-    const partes = [`${tickers.length} debênture${tickers.length === 1 ? "" : "s"}`
-      + ` (${nIpca} IPCA+ Incentivadas, ${nCdi} CDI+ Tradicionais${nOutros ? `, ${nOutros} outros indexadores` : ""})`];
+    const geral = tabela.total_geral || {};
+    const totais = Object.fromEntries((tabela.totais || []).map((t) => [t.classe, t]));
+    const outros = (geral.estoque || 0) - ((totais["IPCA + Incentivadas"] || {}).estoque || 0)
+      - ((totais["CDI + Tradicionais"] || {}).estoque || 0);
+    const partes = [];
     if (grupo) {
-      partes.unshift(`${currentEmissores.length} emissor${currentEmissores.length === 1 ? "" : "es"}`);
+      partes.push(`${currentEmissores.length} emissor${currentEmissores.length === 1 ? "" : "es"}`);
     } else {
       const cnpjs = [...new Set(tickers.map((t) => t.cnpj).filter(Boolean))];
-      if (cnpjs.length === 1) partes.unshift(`CNPJ ${fmtCnpj(cnpjs[0])}`);
+      if (cnpjs.length === 1) partes.push(`CNPJ ${fmtCnpj(cnpjs[0])}`);
     }
-    document.getElementById("perfil-linha").textContent = partes.join(" · ");
+    partes.push(`Dívida em circulação <b>${fmtReais(geral.estoque)}</b> em ${geral.n_ativos || 0} `
+      + `debênture${geral.n_ativos === 1 ? "" : "s"}`);
+    if (outros > 0.5) partes.push(`${fmtReais(outros)} em outros indexadores`);
+    document.getElementById("perfil-linha").innerHTML = partes.join('<span class="sep">·</span>');
   }
 
   // ------------------------------------------------------------------
-  // CARDS: estoque total (inclui outros indexadores), volume por classe e
-  // spread médio por classe com a média 3M embaixo. Volume vem da tabela
-  // (último estoque de cada papel); spread vem de /emissor/cards (só papel
-  // precificado, ponderado por estoque) -- mesmo número dos gráficos.
+  // 2. QUANTO PAGA: uma coluna por classe. Spread médio em destaque e, ao
+  // lado, a distância para o mercado da classe (positivo = o emissor paga
+  // MAIS que a média do mercado, em laranja); depois volume e duration; e
+  // a série. O spread de hoje sai de /emissor/cards (mesmo número da Visão
+  // Geral); mercado e mediana, do último ponto da série.
   // ------------------------------------------------------------------
-  function renderCardsPerfil(tabela, cards) {
-    const totais = Object.fromEntries((tabela.totais || []).map((t) => [t.classe, t]));
-    const geral = tabela.total_geral || {};
-    const porClasse = Object.fromEntries((cards.classes || []).map((c) => [c.classe, c]));
-    const ipca = totais["IPCA + Incentivadas"] || {}, cdi = totais["CDI + Tradicionais"] || {};
-    const outros = (geral.estoque || 0) - (ipca.estoque || 0) - (cdi.estoque || 0);
-    const pct = (v) => (geral.estoque ? ` · ${Math.round((100 * (v || 0)) / geral.estoque)}% do total` : "");
-    const card = (rotulo, valor, sub, tag, destaque) => `
-      <div class="kpi-card${destaque ? " kpi-highlight" : ""}">
-        <span class="kpi-label">${rotulo}${tag ? ` <span class="kpi-tag">${tag}</span>` : ""}</span>
-        <span class="kpi-value">${valor}</span>
-        <span class="kpi-sub">${sub}</span>
-      </div>`;
-    const spreadCard = (classe, rotulo) => {
-      const c = porClasse[classe];
-      if (!c || c.spread === null || c.spread === undefined) return card(rotulo, "—", "sem papel precificado nesta classe", "", false);
-      const m3 = c.spread_3m !== null && c.spread_3m !== undefined ? `Média 3M: ${fmtBpsSimples(c.spread_3m)} bps` : "Média 3M: —";
-      return card(rotulo, `${fmtBpsSimples(c.spread)} bps`, m3, "", false);
-    };
-    document.getElementById("perfil-kpis").innerHTML =
-      card("ESTOQUE TOTAL", fmtReais(geral.estoque),
-           outros > 0.5 ? `inclui ${fmtReais(outros)} em outros indexadores` : `${geral.n_ativos || 0} debêntures`, "", true)
-      + card("VOLUME IPCA+ INCENTIVADAS", ipca.estoque ? fmtReais(ipca.estoque) : "—",
-             ipca.n_ativos ? `${ipca.n_ativos} papéis${pct(ipca.estoque)}` : "sem papel nesta classe", "", false)
-      + card("VOLUME CDI+ TRADICIONAIS", cdi.estoque ? fmtReais(cdi.estoque) : "—",
-             cdi.n_ativos ? `${cdi.n_ativos} papéis${pct(cdi.estoque)}` : "sem papel nesta classe", "", false)
-      + spreadCard("IPCA + Incentivadas", "SPREAD MÉDIO IPCA+")
-      + spreadCard("CDI + Tradicionais", "SPREAD MÉDIO CDI+");
-    const datas = [...(tabela.tickers || []).map((t) => t.data_estoque), ...(cards.classes || []).map((c) => c.data)]
-      .filter(Boolean).sort();
-    escreverFonte("fonte-cards", "Spread médio ponderado por estoque. Fonte: Anbima, Debentures.com e Itaú BBA",
-                  datas[datas.length - 1]);
-  }
-
-  function renderTabelaEmissor(data) {
-    const tbody = document.querySelector("#tabela-emissor-tickers tbody");
-    tbody.innerHTML = "";
-    // AGRUPADO POR CLASSE (11/09/2026): o backend já devolve as linhas
-    // ordenadas por classe e os totais por grupo -- aqui só se desenham as
-    // quebras.
-    const totalPorClasse = {};
-    (data.totais || []).forEach((t) => { totalPorClasse[t.classe] = t; });
-    const num = (v, casas) =>
-      v === null || v === undefined ? "—"
-        : v.toLocaleString("pt-BR", { minimumFractionDigits: casas, maximumFractionDigits: casas });
-
-    let classeAtual = null;
-    (data.tickers || []).forEach((t) => {
-      const classe = t.classe || "Sem classificação";
-      if (classe !== classeAtual) {
-        if (classeAtual !== null) tbody.appendChild(linhaTotal(classeAtual));
-        classeAtual = classe;
-        const cab = document.createElement("tr");
-        cab.className = "grupo-classe";
-        cab.innerHTML = `<td colspan="9">${classe}</td>`;
-        tbody.appendChild(cab);
-      }
-      const tr = document.createElement("tr");
-      tr.className = "linha-ticker";
-      tr.innerHTML = `
-        <td><strong>${t.codigo}</strong></td>
-        <td class="col-emissor">${t.emissor || "—"}</td>
-        <td>${t.indexador || "—"}</td>
-        <td>${t.incentivada || "—"}</td>
-        <td>${t.data_emissao ? fmtData(t.data_emissao) : "—"}</td>
-        <td>${t.taxa_emissao || "—"}</td>
-        <td>${num(t.duration, 2)}</td>
-        <td>${num(t.estoque, 1)}</td>
-        <td>${t.data_estoque ? fmtData(t.data_estoque) : "—"}</td>
-      `;
-      tbody.appendChild(tr);
-    });
-    if (classeAtual !== null) tbody.appendChild(linhaTotal(classeAtual));
-
-    // TOTAL GERAL: só estoque e contagem -- spread e duration não se somam
-    // entre classes.
-    const geral = data.total_geral;
-    if (geral && (data.tickers || []).length) {
-      const tr = document.createElement("tr");
-      tr.className = "total-geral";
-      tr.innerHTML = `
-        <td colspan="7" class="col-emissor">Total geral · ${geral.n_ativos} ativo${geral.n_ativos === 1 ? "" : "s"}</td>
-        <td>${num(geral.estoque, 1)}</td>
-        <td></td>
-      `;
-      tbody.appendChild(tr);
-    }
-    // Papéis que saíram da conta (vencidos ou parados) -- ditos, não escondidos.
-    const fora = data.fora_de_circulacao || [];
-    const notaFora = document.getElementById("emissor-fora");
-    notaFora.style.display = fora.length ? "" : "none";
-    notaFora.textContent = fora.length
-      ? `Fora da conta (vencidos ou sem publicação recente na Anbima): `
-        + fora.map((f) => `${f.codigo} (último boletim ${fmtData(f.data_estoque)})`).join(", ")
-      : "";
-    aplicarRecolhimento();
-    const datasTabela = (data.tickers || []).map((t) => t.data_estoque).filter(Boolean).sort();
-    escreverFonte("fonte-tabela", "Fonte: Debentures.com.br, Anbima e Itaú BBA",
-                  datasTabela[datasTabela.length - 1]);
-
-    function linhaTotal(classe) {
-      const t = totalPorClasse[classe] || {};
-      const tr = document.createElement("tr");
-      tr.className = "total-classe";
-      tr.innerHTML = `
-        <td colspan="7" class="col-emissor">
-          Total ${classe} · ${t.n_ativos || 0} ativo${(t.n_ativos || 0) === 1 ? "" : "s"}
-        </td>
-        <td>${num(t.estoque, 1)}</td>
-        <td></td>
-      `;
-      return tr;
-    }
-  }
-
-  // ------------------------------------------------------------------
-  // UM GRÁFICO POR CLASSE (as duas não compartilham referência): spread
-  // médio do perfil (laranja), mediana (preta tracejada) e o spread médio
-  // do mercado da mesma classe (cinza, fino) como régua.
-  // ------------------------------------------------------------------
-  async function loadEmissorCharts() {
-    await Promise.all(CLASSES_EMISSOR.map((c) => desenharGraficoClasse(c)));
-  }
-
-  async function desenharGraficoClasse({ classe, canvas, chave, fonte }) {
-    const data = await fetchJSON("/api/spreads/emissor/perfil-series", { nome: currentEmissores, classe });
-    destroyChart(chave);
+  function renderClassePerfil({ classe, curto, canvas, chave }, tabela, cards, serieResp) {
+    const total = (tabela.totais || []).find((t) => t.classe === classe) || {};
+    const geral = (tabela.total_geral || {}).estoque || 0;
+    const card = (cards.classes || []).find((c) => c.classe === classe) || {};
+    const serie = serieResp.series || [];
+    const metricas = document.getElementById(`metricas-${curto}`);
+    const peso = document.getElementById(`peso-${curto}`);
     const el = document.getElementById(canvas);
-    const caixa = el.parentElement;
-    caixa.querySelector(".muted-msg")?.remove();
-    const serie = data.series || [];
-    if (!serie.length) {
-      el.style.display = "none";
-      const msg = document.createElement("p");
-      msg.className = "muted small muted-msg";
-      msg.textContent = "Sem papel precificado nesta classe.";
-      caixa.appendChild(msg);
-      escreverFonte(fonte, "Fonte: Anbima e Itaú BBA", null);
+    destroyChart(chave);
+
+    peso.textContent = total.n_ativos
+      ? `${total.n_ativos} papéis · ${geral ? Math.round((100 * (total.estoque || 0)) / geral) : 0}% da dívida`
+      : "";
+
+    if (!total.n_ativos) {
+      metricas.innerHTML = `<div class="perfil-classe-vazia" style="grid-column:1/-1;">Sem dívida em ${classe}.</div>`;
+      el.parentElement.style.display = "none";
       return;
     }
-    el.style.display = "";
+    el.parentElement.style.display = "";
+
+    const mercadoPorData = Object.fromEntries((serieResp.mercado || []).map((p) => [p.data, p.spread_medio]));
+    const ultimo = serie[serie.length - 1];
+    const mercadoHoje = ultimo ? mercadoPorData[ultimo.data] : null;
+    const spread = card.spread;
+    const dif = spread !== null && spread !== undefined && mercadoHoje !== null && mercadoHoje !== undefined
+      ? spread - mercadoHoje : null;
+    const sinal = (v) => (v > 0 ? "+" : v < 0 ? "−" : "");
+    const fmtDif = (v) => `${sinal(v)}${fmtBpsSimples(Math.abs(v))} bps`;
+    const m = (rotulo, valor, detalhe, extra) => `
+      <div class="perfil-metrica ${extra || ""}">
+        <span class="rotulo">${rotulo}</span>
+        ${valor}
+        <span class="detalhe">${detalhe}</span>
+      </div>`;
+    metricas.innerHTML =
+      m("Spread médio", `<span class="valor">${spread !== null && spread !== undefined ? fmtBpsSimples(spread) + " bps" : "—"}</span>`,
+        card.spread_3m !== null && card.spread_3m !== undefined ? `média 3M ${fmtBpsSimples(card.spread_3m)} bps` : "média 3M —",
+        "principal")
+      + m("vs. mercado", `<span class="valor${dif > 0.05 ? " acima" : ""}">${dif !== null ? fmtDif(dif) : "—"}</span>`,
+          mercadoHoje !== null && mercadoHoje !== undefined ? `mercado ${fmtBpsSimples(mercadoHoje)} bps` : "")
+      + m("Volume", `<span class="valor">${fmtReais(total.estoque)}</span>`,
+          ultimo ? `mediana ${fmtBpsSimples(ultimo.spread_mediana)} bps` : "")
+      + m("Duration", `<span class="valor">${card.duration !== null && card.duration !== undefined
+            ? card.duration.toLocaleString("pt-BR", { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + " anos" : "—"}</span>`,
+          "ponderada por estoque");
+
+    if (!serie.length) {
+      el.parentElement.style.display = "none";
+      return;
+    }
     const labels = serie.map((p) => p.data);
-    const mercado = Object.fromEntries((data.mercado || []).map((p) => [p.data, p.spread_medio]));
-    escreverFonte(fonte, "Fonte: Anbima e Itaú BBA", labels[labels.length - 1]);
     charts[chave] = new Chart(el.getContext("2d"), {
       type: "line",
       data: {
         labels,
         datasets: [
           { label: "Spread médio", data: serie.map((p) => p.spread_medio), borderColor: "#FF6200",
-            backgroundColor: "rgba(255, 98, 0, 0.08)", fill: true, borderWidth: 2, pointRadius: 0, tension: 0.15 },
+            backgroundColor: "rgba(255, 98, 0, 0.07)", fill: true, borderWidth: 2, pointRadius: 0, tension: 0.15 },
           { label: "Mediana", data: serie.map((p) => p.spread_mediana), borderColor: "#111111",
-            borderDash: [5, 3], borderWidth: 1.5, pointRadius: 0, tension: 0.15, fill: false },
-          { label: "Mercado", data: labels.map((d) => (d in mercado ? mercado[d] : null)), borderColor: "#c4c4c4",
-            borderWidth: 1.2, pointRadius: 0, tension: 0.15, fill: false, spanGaps: true },
+            borderDash: [4, 3], borderWidth: 1.2, pointRadius: 0, tension: 0.15, fill: false },
+          { label: "Mercado", data: labels.map((d) => (d in mercadoPorData ? mercadoPorData[d] : null)),
+            borderColor: "#c4c4c4", borderWidth: 1.2, pointRadius: 0, tension: 0.15, fill: false, spanGaps: true },
         ],
       },
       options: PADRAO_GRAFICO.eixoData(labels, {
@@ -2178,9 +2091,80 @@
           legend: { display: false },
           tooltip: { callbacks: { label: (it) => ` ${it.dataset.label}: ${it.raw === null ? "—" : fmtBpsSimples(it.raw) + " bps"}` } },
         },
-        scales: { y: { title: { display: true, text: "bps" } } },
+        scales: { y: { title: { display: false } } },
       }),
     });
+  }
+
+  // ------------------------------------------------------------------
+  // 3. A CURVA: papel a papel, por classe, do mais curto ao mais longo.
+  // A linha da classe já traz o resumo (papéis e volume); só o total geral
+  // tem linha própria. A coluna Emissor só aparece no perfil de grupo.
+  // Data base aparece só quando o papel está defasado.
+  // ------------------------------------------------------------------
+  function renderTabelaEmissor(data) {
+    const tabela = document.getElementById("tabela-emissor-tickers");
+    const grupo = perfilAtual.tipo === "grupo";
+    tabela.classList.toggle("sem-emissor", !grupo);
+    const tbody = tabela.querySelector("tbody");
+    tbody.innerHTML = "";
+    const totalPorClasse = Object.fromEntries((data.totais || []).map((t) => [t.classe, t]));
+    const num = (v, casas) =>
+      v === null || v === undefined ? "—"
+        : v.toLocaleString("pt-BR", { minimumFractionDigits: casas, maximumFractionDigits: casas });
+    const ultimaData = (data.tickers || []).map((t) => t.data_estoque).filter(Boolean).sort().pop();
+
+    const porClasse = new Map();
+    (data.tickers || []).forEach((t) => {
+      const c = t.classe || "Sem classificação";
+      if (!porClasse.has(c)) porClasse.set(c, []);
+      porClasse.get(c).push(t);
+    });
+    porClasse.forEach((lista, classe) => {
+      const tot = totalPorClasse[classe] || {};
+      const cab = document.createElement("tr");
+      cab.className = "grupo-classe";
+      cab.innerHTML = `<td colspan="7">${classe}<span class="resumo">${tot.n_ativos || lista.length} papéis · ${fmtReais(tot.estoque)}</span></td>`;
+      tbody.appendChild(cab);
+      lista.sort((a, b) => (a.duration === null) - (b.duration === null) || (a.duration || 0) - (b.duration || 0));
+      lista.forEach((t) => {
+        const tr = document.createElement("tr");
+        tr.className = "linha-ticker";
+        const defasado = t.data_estoque && t.data_estoque !== ultimaData
+          ? `<span class="defasado" title="Último boletim do papel">até ${fmtData(t.data_estoque).slice(0, 5)}</span>` : "";
+        const selo = classe !== "IPCA + Incentivadas" && String(t.incentivada || "").toUpperCase().startsWith("S")
+          ? '<span class="selo-12431" title="Lei 12.431 — incentivada">12.431</span>' : "";
+        tr.innerHTML = `
+          <td class="col-texto"><strong>${t.codigo}</strong>${defasado}</td>
+          <td class="col-texto col-emissor-perfil">${t.emissor || "—"}</td>
+          <td class="col-texto">${t.taxa_emissao || t.indexador || "—"}${selo}</td>
+          <td>${t.data_emissao ? fmtData(t.data_emissao) : "—"}</td>
+          <td>${num(t.duration, 2)}</td>
+          <td><strong>${num(t.spread, 1)}</strong></td>
+          <td>${num(t.estoque, 1)}</td>
+        `;
+        tbody.appendChild(tr);
+      });
+    });
+
+    const geral = data.total_geral;
+    if (geral && (data.tickers || []).length) {
+      const tr = document.createElement("tr");
+      tr.className = "total-geral";
+      tr.innerHTML = `
+        <td class="col-texto" colspan="6">Total · ${geral.n_ativos} papéis</td>
+        <td>${num(geral.estoque, 1)}</td>
+      `;
+      tbody.appendChild(tr);
+    }
+    const fora = data.fora_de_circulacao || [];
+    const notaFora = document.getElementById("emissor-fora");
+    notaFora.style.display = fora.length ? "" : "none";
+    notaFora.textContent = fora.length
+      ? `Fora da conta (vencidos ou sem publicação recente na Anbima): `
+        + fora.map((f) => `${f.codigo} (último boletim ${fmtData(f.data_estoque)})`).join(", ")
+      : "";
+    aplicarRecolhimento();
   }
 
   // ==================================================================

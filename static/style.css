@@ -744,3 +744,47 @@ button.perfil-tag:hover { outline: 1px solid currentColor; }
   height: 2px !important; width: 14px !important; vertical-align: 3px !important; border-radius: 0 !important;
 }
 .kpi-sub { font-size: 0.74rem; color: var(--muted); }
+
+/* PERFIL DO EMISSOR, redesenho clean (22/10/2026). */
+.perfil-cabecalho {
+  display: flex; justify-content: space-between; align-items: flex-end; gap: 20px; flex-wrap: wrap;
+  margin: 2px 0 16px; padding-bottom: 14px; border-bottom: 1px solid var(--border);
+}
+.perfil-identidade { min-width: 0; flex: 1 1 420px; }
+.perfil-seletor { display: flex; gap: 8px; align-items: center; flex: 0 1 560px; justify-content: flex-end; }
+.perfil-seletor .perfil-busca { min-width: 260px; flex: 1 1 300px; }
+.perfil-nome { margin: 8px 0 4px; font-size: 1.6rem; line-height: 1.15; letter-spacing: -.01em; }
+.perfil-linha { margin: 0; font-size: 0.86rem; color: #444; }
+.perfil-linha b { color: #111; }
+.perfil-linha .sep { color: #c4c4c4; margin: 0 6px; }
+.perfil-classes { display: grid; grid-template-columns: repeat(auto-fit, minmax(420px, 1fr)); gap: 16px; }
+.perfil-classe { display: flex; flex-direction: column; margin: 0; }
+.perfil-classe-topo { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; }
+.perfil-classe-topo h3 { margin: 0; font-size: 0.95rem; }
+.perfil-peso { font-size: 0.78rem; color: var(--muted); }
+.perfil-metricas {
+  display: grid; grid-template-columns: 1.35fr 1fr 1fr 1fr; gap: 12px;
+  margin: 12px 0 10px; padding-bottom: 12px; border-bottom: 1px solid #f0f0f0;
+}
+.perfil-metrica { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.perfil-metrica .rotulo { font-size: 0.64rem; letter-spacing: .05em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
+.perfil-metrica .valor { font-size: 1.05rem; font-weight: 700; color: #111; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.perfil-metrica.principal .valor { font-size: 1.55rem; line-height: 1.1; }
+.perfil-metrica .detalhe { font-size: 0.72rem; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.perfil-metrica .valor.acima { color: var(--accent); }
+.perfil-classe-vazia { color: var(--muted); font-size: 0.85rem; padding: 28px 0; text-align: center; }
+.perfil-grafico { position: relative; height: 230px; }
+.perfil-legenda { margin: 8px 2px 16px; }
+#tabela-emissor-tickers td { white-space: nowrap; }
+#tabela-emissor-tickers .grupo-classe td {
+  background: #f6f6f6; font-weight: 700; text-align: left; font-size: 0.8rem;
+}
+#tabela-emissor-tickers .grupo-classe .resumo { font-weight: 400; color: var(--muted); margin-left: 8px; }
+#tabela-emissor-tickers .total-geral td { font-weight: 700; border-top: 2px solid #111; }
+#tabela-emissor-tickers .defasado { color: var(--muted); font-size: 0.72rem; margin-left: 4px; }
+#tabela-emissor-tickers.sem-emissor .col-emissor-perfil { display: none; }
+.selo-12431 { font-size: 0.62rem; background: #ececec; border-radius: 3px; padding: 1px 4px; margin-left: 6px; color: #555; }
+@media (max-width: 760px) {
+  .perfil-metricas { grid-template-columns: 1fr 1fr; }
+  .perfil-seletor { flex-wrap: wrap; }
+}

@@ -38,8 +38,8 @@
 
 <div class="window-tabs" id="secao-tabs" style="margin-bottom:14px;">
   <button data-secao="visao-geral" class="win-btn active">Visão Geral</button>
-  <button data-secao="emissores" class="win-btn">Emissores</button>
   <button data-secao="dispersao" class="win-btn">Dispersão</button>
+  <button data-secao="emissores" class="win-btn">Emissor</button>
 </div>
 
 <div id="painel-visao-geral">
@@ -440,99 +440,87 @@
 </div>
 
 <div id="painel-emissores" style="display:none;">
-  {# PERFIL DO EMISSOR (22/10/2026, pedido do Allan, inspirado no painel de
-     FIIs do time). A aba deixou de ser "seleção de vários emissores" e
-     virou o perfil de UM emissor -- ou de um grupo econômico inteiro,
-     consolidado: quem é (grupo, setores), quanto deve em cada classe, a que
-     spread negocia e como isso evoluiu, e a abertura da dívida.
-     O negócio a negócio da B3 saiu desta página (a rota continua de pé). #}
-  <div class="filters-bar">
-    {# O que a busca lista (22/10/2026): emissor OU grupo econômico, nunca
-       os dois misturados -- tira a dúvida de "isso é um emissor ou um
-       grupo?". A lista inteira abre ao clicar na caixa; digitar filtra. #}
-    <div class="window-tabs" id="perfil-tipo-tabs">
-      <button data-tipo="emissor" class="win-btn active">Emissor</button>
-      <button data-tipo="grupo" class="win-btn">Grupo econômico</button>
-    </div>
-    <div class="perfil-busca">
-      <input id="emissor-busca" type="search" placeholder="Buscar emissor…" autocomplete="off"
-             aria-label="Buscar emissor">
-      <div id="emissor-busca-resultados" class="search-results" style="display:none;"></div>
-    </div>
-  </div>
+  {# PERFIL DO EMISSOR -- redesenho "clean" (22/10/2026, pedido do Allan:
+     "pense pela ótica de um credit research buy side que precisa ter essas
+     informações rapidamente e tudo claro").
 
-  <div id="emissor-vazio" class="chart-card perfil-vazio">
-    <h2 style="margin:0 0 4px;">Perfil do emissor</h2>
-    <p class="muted" style="margin:0;">Busque um emissor ou um grupo econômico para ver quem é, quanto deve em
-      cada classe, a que spread negocia e a abertura da dívida.</p>
-  </div>
-
-  <div id="emissor-conteudo" style="display:none;">
-    <div class="perfil-cabecalho">
+     Leitura de cima para baixo, uma pergunta por faixa:
+       1. QUEM É      nome, grupo, setor e o tamanho da dívida, numa linha.
+       2. QUANTO PAGA uma coluna por classe (IPCA+ | CDI+), cada uma com o
+                      spread médio e, ao lado, a distância para o mercado da
+                      classe -- o número que decide "caro ou barato" -- depois
+                      volume, duration e a série no tempo. Classe nunca soma
+                      com classe (NTN-B x DI).
+       3. A CURVA     a abertura da dívida, papel a papel, ordenada por
+                      duration, com o spread de cada um.
+     Sem cartão de instruções: a aba já abre com o emissor de maior estoque.
+     A busca (emissor OU grupo, nunca os dois misturados) fica no canto. #}
+  <div class="perfil-cabecalho">
+    <div class="perfil-identidade">
       <div class="perfil-topo">
         <span class="perfil-tipo" id="perfil-tipo">Emissor</span>
         <span class="perfil-tags" id="perfil-tags"></span>
       </div>
       <h2 class="perfil-nome" id="perfil-nome">—</h2>
-      <p class="muted small perfil-linha" id="perfil-linha">—</p>
+      <p class="perfil-linha" id="perfil-linha">—</p>
     </div>
-
-    {# CINCO CARDS: estoque total, volume por classe e spread médio por
-       classe. Volume e spread de IPCA+ e de CDI+ ficam em cards separados e
-       nunca se somam em spread (referências diferentes: NTN-B e DI); só o
-       estoque, que é saldo em reais, tem total. #}
-    <div class="kpi-row kpi-compacto" id="perfil-kpis"></div>
-    <p class="fonte-visual" id="fonte-cards" style="margin:-4px 0 16px;">Fonte: Anbima, Debentures.com e Itaú BBA</p>
-
-    <div class="emissor-duplo duplo-alinhado" style="margin-bottom:16px;">
-      <div class="chart-card">
-        <h2 style="margin:0;">IPCA + Incentivadas</h2>
-        <p class="muted small" style="margin:2px 0 6px;">bps · spread médio ponderado por estoque e mediana sem peso</p>
-        <div class="treemap-legenda">
-          <span><i style="background:#FF6200;"></i>Spread médio</span>
-          <span><i class="legenda-tracejada"></i>Mediana</span>
-          <span><i style="background:#c4c4c4;"></i>Mercado (spread médio da classe)</span>
-        </div>
-        <div class="perfil-grafico"><canvas id="chart-emissor-ipca"></canvas></div>
-        <p class="fonte-visual" id="fonte-grafico-ipca">Fonte: Anbima e Itaú BBA</p>
+    <div class="perfil-seletor">
+      <div class="window-tabs" id="perfil-tipo-tabs">
+        <button data-tipo="emissor" class="win-btn active">Emissor</button>
+        <button data-tipo="grupo" class="win-btn">Grupo econômico</button>
       </div>
-      <div class="chart-card">
-        <h2 style="margin:0;">CDI + Tradicionais</h2>
-        <p class="muted small" style="margin:2px 0 6px;">bps · spread médio ponderado por estoque e mediana sem peso</p>
-        <div class="treemap-legenda">
-          <span><i style="background:#FF6200;"></i>Spread médio</span>
-          <span><i class="legenda-tracejada"></i>Mediana</span>
-          <span><i style="background:#c4c4c4;"></i>Mercado (spread médio da classe)</span>
-        </div>
-        <div class="perfil-grafico"><canvas id="chart-emissor-cdi"></canvas></div>
-        <p class="fonte-visual" id="fonte-grafico-cdi">Fonte: Anbima e Itaú BBA</p>
+      <div class="perfil-busca">
+        <input id="emissor-busca" type="search" placeholder="Buscar emissor…" autocomplete="off" aria-label="Buscar emissor">
+        <div id="emissor-busca-resultados" class="search-results" style="display:none;"></div>
       </div>
-    </div>
-
-    <div class="chart-card" style="margin-bottom:16px;">
-      <div class="titulo-com-acao">
-        <h2 style="margin:0;" id="emissor-titulo-tabela">Abertura da Dívida</h2>
-        <button type="button" id="emissor-recolher" class="win-btn">Recolher linhas</button>
-      </div>
-      <p class="muted small" style="margin:2px 0 10px;">debêntures em circulação, agrupadas por classe · estoque em R$ milhões</p>
-      <table class="table tabela-emissao" id="tabela-emissor-tickers">
-        <thead><tr>
-          <th>Código</th>
-          <th class="col-emissor">Emissor</th>
-          <th>Indexador</th>
-          <th title="Lei 12.431 — debênture incentivada, isenta de IR para pessoa física">Lei 12.431</th>
-          <th>Data de emissão</th>
-          <th title="Remuneração contratada na emissão — não é a taxa indicativa de hoje">Taxa da emissão</th>
-          <th>Duration (anos)</th>
-          <th>Estoque (R$ mm)</th>
-          <th>Data base</th>
-        </tr></thead>
-        <tbody></tbody>
-      </table>
-      <p class="muted small" id="emissor-fora" style="display:none;margin:6px 0 0;"></p>
-      <p class="fonte-visual" id="fonte-tabela">Fonte: Debentures.com.br, Anbima e Itaú BBA</p>
     </div>
   </div>
+
+  <div class="perfil-classes">
+    <section class="chart-card perfil-classe" id="classe-ipca">
+      <div class="perfil-classe-topo">
+        <h3>IPCA + Incentivadas</h3>
+        <span class="perfil-peso" id="peso-ipca"></span>
+      </div>
+      <div class="perfil-metricas" id="metricas-ipca"></div>
+      <div class="perfil-grafico"><canvas id="chart-emissor-ipca"></canvas></div>
+    </section>
+    <section class="chart-card perfil-classe" id="classe-cdi">
+      <div class="perfil-classe-topo">
+        <h3>CDI + Tradicionais</h3>
+        <span class="perfil-peso" id="peso-cdi"></span>
+      </div>
+      <div class="perfil-metricas" id="metricas-cdi"></div>
+      <div class="perfil-grafico"><canvas id="chart-emissor-cdi"></canvas></div>
+    </section>
+  </div>
+  <div class="treemap-legenda perfil-legenda">
+    <span><i style="background:#FF6200;"></i>Spread médio do emissor (ponderado por estoque)</span>
+    <span><i class="legenda-tracejada"></i>Mediana</span>
+    <span><i style="background:#c4c4c4;"></i>Spread médio do mercado na classe</span>
+  </div>
+
+  <div class="chart-card" style="margin-bottom:12px;">
+    <div class="titulo-com-acao">
+      <h2 style="margin:0;" id="emissor-titulo-tabela">Abertura da Dívida</h2>
+      <button type="button" id="emissor-recolher" class="win-btn">Recolher linhas</button>
+    </div>
+    <p class="muted small" style="margin:2px 0 10px;">por classe, do papel mais curto ao mais longo · spread do último boletim · estoque em R$ milhões</p>
+    <table class="table tabela-casa" id="tabela-emissor-tickers">
+      <thead><tr>
+        <th class="col-texto">Código</th>
+        <th class="col-texto col-emissor-perfil">Emissor</th>
+        <th class="col-texto">Remuneração</th>
+        <th>Emissão</th>
+        <th>Duration (anos)</th>
+        <th>Spread (bps)</th>
+        <th>Estoque (R$ mi)</th>
+      </tr></thead>
+      <tbody></tbody>
+    </table>
+    <p class="muted small" id="emissor-fora" style="display:none;margin:8px 0 0;"></p>
+  </div>
+  <p class="fonte-visual" id="fonte-perfil">Fonte: Anbima, Debentures.com e Itaú BBA</p>
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
