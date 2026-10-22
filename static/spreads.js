@@ -1839,37 +1839,66 @@
     ]);
     emissoresDisponiveis = lista.emissores || [];
     gruposEconomicos = grupos.grupos || [];
+    // A lista pode ter sido aberta antes de os nomes chegarem.
+    if (emissorBuscaResultados.style.display === "block") listarBusca();
   }
 
-  // Busca única: emissores e grupos na mesma lista, cada um com o tipo à
-  // direita. Quem começa com o termo vem antes; depois, ordem alfabética.
-  emissorBusca.addEventListener("input", () => {
+  // BUSCA COM TIPO (22/10/2026, pedido do Allan). O seletor ao lado escolhe
+  // o que a lista mostra -- emissores ou grupos econômicos, nunca os dois
+  // juntos. Clicar na caixa já abre a lista inteira, em ordem alfabética;
+  // digitar filtra (sem diferenciar acento), quem começa com o termo
+  // primeiro.
+  let tipoBusca = "emissor";
+  const tipoBuscaTabs = document.querySelectorAll("#perfil-tipo-tabs .win-btn");
+
+  function listarBusca() {
     const q = semAcento(emissorBusca.value.trim());
-    if (!q) { emissorBuscaResultados.style.display = "none"; return; }
-    const candidatos = [
-      ...gruposEconomicos.map((g) => ({ tipo: "grupo", nome: g.grupo, extra: `${g.n_emissores} emissor${g.n_emissores === 1 ? "" : "es"}` })),
-      ...emissoresDisponiveis.map((n) => ({ tipo: "emissor", nome: n, extra: "" })),
-    ].filter((c) => semAcento(c.nome).includes(q));
-    candidatos.sort((a, b) => (semAcento(b.nome).startsWith(q) - semAcento(a.nome).startsWith(q))
+    const candidatos = tipoBusca === "grupo"
+      ? gruposEconomicos.map((g) => ({ nome: g.grupo, extra: `${g.n_emissores} emissor${g.n_emissores === 1 ? "" : "es"}` }))
+      : emissoresDisponiveis.map((n) => ({ nome: n, extra: "" }));
+    const filtrados = candidatos.filter((c) => !q || semAcento(c.nome).includes(q));
+    filtrados.sort((a, b) => (q ? semAcento(b.nome).startsWith(q) - semAcento(a.nome).startsWith(q) : 0)
       || a.nome.localeCompare(b.nome, "pt-BR", { sensitivity: "base" }));
     emissorBuscaResultados.innerHTML = "";
     if (!candidatos.length) {
+      emissorBuscaResultados.innerHTML = '<div class="search-item muted">Carregando…</div>';
+    } else if (!filtrados.length) {
       emissorBuscaResultados.innerHTML = '<div class="search-item muted">Nada encontrado.</div>';
     } else {
-      candidatos.slice(0, 20).forEach((c) => {
+      const frag = document.createDocumentFragment();
+      filtrados.forEach((c) => {
         const div = document.createElement("div");
         div.className = "search-item";
         div.innerHTML = `<span>${escHtml(c.nome)}</span>`
-          + `<span class="tipo-resultado">${c.tipo === "grupo" ? "Grupo econômico" : "Emissor"}${c.extra ? " · " + c.extra : ""}</span>`;
+          + (c.extra ? `<span class="tipo-resultado">${c.extra}</span>` : "");
         div.addEventListener("click", () => {
           emissorBusca.value = "";
           emissorBuscaResultados.style.display = "none";
-          abrirPerfil(c.tipo, c.nome);
+          abrirPerfil(tipoBusca, c.nome);
         });
-        emissorBuscaResultados.appendChild(div);
+        frag.appendChild(div);
       });
+      emissorBuscaResultados.appendChild(frag);
     }
     emissorBuscaResultados.style.display = "block";
+  }
+
+  emissorBusca.addEventListener("input", listarBusca);
+  emissorBusca.addEventListener("focus", listarBusca);
+  emissorBusca.addEventListener("click", listarBusca);
+
+  tipoBuscaTabs.forEach((btn) => {
+    btn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      tipoBuscaTabs.forEach((b) => b.classList.remove("active"));
+      btn.classList.add("active");
+      tipoBusca = btn.dataset.tipo;
+      const rotulo = tipoBusca === "grupo" ? "grupo econômico" : "emissor";
+      emissorBusca.placeholder = `Buscar ${rotulo}…`;
+      emissorBusca.setAttribute("aria-label", `Buscar ${rotulo}`);
+      emissorBusca.value = "";
+      emissorBusca.focus();   // já abre a lista do tipo novo
+    });
   });
 
   document.addEventListener("click", (e) => {

@@ -447,9 +447,16 @@
      spread negocia e como isso evoluiu, e a abertura da dívida.
      O negócio a negócio da B3 saiu desta página (a rota continua de pé). #}
   <div class="filters-bar">
+    {# O que a busca lista (22/10/2026): emissor OU grupo econômico, nunca
+       os dois misturados -- tira a dúvida de "isso é um emissor ou um
+       grupo?". A lista inteira abre ao clicar na caixa; digitar filtra. #}
+    <div class="window-tabs" id="perfil-tipo-tabs">
+      <button data-tipo="emissor" class="win-btn active">Emissor</button>
+      <button data-tipo="grupo" class="win-btn">Grupo econômico</button>
+    </div>
     <div class="perfil-busca">
-      <input id="emissor-busca" type="search" placeholder="Buscar emissor ou grupo econômico…" autocomplete="off"
-             aria-label="Buscar emissor ou grupo econômico">
+      <input id="emissor-busca" type="search" placeholder="Buscar emissor…" autocomplete="off"
+             aria-label="Buscar emissor">
       <div id="emissor-busca-resultados" class="search-results" style="display:none;"></div>
     </div>
   </div>
