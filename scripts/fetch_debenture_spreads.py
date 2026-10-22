@@ -38,6 +38,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from app.db import Base, SessionLocal, engine, ensure_schema
+from app.models import DebentureCaracteristica
 from app.spreads.fetch import (
     build_session,
     business_days,
@@ -122,6 +123,11 @@ def main() -> None:
         # (22/10/2026): a aba Emissor lista toda a dívida registrada do
         # emissor, não só o que a Anbima precifica.
         try:
+            # Só ESTA tabela, e só se faltar (22/10/2026): `ensure_schema` não
+            # roda DDL na nuvem de propósito (ver app/db.py), mas uma tabela
+            # nova, sem ALTER em tabela existente, não trava ninguém -- e
+            # assim ela aparece sem depender de rodar init_db à mão.
+            DebentureCaracteristica.__table__.create(bind=engine, checkfirst=True)
             caracs = caracs if "caracs" in locals() else fetch_caracs(session)
             n = persist_caracteristicas_completas(db, caracs)
             logger.info("Características completas gravadas: %d debênture(s)", n)
