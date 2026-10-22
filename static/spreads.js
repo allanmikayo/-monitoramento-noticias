@@ -265,6 +265,16 @@
         scales: { y: { title: { display: true, text: "bps" } } },
       }),
     });
+    // Período curto (Personalizado de poucas semanas): uma marca por mês
+    // deixaria o eixo com um rótulo só. Até ~3 meses, marca por dia
+    // ("15-out"), com no máximo 10 rótulos.
+    if (datasIso.length && datasIso.length <= 66) {
+      Object.assign(charts.series.options.scales.x.ticks, {
+        autoSkip: true, maxTicksLimit: 10,
+        callback: (valor, indice) => PADRAO_GRAFICO.diaMes(datasIso[indice]),
+      });
+      charts.series.update("none");
+    }
   }
 
   // ------------------------------------------------------------------
