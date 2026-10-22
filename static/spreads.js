@@ -2383,14 +2383,25 @@
       : v.toLocaleString("pt-BR", { minimumFractionDigits: casas, maximumFractionDigits: casas });
   }
 
-  function desenharListaDisp(setores) {
+  // ORDEM DA LISTA (22/10/2026, pedido do Allan): sempre alfabética, sem
+  // diferenciar acento nem caixa. Só "Sem classificação" e "Outros" vão
+  // para o fim, por serem restos e não setores. As cores e tons continuam
+  // decididos pelo estoque (estruturaDisp) -- a ordem da lista não muda
+  // nenhuma cor.
+  const RESTOS_SETOR = new Set(["Sem classificação", "Outros"]);
+  const alfabetica = (a, b) => a.localeCompare(b, "pt-BR", { sensitivity: "base" });
+
+  function desenharListaDisp(setoresPorEstoque) {
+    const setores = [...setoresPorEstoque].sort((a, b) =>
+      (RESTOS_SETOR.has(a.setor) - RESTOS_SETOR.has(b.setor)) || alfabetica(a.setor, b.setor));
     const lista = document.getElementById("disp-lista");
     const termo = (document.getElementById("disp-busca").value || "").trim().toLowerCase();
     lista.innerHTML = "";
     const comItens = disp.nivel !== "setor";
     setores.forEach((s) => {
       const casaSetor = s.setor.toLowerCase().includes(termo);
-      const itensBusca = termo ? s.itens.filter((it) => it.chave.toLowerCase().includes(termo)) : s.itens;
+      const itensOrdem = [...s.itens].sort((a, b) => alfabetica(a.chave, b.chave));
+      const itensBusca = termo ? itensOrdem.filter((it) => it.chave.toLowerCase().includes(termo)) : itensOrdem;
       if (termo && !casaSetor && !itensBusca.length) return;
       const bloco = document.createElement("div");
       bloco.className = "disp-setor";
@@ -2419,7 +2430,7 @@
       if (aberto) {
         const itens = document.createElement("div");
         itens.className = "disp-itens";
-        (termo && !casaSetor ? itensBusca : s.itens).forEach((it) => {
+        (termo && !casaSetor ? itensBusca : itensOrdem).forEach((it) => {
           const l = document.createElement("div");
           const oculto = disp.itensOcultos.has(it.chave);
           l.className = "disp-linha" + (oculto ? " oculto" : "");

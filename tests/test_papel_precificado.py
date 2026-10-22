@@ -110,3 +110,13 @@ def test_mapa_dispersao_niveis():
     assert setor["spread_medio"] == pytest.approx(150.0, abs=0.1)
     assert setor["spread_mediana"] == 100.0
     assert setor["estoque"] == 500.0
+
+
+def test_opcoes_de_filtro_em_ordem_alfabetica_sem_acento():
+    db = _banco()
+    for cod, setor in (("O1", "Óleo & Gás"), ("T1", "Transportes"), ("E1", "Energia Elétrica")):
+        db.add(Debenture(codigo=cod, nome=f"EMISSOR {cod}", classe=IPCA, setor=setor))
+        db.add(DebentureSpread(codigo=cod, data=D1, spread=50.0, estoque=10.0))
+    db.commit()
+    assert queries.opcoes_filtro(db, IPCA)["setores"] == [
+        "Energia Elétrica", "Óleo & Gás", "Saneamento", "Transportes"]

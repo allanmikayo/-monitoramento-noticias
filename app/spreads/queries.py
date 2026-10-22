@@ -132,6 +132,14 @@ def _aplicar_filtros(q, filtros: Filtros | None):
     return q
 
 
+def _chave_alfabetica(nome: str) -> str:
+    """Ordem alfabética de gente: sem acento e sem caixa ("Óleo & Gás" entre
+    "Mineração" e "Papel", não depois de "Transportes")."""
+    import unicodedata
+    sem_acento = unicodedata.normalize("NFKD", nome or "").encode("ascii", "ignore").decode()
+    return sem_acento.casefold()
+
+
 def opcoes_filtro(db: Session, classe: str) -> dict:
     """Setores, subsetores e grupos que EXISTEM na classe, para as listas
     da segunda linha de filtros.
@@ -154,13 +162,13 @@ def opcoes_filtro(db: Session, classe: str) -> dict:
         subsetores[subsetor or SEM_CLASSIFICACAO] = setor or SEM_CLASSIFICACAO
         if grupo:
             grupos.add(grupo)
-    ordenar = lambda nomes: sorted(nomes, key=lambda x: (x == SEM_CLASSIFICACAO, x.lower()))
+    ordenar = lambda nomes: sorted(nomes, key=lambda x: (x == SEM_CLASSIFICACAO, _chave_alfabetica(x)))
     return {
         "setores": ordenar(setores),
         "subsetores": [{"subsetor": sub, "setor": setores_do}
                        for sub, setores_do in sorted(subsetores.items(),
                                                      key=lambda kv: (kv[0] == SEM_CLASSIFICACAO,
-                                                                     kv[0].lower()))],
+                                                                     _chave_alfabetica(kv[0])))],
         "grupos": ordenar(grupos),
     }
 
