@@ -573,7 +573,7 @@
     }
   }
 
-  async function openDrilldown(codigo, nome, ancora) {
+  async function openDrilldown(codigo, nome, ancora, classe) {
     // Segundo clique no mesmo papel da mesma linha: fecha.
     const mesmaLinha = ancora && ancora.tagName === "TR" && ancora.classList.contains("linha-aberta");
     recolherDrilldown();
@@ -585,7 +585,7 @@
     document.getElementById("drilldown-titulo").textContent = `${codigo}${nome ? " — " + nome : ""}`;
     drilldownWrap.scrollIntoView({ behavior: "smooth", block: "nearest" });
 
-    const { series } = await fetchJSON("/api/spreads/series", { classe: currentClasse, codigo });
+    const { series } = await fetchJSON("/api/spreads/series", { classe: classe || currentClasse, codigo });
     destroyChart("drilldown");
     const ctx = document.getElementById("chart-drilldown").getContext("2d");
     const datasIso = series.map((r) => r.data);
@@ -1812,6 +1812,8 @@
       // painel estava escondido (largura 0) quando os dados chegaram.
       if (secao === "visao-geral") desenharAtribuicao();
       painelEmissores.style.display = secao === "emissores" ? "block" : "none";
+      document.getElementById("painel-dispersao").style.display = secao === "dispersao" ? "block" : "none";
+      if (secao === "dispersao") abrirAbaDispersao();
       if (secao === "emissores" && !emissoresCarregados) {
         carregarListaEmissores();
       }
@@ -2290,5 +2292,384 @@
       `;
       tbody.appendChild(tr);
     });
+  }
+
+  // ==================================================================
+  // ABA "DISPERSÃO" (22/10/2026, pedido do Allan)
+  //
+  // Spread x duration num nível escolhido (ativo, emissor, grupo, setor,
+  // subsetor). Uma classe por vez -- IPCA+ Incentivadas por padrão; as duas
+  // nunca se misturam (referências diferentes, NTN-B x DI).
+  //
+  // COR E TOM. Cada setor tem uma cor; dentro do setor, cada item ganha um
+  // tom dela -- o de maior estoque com a cor cheia, os seguintes clareando.
+  // No nível Ativo o tom é por EMISSOR (os papéis do mesmo emissor ficam
+  // com o mesmo tom). A cor de um setor não muda ao trocar de nível, para o
+  // olho não precisar reaprender a legenda.
+  //
+  // MENOS É MAIS. A lista ao lado é a legenda e o seletor: liga e desliga
+  // setores inteiros ou itens dentro deles. Nome escrito ao lado do ponto
+  // só quando há poucos pontos na tela -- com centenas, vira borrão.
+  // ==================================================================
+  const PALETA_SETOR = ["#FF6200", "#1F4E79", "#2A9D8F", "#7B3FA0", "#C0392B", "#B8860B",
+                        "#3A7D44", "#0B7285", "#8D5524", "#D6336C", "#4C6EF5", "#5C6B73", "#868E96"];
+  const ROTULO_NIVEL_DISP = { ativo: "Ativo", emissor: "Emissor", grupo: "Grupo Econômico",
+                              setor: "Setor", subsetor: "Subsetor" };
+  const MAX_ROTULOS_DISP = 25;
+  const disp = {
+    classe: document.querySelector("#disp-classe-tabs .win-btn.active")?.dataset.classe || "IPCA + Incentivadas",
+    metrica: "spread_medio",
+    nivel: "setor",
+    data: "",                 // vazio = última disponível
+    datas: [],
+    pontos: [],
+    corSetor: new Map(),      // estável por classe
+    setoresOcultos: new Set(),
+    itensOcultos: new Set(),  // rótulo do item (no nível Ativo: emissor)
+    abertos: new Set(),       // setores expandidos na lista
+    carregada: false,
+  };
+
+  function misturarBranco(hex, t) {
+    const n = parseInt(hex.slice(1), 16);
+    const c = (v) => Math.round(v + (255 - v) * t);
+    return `rgb(${c(n >> 16)}, ${c((n >> 8) & 255)}, ${c(n & 255)})`;
+  }
+
+  // Chave do TOM de um ponto: o emissor no nível Ativo, o próprio item nos
+  // outros. É também a chave que a lista liga/desliga.
+  const chaveItem = (p) => (disp.nivel === "ativo" ? (p.emissor || p.rotulo) : p.rotulo);
+
+  // Monta a estrutura setor -> itens, já com cor e tom.
+  function estruturaDisp() {
+    const porSetor = new Map();
+    disp.pontos.forEach((p) => {
+      if (!porSetor.has(p.setor)) porSetor.set(p.setor, { setor: p.setor, estoque: 0, itens: new Map() });
+      const s = porSetor.get(p.setor);
+      s.estoque += p.estoque || 0;
+      const k = chaveItem(p);
+      if (!s.itens.has(k)) s.itens.set(k, { chave: k, estoque: 0, n: 0 });
+      const it = s.itens.get(k);
+      it.estoque += p.estoque || 0;
+      it.n += 1;
+    });
+    const setores = [...porSetor.values()].sort((a, b) => b.estoque - a.estoque);
+    // Cores novas vão para os setores ainda sem cor, na ordem de estoque.
+    setores.forEach((s) => {
+      if (!disp.corSetor.has(s.setor)) {
+        disp.corSetor.set(s.setor, PALETA_SETOR[disp.corSetor.size % PALETA_SETOR.length]);
+      }
+      s.cor = disp.corSetor.get(s.setor);
+      s.itens = [...s.itens.values()].sort((a, b) => b.estoque - a.estoque);
+      const n = s.itens.length;
+      s.itens.forEach((it, i) => {
+        it.cor = disp.nivel === "setor" || n === 1 ? s.cor : misturarBranco(s.cor, (i / (n - 1)) * 0.62);
+      });
+      s.tom = new Map(s.itens.map((it) => [it.chave, it.cor]));
+    });
+    return setores;
+  }
+
+  function pontoVisivel(p) {
+    return !disp.setoresOcultos.has(p.setor) && !disp.itensOcultos.has(chaveItem(p));
+  }
+
+  function fmtDisp(v, casas) {
+    return v === null || v === undefined ? "—"
+      : v.toLocaleString("pt-BR", { minimumFractionDigits: casas, maximumFractionDigits: casas });
+  }
+
+  function desenharListaDisp(setores) {
+    const lista = document.getElementById("disp-lista");
+    const termo = (document.getElementById("disp-busca").value || "").trim().toLowerCase();
+    lista.innerHTML = "";
+    const comItens = disp.nivel !== "setor";
+    setores.forEach((s) => {
+      const casaSetor = s.setor.toLowerCase().includes(termo);
+      const itensBusca = termo ? s.itens.filter((it) => it.chave.toLowerCase().includes(termo)) : s.itens;
+      if (termo && !casaSetor && !itensBusca.length) return;
+      const bloco = document.createElement("div");
+      bloco.className = "disp-setor";
+      const aberto = comItens && (disp.abertos.has(s.setor) || (termo && itensBusca.length && !casaSetor));
+      const nItens = s.itens.length;
+      const linha = document.createElement("div");
+      linha.className = "disp-linha" + (disp.setoresOcultos.has(s.setor) ? " oculto" : "");
+      linha.title = disp.setoresOcultos.has(s.setor) ? "Mostrar o setor" : "Esconder o setor";
+      linha.innerHTML = (comItens
+          ? `<button type="button" class="disp-abrir" aria-expanded="${aberto ? "true" : "false"}" aria-label="Ver itens">▸</button>`
+          : "")
+        + `<span class="disp-cor" style="background:${s.cor}"></span>`
+        + `<span class="disp-nome">${escHtml(s.setor)}</span>`
+        + `<span class="disp-n">${comItens ? nItens : ""}</span>`;
+      linha.addEventListener("click", (e) => {
+        if (e.target.closest(".disp-abrir")) {
+          if (disp.abertos.has(s.setor)) disp.abertos.delete(s.setor); else disp.abertos.add(s.setor);
+          desenharListaDisp(setores);
+          return;
+        }
+        if (disp.setoresOcultos.has(s.setor)) disp.setoresOcultos.delete(s.setor);
+        else disp.setoresOcultos.add(s.setor);
+        atualizarDisp();
+      });
+      bloco.appendChild(linha);
+      if (aberto) {
+        const itens = document.createElement("div");
+        itens.className = "disp-itens";
+        (termo && !casaSetor ? itensBusca : s.itens).forEach((it) => {
+          const l = document.createElement("div");
+          const oculto = disp.itensOcultos.has(it.chave);
+          l.className = "disp-linha" + (oculto ? " oculto" : "");
+          l.title = it.chave;
+          l.innerHTML = `<span class="disp-cor" style="background:${it.cor}"></span>`
+            + `<span class="disp-nome">${escHtml(it.chave)}</span>`
+            + (disp.nivel === "ativo" ? `<span class="disp-n">${it.n}</span>` : "");
+          l.addEventListener("click", () => {
+            if (oculto) {
+              disp.itensOcultos.delete(it.chave);
+              disp.setoresOcultos.delete(s.setor);   // ligar um item liga o setor
+            } else {
+              disp.itensOcultos.add(it.chave);
+            }
+            atualizarDisp();
+          });
+          itens.appendChild(l);
+        });
+        bloco.appendChild(itens);
+      }
+      lista.appendChild(bloco);
+    });
+    if (!lista.children.length) lista.innerHTML = '<div class="muted small" style="padding:8px 4px;">Nada encontrado.</div>';
+  }
+
+  // Nome ao lado do ponto, só com poucos pontos visíveis.
+  const rotulosDisp = {
+    id: "rotulosDisp",
+    afterDatasetsDraw(chart) {
+      const visiveis = [];
+      chart.data.datasets.forEach((ds, i) => {
+        if (chart.isDatasetVisible(i)) chart.getDatasetMeta(i).data.forEach((el, j) => visiveis.push([el, ds.data[j]]));
+      });
+      if (!visiveis.length || visiveis.length > MAX_ROTULOS_DISP) return;
+      const { ctx, chartArea } = chart;
+      ctx.save();
+      ctx.font = `11px ${Chart.defaults.font.family}`;
+      ctx.fillStyle = "#333";
+      ctx.textBaseline = "middle";
+      visiveis.forEach(([el, d]) => {
+        const nome = d.p.rotulo.length > 26 ? d.p.rotulo.slice(0, 25) + "…" : d.p.rotulo;
+        const largura = ctx.measureText(nome).width;
+        const direita = el.x + 9 + largura < chartArea.right;
+        ctx.textAlign = direita ? "left" : "right";
+        ctx.fillText(nome, el.x + (direita ? 9 : -9), el.y);
+      });
+      ctx.restore();
+    },
+  };
+
+  function desenharGraficoDisp(setores) {
+    destroyChart("mapa");
+    const el = document.getElementById("chart-mapa");
+    const medio = disp.metrica === "spread_medio";
+    const raio = disp.nivel === "ativo" ? 4 : disp.nivel === "emissor" || disp.nivel === "grupo" ? 5.5 : 7;
+    const datasets = setores.filter((s) => !disp.setoresOcultos.has(s.setor)).map((s) => {
+      const pts = disp.pontos.filter((p) => p.setor === s.setor && pontoVisivel(p)
+                                            && p.duration !== null && p[disp.metrica] !== null);
+      return {
+        label: s.setor,
+        data: pts.map((p) => ({ x: p.duration, y: p[disp.metrica], p })),
+        backgroundColor: pts.map((p) => s.tom.get(chaveItem(p))),
+        borderColor: "#ffffff",
+        borderWidth: 1,
+        pointRadius: raio,
+        pointHoverRadius: raio + 2.5,
+      };
+    }).filter((d) => d.data.length);
+
+    charts.mapa = new Chart(el.getContext("2d"), {
+      type: "scatter",
+      data: { datasets },
+      plugins: [rotulosDisp],
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        animation: { duration: 250 },
+        interaction: { mode: "nearest", intersect: true },
+        layout: { padding: { right: 8, top: 6 } },
+        scales: {
+          x: { title: { display: true, text: "Duration (anos)" }, grid: { color: PADRAO_GRAFICO.GRADE },
+               ticks: { callback: (v) => fmtDisp(v, 1) } },
+          y: { title: { display: true, text: medio ? "Spread médio (bps)" : "Mediana do spread (bps)" },
+               grid: { color: PADRAO_GRAFICO.GRADE } },
+        },
+        plugins: {
+          legend: { display: false },
+          tooltip: {
+            callbacks: {
+              title: (itens) => itens[0].raw.p.rotulo,
+              label: (item) => {
+                const p = item.raw.p;
+                const linhas = [];
+                if (disp.nivel === "ativo") linhas.push(` ${p.emissor || ""}`);
+                if (disp.nivel !== "setor") linhas.push(` Setor: ${p.setor}`);
+                if (disp.nivel === "ativo") {
+                  linhas.push(` Spread: ${fmtDisp(p.spread_medio, 1)} bps`);
+                } else {
+                  linhas.push(` Spread médio: ${fmtDisp(p.spread_medio, 1)} bps · mediana: ${fmtDisp(p.spread_mediana, 1)} bps`);
+                  linhas.push(` ${p.n_ativos} ${p.n_ativos === 1 ? "ativo" : "ativos"}`);
+                }
+                linhas.push(` Duration: ${fmtDisp(p.duration, 2)} anos`);
+                if (p.estoque !== null) linhas.push(` Estoque: R$ ${fmtDisp(p.estoque, 0)} mi`);
+                return linhas;
+              },
+            },
+          },
+        },
+        onClick(evento, elementos) {
+          // No nível Ativo, clicar abre a série do papel logo abaixo do gráfico.
+          if (disp.nivel !== "ativo" || !elementos.length) return;
+          const { datasetIndex, index } = elementos[0];
+          const p = datasets[datasetIndex].data[index].p;
+          openDrilldown(p.rotulo, p.emissor, el, disp.classe);
+        },
+      },
+    });
+  }
+
+  function atualizarDisp() {
+    const setores = estruturaDisp();
+    const vazio = !disp.pontos.length;
+    document.getElementById("disp-vazio").style.display = vazio ? "" : "none";
+    desenharListaDisp(setores);
+    desenharGraficoDisp(setores);
+    const visiveis = disp.pontos.filter(pontoVisivel).length;
+    const nomeNivel = ROTULO_NIVEL_DISP[disp.nivel];
+    document.getElementById("disp-titulo").textContent =
+      `${disp.metrica === "spread_medio" ? "Spread Médio" : "Mediana do Spread"} x Duration por ${nomeNivel}`;
+    const legenda = disp.nivel === "setor" ? "cor = setor"
+      : disp.nivel === "ativo" ? "cor = setor, tom = emissor" : `cor = setor, tom = ${nomeNivel.toLowerCase()}`;
+    const nota = disp.nivel === "ativo" && disp.metrica === "spread_mediana"
+      ? " · no nível Ativo média e mediana são o próprio spread do papel" : "";
+    document.getElementById("disp-sub").textContent =
+      `bps em ${iso2br(disp.dataEfetiva)} · ${visiveis} de ${disp.pontos.length} pontos na tela · ${legenda}`
+      + `${disp.nivel === "ativo" ? " · clique num ponto para ver a série" : ""}${nota}`;
+  }
+
+  async function carregarDisp() {
+    const r = await fetchJSON("/api/spreads/mapa-dispersao", {
+      classe: disp.classe, nivel: disp.nivel, data: disp.data || undefined,
+    });
+    disp.pontos = r.pontos || [];
+    disp.dataEfetiva = r.data_referencia;
+    document.getElementById("disp-texto-data").textContent = iso2br(r.data_referencia);
+    escreverFonte("fonte-mapa", "Fonte: Anbima, Debentures.com e Itaú BBA", r.data_referencia);
+    atualizarDisp();
+  }
+
+  async function carregarDatasDisp() {
+    const r = await fetchJSON("/api/spreads/datas", { classe: disp.classe });
+    disp.datas = r.datas || [];
+  }
+
+  function ligarAbas(seletor, aoTrocar) {
+    document.querySelectorAll(`${seletor} .win-btn`).forEach((btn) => {
+      btn.addEventListener("click", () => {
+        document.querySelectorAll(`${seletor} .win-btn`).forEach((b) => b.classList.remove("active"));
+        btn.classList.add("active");
+        aoTrocar(btn);
+      });
+    });
+  }
+
+  ligarAbas("#disp-classe-tabs", (btn) => {
+    disp.classe = btn.dataset.classe;
+    // Setores e grupos não são os mesmos nas duas classes: começa limpo.
+    disp.corSetor = new Map();
+    disp.setoresOcultos.clear(); disp.itensOcultos.clear(); disp.abertos.clear();
+    registrarUso("filtro", "Dispersão: " + disp.classe);
+    carregarDatasDisp();
+    carregarDisp();
+  });
+  ligarAbas("#disp-metrica-tabs", (btn) => {
+    disp.metrica = btn.dataset.metrica;
+    registrarUso("filtro", "Dispersão: " + btn.textContent.trim());
+    atualizarDisp();   // as duas métricas já vieram na resposta
+  });
+  ligarAbas("#disp-nivel-tabs", (btn) => {
+    disp.nivel = btn.dataset.nivel;
+    // Setores escondidos continuam escondidos; itens são outra coisa em
+    // cada nível, então a seleção deles recomeça.
+    disp.itensOcultos.clear();
+    registrarUso("filtro", "Dispersão: nível " + btn.textContent.trim());
+    carregarDisp();
+  });
+
+  document.getElementById("disp-busca").addEventListener("input", () => desenharListaDisp(estruturaDisp()));
+  document.getElementById("disp-mostrar-todos").addEventListener("click", () => {
+    disp.setoresOcultos.clear(); disp.itensOcultos.clear();
+    atualizarDisp();
+  });
+  document.getElementById("disp-esconder-todos").addEventListener("click", () => {
+    estruturaDisp().forEach((s) => disp.setoresOcultos.add(s.setor));
+    atualizarDisp();
+  });
+
+  // Calendário de um dia só (mesmo visual do "Dados até" da Visão Geral).
+  (function calendarioDisp() {
+    const btn = document.getElementById("disp-btn-data");
+    const painel = document.getElementById("disp-calendario");
+    let mes = null;
+    const fechar = () => { painel.style.display = "none"; btn.setAttribute("aria-expanded", "false"); };
+    function desenhar() {
+      const ano = mes.getFullYear(), m = mes.getMonth();
+      const pad = (n) => String(n).padStart(2, "0");
+      const chave = `${ano}-${pad(m + 1)}`;
+      const datas = new Set(disp.datas);
+      const primeira = disp.datas[0], ultima = disp.datas[disp.datas.length - 1];
+      const atual = disp.data || ultima;
+      let h = `<div class="cal-topo">
+          <button type="button" class="cal-nav" data-nav="-1" aria-label="Mês anterior" ${primeira && chave > primeira.slice(0, 7) ? "" : "disabled"}>‹</button>
+          <b>${MESES[m]} ${ano}</b>
+          <button type="button" class="cal-nav" data-nav="1" aria-label="Próximo mês" ${ultima && chave < ultima.slice(0, 7) ? "" : "disabled"}>›</button>
+        </div><div class="cal-grade">`;
+      ["D", "S", "T", "Q", "Q", "S", "S"].forEach((d) => { h += `<div class="cal-semana">${d}</div>`; });
+      for (let i = 0; i < new Date(ano, m, 1).getDay(); i++) h += "<div></div>";
+      for (let d = 1; d <= new Date(ano, m + 1, 0).getDate(); d++) {
+        const iso = `${chave}-${pad(d)}`;
+        h += `<button type="button" class="cal-dia${iso === atual ? " escolhido" : ""}" data-dia="${iso}" ${datas.has(iso) ? "" : "disabled"}>${d}</button>`;
+      }
+      h += '</div><div class="cal-dica">Só dias com boletim podem ser escolhidos.</div>'
+        + '<div class="cal-rodape"><button type="button" class="btn-small" data-acao="ultima">Usar a última data</button></div>';
+      painel.innerHTML = h;
+    }
+    btn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      if (painel.style.display === "block") { fechar(); return; }
+      const ref = disp.data || disp.datas[disp.datas.length - 1];
+      const base = ref ? new Date(+ref.slice(0, 4), +ref.slice(5, 7) - 1, 1) : new Date();
+      mes = new Date(base.getFullYear(), base.getMonth(), 1);
+      painel.style.display = "block";
+      btn.setAttribute("aria-expanded", "true");
+      desenhar();
+    });
+    painel.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const nav = e.target.closest("[data-nav]");
+      if (nav) { mes = new Date(mes.getFullYear(), mes.getMonth() + Number(nav.dataset.nav), 1); desenhar(); return; }
+      if (e.target.closest('[data-acao="ultima"]')) { disp.data = ""; fechar(); carregarDisp(); return; }
+      const dia = e.target.closest("[data-dia]");
+      if (!dia || dia.disabled) return;
+      disp.data = dia.dataset.dia === disp.datas[disp.datas.length - 1] ? "" : dia.dataset.dia;
+      registrarUso("filtro", "Dispersão: data escolhida");
+      fechar();
+      carregarDisp();
+    });
+    document.addEventListener("click", fechar);
+    document.addEventListener("keydown", (e) => { if (e.key === "Escape") fechar(); });
+  })();
+
+  async function abrirAbaDispersao() {
+    if (disp.carregada) { if (charts.mapa) charts.mapa.resize(); return; }
+    disp.carregada = true;
+    await Promise.all([carregarDatasDisp(), carregarDisp()]);
   }
 })();

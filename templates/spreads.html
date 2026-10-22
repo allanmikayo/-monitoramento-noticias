@@ -39,6 +39,7 @@
 <div class="window-tabs" id="secao-tabs" style="margin-bottom:14px;">
   <button data-secao="visao-geral" class="win-btn active">Visão Geral</button>
   <button data-secao="emissores" class="win-btn">Emissores</button>
+  <button data-secao="dispersao" class="win-btn">Dispersão</button>
 </div>
 
 <div id="painel-visao-geral">
@@ -382,6 +383,60 @@
     </table>
   </div>
 </div>
+</div>
+
+{# ABA DISPERSÃO (22/10/2026, pedido do Allan). Um gráfico grande de spread
+   x duration em que se escolhe o que se vê: classe (nunca as duas juntas;
+   IPCA+ Incentivadas por padrão), variável (spread médio ponderado por
+   estoque ou mediana sem peso) e nível (ativo, emissor, grupo econômico,
+   setor, subsetor). A lista ao lado é a própria legenda: cor = setor, tom =
+   item dentro do setor; cada linha liga e desliga o que aparece. Conta em
+   queries.mapa_dispersao. #}
+<div id="painel-dispersao" style="display:none;">
+  <div class="filters-bar" id="barra-dispersao">
+    <div class="window-tabs" id="disp-classe-tabs">
+      {% for c in classes %}
+      <button data-classe="{{ c }}" class="win-btn{% if c == 'IPCA + Incentivadas' %} active{% endif %}">{{ c }}</button>
+      {% endfor %}
+    </div>
+    <div class="window-tabs" id="disp-metrica-tabs">
+      <button data-metrica="spread_medio" class="win-btn active" title="Ponderado por estoque">Spread Médio</button>
+      <button data-metrica="spread_mediana" class="win-btn" title="Sem ponderação">Mediana do Spread</button>
+    </div>
+    <div class="window-tabs" id="disp-nivel-tabs">
+      <button data-nivel="ativo" class="win-btn">Ativo</button>
+      <button data-nivel="emissor" class="win-btn">Emissor</button>
+      <button data-nivel="grupo" class="win-btn">Grupo Econômico</button>
+      <button data-nivel="setor" class="win-btn active">Setor</button>
+      <button data-nivel="subsetor" class="win-btn">Subsetor</button>
+    </div>
+    <div class="seletor-data">
+      <span class="muted small">Dados até</span>
+      <button type="button" class="campo-data" id="disp-btn-data" aria-haspopup="dialog" aria-expanded="false">
+        <span id="disp-texto-data">—</span>
+        <svg width="14" height="14" viewBox="0 0 16 16" aria-hidden="true"><rect x="1.5" y="2.5" width="13" height="12" rx="2" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M1.5 6.5h13M5 1v3M11 1v3" stroke="currentColor" stroke-width="1.4"/></svg>
+      </button>
+      <div class="calendario" id="disp-calendario" role="dialog" aria-label="Escolher data" style="display:none;"></div>
+    </div>
+  </div>
+
+  <div class="chart-card" style="margin-bottom:16px;">
+    <h2 style="margin:0;" id="disp-titulo">Spread x Duration por Setor</h2>
+    <p class="muted small" style="margin:2px 0 10px;" id="disp-sub">—</p>
+    <div class="disp-layout">
+      <div class="disp-grafico"><canvas id="chart-mapa"></canvas></div>
+      <aside class="disp-lateral" aria-label="Legenda e seleção">
+        <input type="search" id="disp-busca" placeholder="Buscar…" autocomplete="off">
+        <div class="disp-acoes">
+          <button type="button" class="btn-small" id="disp-mostrar-todos">Mostrar todos</button>
+          <button type="button" class="btn-small" id="disp-esconder-todos">Esconder todos</button>
+        </div>
+        <div id="disp-lista"></div>
+      </aside>
+    </div>
+    <p class="muted small" id="disp-vazio" style="display:none;">Sem dado para a data selecionada.</p>
+    <p class="fonte-visual" id="fonte-mapa">Fonte: Anbima, Debentures.com e Itaú BBA</p>
+  </div>
 </div>
 
 <div id="painel-emissores" style="display:none;">

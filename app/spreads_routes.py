@@ -185,6 +185,17 @@ def register_spreads_routes(require_user_dep) -> APIRouter:
                                               filtros=filtros, inicio=_parse_data(inicio),
                                               fim=_parse_data(fim))}
 
+    # Aba "Dispersão" (22/10/2026). Nome próprio porque `/api/spreads/dispersao`
+    # já existe e é a dispersão intra-rating do analitico.py.
+    @router.get("/api/spreads/mapa-dispersao")
+    def api_spreads_mapa_dispersao(
+        classe: str, nivel: str = "setor", data: str | None = None,
+        user: User | None = Depends(require_user_dep), db: Session = Depends(get_db),
+    ):
+        if nivel not in queries.NIVEIS_DISPERSAO:
+            raise HTTPException(status_code=400, detail="nivel inválido")
+        return queries.mapa_dispersao(db, _validar_classe(classe), _parse_data(data), nivel)
+
     # Dias com dado da classe -- alimenta o calendário da barra de filtros
     # (22/10/2026): só esses dias podem ser escolhidos.
     @router.get("/api/spreads/datas")

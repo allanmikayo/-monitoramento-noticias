@@ -2330,3 +2330,85 @@ def atribuicao_variacao(
         "composicao_bps": soma(lambda b: b["tipo"] != "grupo"),
         "blocos": saida,
     }
+
+
+# ---------------------------------------------------------------------------
+# ABA "DISPERSÃO" (22/10/2026, pedido do Allan)
+#
+# Um ponto por Ativo / Emissor / Grupo econômico / Setor / Subsetor, numa
+# data: x = duration ponderada por estoque, y = spread (média ponderada por
+# estoque E mediana simples -- as duas vão juntas, a tela troca sem nova
+# consulta). Mesma base de toda a página: classe única, regra PRECIFICADO e
+# lista manual de exclusão.
+#
+# Cada ponto leva o SETOR DOMINANTE (o de maior estoque entre os papéis
+# dele): é ele que dá a cor na tela. Um emissor ou grupo raramente atravessa
+# setores, mas pode -- e um ponto só tem uma cor.
+# ---------------------------------------------------------------------------
+
+NIVEIS_DISPERSAO = ("ativo", "emissor", "grupo", "setor", "subsetor")
+
+
+def mapa_dispersao(
+    db: Session, classe: str, data_referencia: date | None = None, nivel: str = "setor",
+) -> dict:
+    if nivel not in NIVEIS_DISPERSAO:
+        raise ValueError(f"nivel inválido: {nivel}")
+    dates_desc = distinct_dates(db, classe)
+    hoje = _resolve_hoje(dates_desc, data_referencia)
+    if hoje is None:
+        return {"data_referencia": None, "nivel": nivel, "pontos": []}
+    q = (
+        db.query(DebentureSpread.codigo, DebentureSpread.spread, DebentureSpread.estoque,
+                 DebentureSpread.duration, Debenture.nome, Debenture.setor,
+                 Debenture.subsetor, Debenture.grupo_economico)
+        .join(Debenture, Debenture.codigo == DebentureSpread.codigo)
+        .filter(Debenture.classe == classe, DebentureSpread.data == hoje, PRECIFICADO)
+    )
+    excluidos = tickers_excluidos_spread(db)
+    if excluidos:
+        q = q.filter(DebentureSpread.codigo.notin_(excluidos))
+
+    grupos: dict[str, list] = {}
+    for codigo, spread, estoque, duration, nome, setor, subsetor, grupo in q.all():
+        setor = setor or SEM_CLASSIFICACAO
+        if nivel == "ativo":
+            chave = codigo
+        elif nivel == "emissor":
+            chave = nome or SEM_CLASSIFICACAO
+        elif nivel == "grupo":
+            # Sem grupo cadastrado: o próprio emissor (mesma regra da
+            # decomposição do movimento), em vez de um "grupo" falso gigante.
+            chave = grupo or nome or SEM_CLASSIFICACAO
+        elif nivel == "subsetor":
+            chave = subsetor or SEM_CLASSIFICACAO
+        else:
+            chave = setor
+        grupos.setdefault(chave, []).append(
+            {"codigo": codigo, "spread": spread, "estoque": estoque, "duration": duration,
+             "nome": nome, "setor": setor, "grupo": grupo})
+
+    pontos = []
+    for rotulo, papeis in grupos.items():
+        media, _ = _ponderar([(p["spread"], p["estoque"]) for p in papeis])
+        duration, _ = _ponderar([(p["duration"], p["estoque"]) for p in papeis])
+        estoque_setor: dict[str, float] = {}
+        for p in papeis:
+            estoque_setor[p["setor"]] = estoque_setor.get(p["setor"], 0.0) + (p["estoque"] or 0.0)
+        setor_dom = max(estoque_setor, key=lambda s: (estoque_setor[s], s))
+        estoques = [p["estoque"] for p in papeis if p["estoque"] is not None]
+        ponto = {
+            "rotulo": rotulo,
+            "setor": setor_dom,
+            "n_ativos": len(papeis),
+            "estoque": round(sum(estoques), 1) if estoques else None,
+            "duration": round(duration, 2) if duration is not None else None,
+            "spread_medio": round(media, 1) if media is not None else None,
+            "spread_mediana": round(statistics.median(p["spread"] for p in papeis), 1),
+        }
+        if nivel == "ativo":
+            ponto["emissor"] = papeis[0]["nome"]
+            ponto["grupo"] = papeis[0]["grupo"]
+        pontos.append(ponto)
+    pontos.sort(key=lambda p: -(p["estoque"] or 0))
+    return {"data_referencia": hoje.isoformat(), "nivel": nivel, "pontos": pontos}

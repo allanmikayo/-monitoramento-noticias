@@ -676,3 +676,39 @@ tr.linha-serie .chart-card { margin: 0; box-shadow: none; }
 /* "Selecionar todos" ao lado do "Limpar" nos menus de setor/subsetor/grupo. */
 .menu-multi-acoes { display: flex; gap: 6px; margin-top: 6px; }
 .menu-multi-acoes .btn-small { flex: 1; margin-top: 0; }
+
+/* ABA DISPERSÃO (22/10/2026). Gráfico largo + lista lateral que é a
+   legenda e o seletor ao mesmo tempo. */
+.disp-layout { display: grid; grid-template-columns: minmax(0, 1fr) 280px; gap: 18px; align-items: stretch; }
+.disp-grafico { position: relative; height: 580px; }
+.disp-lateral { display: flex; flex-direction: column; gap: 8px; min-height: 0; max-height: 580px; }
+.disp-lateral input[type="search"] { width: 100%; }
+.disp-acoes { display: flex; gap: 6px; }
+.disp-acoes .btn-small { flex: 1; }
+#disp-lista { overflow-y: auto; flex: 1; border-top: 1px solid var(--border); padding-top: 4px; }
+.disp-setor { border-bottom: 1px solid #f0f0f0; }
+.disp-linha {
+  display: flex; align-items: center; gap: 8px; padding: 5px 4px; font-size: 0.8rem;
+  cursor: pointer; border-radius: 4px; user-select: none;
+}
+.disp-linha:hover { background: #faf6f2; }
+.disp-linha.oculto { color: #b5b5b5; }
+.disp-linha.oculto .disp-cor { opacity: .25; }
+.disp-cor { width: 11px; height: 11px; border-radius: 50%; flex: none; }
+.disp-nome { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.disp-n { color: var(--muted); font-size: 0.72rem; font-variant-numeric: tabular-nums; }
+.disp-abrir {
+  border: 0; background: none; cursor: pointer; width: 20px; height: 20px; border-radius: 4px;
+  color: var(--muted); font-size: 0.8rem; flex: none; transition: transform .15s;
+}
+.disp-abrir:hover { background: #eee; }
+.disp-abrir[aria-expanded="true"] { transform: rotate(90deg); }
+.disp-setor > .disp-linha { font-weight: 600; }
+.disp-itens { padding-left: 18px; }
+.disp-itens .disp-linha { padding: 3px 4px; font-size: 0.76rem; }
+.disp-itens .disp-cor { width: 9px; height: 9px; }
+@media (max-width: 900px) {
+  .disp-layout { grid-template-columns: 1fr; }
+  .disp-grafico { height: 420px; }
+  .disp-lateral { max-height: 320px; }
+}

@@ -99,3 +99,14 @@ def test_serie_recortada_pelo_periodo():
     db = _banco()
     assert [p["data"] for p in queries.time_series(db, IPCA, inicio=D1)] == [D1.isoformat()]
     assert [p["data"] for p in queries.time_series(db, IPCA, fim=D0)] == [D0.isoformat()]
+
+
+def test_mapa_dispersao_niveis():
+    db = _banco()
+    ativos = queries.mapa_dispersao(db, IPCA, nivel="ativo")["pontos"]
+    assert sorted(p["rotulo"] for p in ativos) == ["A", "B", "C"]      # NOVO fica fora
+    [setor] = queries.mapa_dispersao(db, IPCA, nivel="setor")["pontos"]
+    assert setor["rotulo"] == "Saneamento" and setor["n_ativos"] == 3
+    assert setor["spread_medio"] == pytest.approx(150.0, abs=0.1)
+    assert setor["spread_mediana"] == 100.0
+    assert setor["estoque"] == 500.0
