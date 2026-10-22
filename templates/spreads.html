@@ -67,18 +67,24 @@
             title="Escolher à mão a data inicial da comparação">Personalizado</button>
   </div>
 
-  {# Só aparece com "Personalizado" ligado: é a DATA INICIAL da comparação
-     (a final continua sendo o campo "Data" ao lado, ou a última disponível). #}
-  <label class="muted small" id="rotulo-inicio" style="display:none;align-items:center;gap:6px;"
-         title="Data inicial da comparação — a final é a do campo Data.">
-    De
-    <input type="date" id="visao-inicio">
-  </label>
-
-  <label class="muted small" style="display:flex;align-items:center;gap:6px;" title="Analisa a base como se essa fosse a data de hoje — em branco, usa sempre a última data disponível.">
-    Data
-    <input type="date" id="visao-data">
-  </label>
+  {# SELETOR DE DATA ÚNICO (22/10/2026, pedido do Allan). Substitui os dois
+     campos soltos "De" e "Data". Com d-1/WoW/MoM é "Dados até": um dia, a
+     data de referência de TODOS os visuais da página (abre na mais
+     recente). Com "Personalizado" vira "Período": início e fim no mesmo
+     calendário -- o início é a base de comparação e os dois limitam o eixo
+     da evolução. Só dias com dado podem ser clicados.
+     Os dois <input hidden> guardam o valor em AAAA-MM-DD e são o que o JS
+     manda ao servidor (mesmos ids de antes). #}
+  <input type="hidden" id="visao-inicio">
+  <input type="hidden" id="visao-data">
+  <div class="seletor-data" id="seletor-data">
+    <span class="muted small" id="rotulo-data">Dados até</span>
+    <button type="button" class="campo-data" id="btn-data" aria-haspopup="dialog" aria-expanded="false">
+      <span id="texto-data">—</span>
+      <svg width="14" height="14" viewBox="0 0 16 16" aria-hidden="true"><rect x="1.5" y="2.5" width="13" height="12" rx="2" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M1.5 6.5h13M5 1v3M11 1v3" stroke="currentColor" stroke-width="1.4"/></svg>
+    </button>
+    <div class="calendario" id="calendario" role="dialog" aria-label="Escolher data" style="display:none;"></div>
+  </div>
 
   <span class="contexto-base" id="nota-base">—</span>
 
@@ -99,7 +105,10 @@
     <div class="menu-multi-painel" style="display:none;">
       <input type="search" class="menu-multi-busca" placeholder="Buscar setor…" autocomplete="off">
       <div class="menu-multi-lista"></div>
-      <button type="button" class="btn-small menu-multi-limpar">Limpar</button>
+      <div class="menu-multi-acoes">
+        <button type="button" class="btn-small menu-multi-todos">Selecionar todos</button>
+        <button type="button" class="btn-small menu-multi-limpar">Limpar</button>
+      </div>
     </div>
   </div>
   <div class="menu-multi" id="menu-subsetor">
@@ -107,7 +116,10 @@
     <div class="menu-multi-painel" style="display:none;">
       <input type="search" class="menu-multi-busca" placeholder="Buscar subsetor…" autocomplete="off">
       <div class="menu-multi-lista"></div>
-      <button type="button" class="btn-small menu-multi-limpar">Limpar</button>
+      <div class="menu-multi-acoes">
+        <button type="button" class="btn-small menu-multi-todos">Selecionar todos</button>
+        <button type="button" class="btn-small menu-multi-limpar">Limpar</button>
+      </div>
     </div>
   </div>
   <div class="menu-multi" id="menu-grupo">
@@ -115,7 +127,10 @@
     <div class="menu-multi-painel" style="display:none;">
       <input type="search" class="menu-multi-busca" placeholder="Buscar grupo…" autocomplete="off">
       <div class="menu-multi-lista"></div>
-      <button type="button" class="btn-small menu-multi-limpar">Limpar</button>
+      <div class="menu-multi-acoes">
+        <button type="button" class="btn-small menu-multi-todos">Selecionar todos</button>
+        <button type="button" class="btn-small menu-multi-limpar">Limpar</button>
+      </div>
     </div>
   </div>
   <span class="contexto-base" id="nota-filtros">Sem recorte: mercado inteiro da classe</span>

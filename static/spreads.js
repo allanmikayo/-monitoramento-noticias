@@ -38,7 +38,6 @@
   const detalhesContagem = document.getElementById("detalhes-contagem");
 
   const inicioInput = document.getElementById("visao-inicio");
-  const rotuloInicio = document.getElementById("rotulo-inicio");
 
   let currentClasse = document.querySelector("#classe-tabs .win-btn.active")?.dataset.classe || "";
   let currentBase = document.querySelector("#base-tabs .win-btn.active")?.dataset.base || "WoW";
@@ -150,7 +149,6 @@
     // vazio (nesse caso `data.data_referencia` é sempre a última
     // disponível de verdade); se já tem uma data escolhida, a resposta
     // reflete ESSA data, não a mais recente, então não mexe no max.
-    if (!visaoDataInput.value && data.data_referencia) visaoDataInput.max = data.data_referencia;
     document.getElementById("kpi-spread").textContent = data.spread_medio !== null ? `${num1(data.spread_medio)} bps` : "—";
     document.getElementById("kpi-spread-tag").textContent = data.spread_medio_fallback ? "sem estoque" : "pond. estoque";
     document.getElementById("kpi-n-ativos").textContent =
@@ -206,8 +204,12 @@
   // Gráfico 1 -- Evolução do spread médio (linha)
   // ------------------------------------------------------------------
   async function loadSeriesChart() {
+    // Eixo x (22/10/2026): termina na data de referência ("Dados até" ou
+    // fim do "Período") e, no Personalizado, começa no início do período.
     const { series } = await fetchJSON("/api/spreads/series", {
       classe: currentClasse, setor: filtros.setor, subsetor: filtros.subsetor, grupo: filtros.grupo,
+      inicio: currentBase === BASE_PERSONALIZADA ? (inicioInput.value || undefined) : undefined,
+      fim: visaoDataInput.value || undefined,
     });
     destroyChart("series");
     const ctx = document.getElementById("chart-series").getContext("2d");
@@ -1388,6 +1390,7 @@
       atualizarMenus();
       if (barraFiltros2.style.display !== "none") carregarOpcoesFiltro();
       recolherDrilldown();
+      carregarDatas();
       reloadAll();
     });
   });
@@ -1405,31 +1408,182 @@
     loadAtribuicao();
   }
 
+  // ------------------------------------------------------------------
+  // SELETOR DE DATA (22/10/2026, pedido do Allan). Um campo só na barra:
+  //  - d-1 / WoW / MoM: "Dados até" -- um dia, a data de referência de
+  //    todos os visuais. Abre mostrando a mais recente; `visao-data` vazio
+  //    continua significando "a última disponível".
+  //  - Personalizado: "Período" -- dois cliques no mesmo calendário, início
+  //    e fim. O início é a base de comparação; os dois recortam o eixo da
+  //    evolução.
+  // Calendário próprio porque o <input type="date"> nativo não deixa
+  // bloquear os dias sem boletim -- e só esses podem ser comparados.
+  // ------------------------------------------------------------------
+  const btnData = document.getElementById("btn-data");
+  const textoData = document.getElementById("texto-data");
+  const rotuloData = document.getElementById("rotulo-data");
+  const calendario = document.getElementById("calendario");
+  const MESES = ["janeiro", "fevereiro", "março", "abril", "maio", "junho", "julho",
+                 "agosto", "setembro", "outubro", "novembro", "dezembro"];
+  let datasDisponiveis = [];   // AAAA-MM-DD, do mais antigo ao mais recente
+  let setDatas = new Set();
+  let calMes = null;           // 1º dia do mês exibido
+  let selecaoParcial = null;   // início já clicado, esperando o fim
+
+  const iso2br = (v) => (v ? `${v.slice(8, 10)}/${v.slice(5, 7)}/${v.slice(0, 4)}` : "—");
+  const ultimaData = () => datasDisponiveis[datasDisponiveis.length - 1] || null;
+  const modoPeriodo = () => currentBase === BASE_PERSONALIZADA;
+
+  async function carregarDatas() {
+    const r = await fetchJSON("/api/spreads/datas", { classe: currentClasse });
+    datasDisponiveis = r.datas || [];
+    setDatas = new Set(datasDisponiveis);
+    atualizarCampoData();
+  }
+
+  function atualizarCampoData() {
+    rotuloData.textContent = modoPeriodo() ? "Período" : "Dados até";
+    if (modoPeriodo()) {
+      textoData.textContent = inicioInput.value
+        ? `${iso2br(inicioInput.value)} – ${iso2br(visaoDataInput.value || ultimaData())}`
+        : "Escolha início e fim";
+    } else {
+      textoData.textContent = iso2br(visaoDataInput.value || ultimaData());
+    }
+  }
+
+  function abrirCalendario() {
+    selecaoParcial = null;
+    const ref = (modoPeriodo() && inicioInput.value) || visaoDataInput.value || ultimaData();
+    const base = ref ? new Date(+ref.slice(0, 4), +ref.slice(5, 7) - 1, 1) : new Date();
+    calMes = new Date(base.getFullYear(), base.getMonth(), 1);
+    calendario.style.display = "block";
+    btnData.setAttribute("aria-expanded", "true");
+    desenharCalendario();
+  }
+
+  function fecharCalendario() {
+    if (calendario.style.display === "none") return;
+    calendario.style.display = "none";
+    btnData.setAttribute("aria-expanded", "false");
+    selecaoParcial = null;
+  }
+
+  function desenharCalendario() {
+    const ano = calMes.getFullYear(), mes = calMes.getMonth();
+    const pad = (n) => String(n).padStart(2, "0");
+    const chave = `${ano}-${pad(mes + 1)}`;
+    const primeira = datasDisponiveis[0], ultima = ultimaData();
+    const podeVoltar = !!primeira && chave > primeira.slice(0, 7);
+    const podeAvancar = !!ultima && chave < ultima.slice(0, 7);
+    let ini = null, fim = null;
+    if (modoPeriodo()) {
+      if (selecaoParcial) ini = selecaoParcial;
+      else if (inicioInput.value) { ini = inicioInput.value; fim = visaoDataInput.value || ultima; }
+    } else {
+      fim = visaoDataInput.value || ultima;
+    }
+    let h = `<div class="cal-topo">
+        <button type="button" class="cal-nav" data-nav="-1" aria-label="Mês anterior" ${podeVoltar ? "" : "disabled"}>‹</button>
+        <b>${MESES[mes]} ${ano}</b>
+        <button type="button" class="cal-nav" data-nav="1" aria-label="Próximo mês" ${podeAvancar ? "" : "disabled"}>›</button>
+      </div><div class="cal-grade">`;
+    ["D", "S", "T", "Q", "Q", "S", "S"].forEach((d) => { h += `<div class="cal-semana">${d}</div>`; });
+    for (let i = 0; i < new Date(ano, mes, 1).getDay(); i++) h += "<div></div>";
+    const nDias = new Date(ano, mes + 1, 0).getDate();
+    for (let d = 1; d <= nDias; d++) {
+      const iso = `${chave}-${pad(d)}`;
+      let cls = "cal-dia";
+      if (iso === ini || iso === fim) cls += " escolhido";
+      else if (ini && fim && iso > ini && iso < fim) cls += " no-periodo";
+      h += `<button type="button" class="${cls}" data-dia="${iso}" ${setDatas.has(iso) ? "" : "disabled"}>${d}</button>`;
+    }
+    h += "</div>";
+    const dica = !modoPeriodo() ? "Só dias com boletim podem ser escolhidos."
+      : selecaoParcial ? `Início ${iso2br(selecaoParcial)} · agora escolha a data final.`
+      : "Escolha a data inicial da comparação.";
+    h += `<div class="cal-dica">${dica}</div>`;
+    if (!modoPeriodo()) {
+      h += '<div class="cal-rodape"><button type="button" class="btn-small" data-acao="ultima">Usar a última data</button></div>';
+    }
+    calendario.innerHTML = h;
+  }
+
+  // Aplica a(s) data(s) escolhida(s) à página inteira.
+  function aplicarDatas() {
+    atualizarCampoData();
+    loadSeriesChart();
+    loadDesagios();
+    recarregarComparacao();
+  }
+
+  btnData.addEventListener("click", (e) => {
+    e.stopPropagation();
+    if (calendario.style.display === "block") fecharCalendario();
+    else abrirCalendario();
+  });
+
+  calendario.addEventListener("click", (e) => {
+    e.stopPropagation();
+    const nav = e.target.closest("[data-nav]");
+    if (nav) {
+      calMes = new Date(calMes.getFullYear(), calMes.getMonth() + Number(nav.dataset.nav), 1);
+      desenharCalendario();
+      return;
+    }
+    if (e.target.closest('[data-acao="ultima"]')) {
+      visaoDataInput.value = "";
+      fecharCalendario();
+      aplicarDatas();
+      return;
+    }
+    const dia = e.target.closest("[data-dia]");
+    if (!dia || dia.disabled) return;
+    const escolhido = dia.dataset.dia;
+    // A última data disponível fica como "vazio": a página continua
+    // acompanhando o boletim mais recente quando ele chegar.
+    const comoValor = (v) => (v === ultimaData() ? "" : v);
+    if (!modoPeriodo()) {
+      visaoDataInput.value = comoValor(escolhido);
+      registrarUso("filtro", "Dados até: data escolhida");
+      fecharCalendario();
+      aplicarDatas();
+      return;
+    }
+    if (!selecaoParcial) { selecaoParcial = escolhido; desenharCalendario(); return; }
+    if (escolhido === selecaoParcial) return;   // início e fim precisam ser dias diferentes
+    const [a, b] = [selecaoParcial, escolhido].sort();
+    inicioInput.value = a;
+    visaoDataInput.value = comoValor(b);
+    registrarUso("filtro", "Base: período escolhido");
+    fecharCalendario();
+    aplicarDatas();
+  });
+
+  document.addEventListener("click", fecharCalendario);
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape") fecharCalendario(); });
+
   baseTabs.forEach((btn) => {
-    btn.addEventListener("click", () => {
+    btn.addEventListener("click", (ev) => {
       baseTabs.forEach((b) => b.classList.remove("active"));
       btn.classList.add("active");
       currentBase = btn.dataset.base;
       registrarUso("filtro", "Base: " + btn.dataset.base);
-      const personalizada = currentBase === BASE_PERSONALIZADA;
-      rotuloInicio.style.display = personalizada ? "flex" : "none";
-      if (personalizada && !inicioInput.value) {
-        // Sem data ainda: mostra o campo, dá o foco e espera -- pedir ao
+      // Saindo do Personalizado, a data final do período continua como
+      // "Dados até"; o início deixa de existir.
+      if (!modoPeriodo()) inicioInput.value = "";
+      atualizarCampoData();
+      if (modoPeriodo() && !inicioInput.value) {
+        // Sem período ainda: abre o calendário e espera -- pedir ao
         // servidor uma comparação sem ponto de partida daria 400.
-        document.getElementById("nota-base").textContent =
-          "Escolha a data inicial da comparação em “De”.";
-        inicioInput.focus();
+        ev.stopPropagation();
+        document.getElementById("nota-base").textContent = "Escolha o período no calendário.";
+        abrirCalendario();
         return;
       }
+      loadSeriesChart();
       recarregarComparacao();
     });
-  });
-
-  // Data inicial da comparação (base "Personalizado").
-  inicioInput.addEventListener("change", () => {
-    if (currentBase !== BASE_PERSONALIZADA) return;
-    registrarUso("filtro", "Base: data escolhida");
-    recarregarComparacao();
   });
 
   // ------------------------------------------------------------------
@@ -1509,6 +1663,17 @@
     });
     painel.addEventListener("click", (e) => e.stopPropagation());
     busca.addEventListener("input", desenhar);
+    // "Selecionar todos" (22/10/2026): marca tudo o que a busca está
+    // mostrando -- sem termo digitado, a lista inteira.
+    raiz.querySelector(".menu-multi-todos").addEventListener("click", () => {
+      const termo = (busca.value || "").trim().toLowerCase();
+      const visiveis = itens().filter((n) => n.toLowerCase().includes(termo));
+      filtros[chave] = [...new Set([...filtros[chave], ...visiveis])];
+      registrarUso("filtro", `${prefixo}: selecionar todos`);
+      desenhar();
+      atualizarMenus();
+      reloadAll();
+    });
     raiz.querySelector(".menu-multi-limpar").addEventListener("click", () => {
       filtros[chave] = [];
       if (chave === "setor") filtros.subsetor = [];
@@ -1575,20 +1740,7 @@
     });
   });
 
-  // Campo de data da Visão Geral (pedido do Allan, 27/07/2026) -- não mexe
-  // no gráfico de evolução (a linha mostra o histórico inteiro de qualquer
-  // forma), só nos cartões, na tabela de setor e nos movers, que passam a
-  // olhar "como se hoje fosse" a data escolhida.
-  visaoDataInput.addEventListener("change", () => {
-    loadKPI();
-    loadSetor();
-    loadMovers();
-    loadComposicao();
-    loadDispersao();
-    loadDesagios();
-    loadAtribuicao();
-  });
-
+  carregarDatas();
   reloadAll();
 
   // ------------------------------------------------------------------

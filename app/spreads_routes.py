@@ -173,6 +173,7 @@ def register_spreads_routes(require_user_dep) -> APIRouter:
     @router.get("/api/spreads/series")
     def api_spreads_series(
         classe: str, codigo: str | None = None,
+        inicio: str | None = None, fim: str | None = None,
         setor: list[str] = Query(default=[]), subsetor: list[str] = Query(default=[]),
         grupo: list[str] = Query(default=[]),
         user: User | None = Depends(require_user_dep), db: Session = Depends(get_db),
@@ -181,7 +182,17 @@ def register_spreads_routes(require_user_dep) -> APIRouter:
         # aplica (o papel ou está nele, ou a tela nem teria como pedi-lo).
         filtros = None if codigo else _filtros(setor, subsetor, grupo)
         return {"series": queries.time_series(db, _validar_classe(classe), codigo=codigo,
-                                              filtros=filtros)}
+                                              filtros=filtros, inicio=_parse_data(inicio),
+                                              fim=_parse_data(fim))}
+
+    # Dias com dado da classe -- alimenta o calendário da barra de filtros
+    # (22/10/2026): só esses dias podem ser escolhidos.
+    @router.get("/api/spreads/datas")
+    def api_spreads_datas(
+        classe: str,
+        user: User | None = Depends(require_user_dep), db: Session = Depends(get_db),
+    ):
+        return {"datas": [d.isoformat() for d in queries.datas_com_dado(db, _validar_classe(classe))]}
 
     # DE ONDE VEIO O MOVIMENTO (01/10/2026, pedido do Allan) -- treemap no fim
     # da Visão Geral. Mesma classe, base, data e recorte do card SPREAD MÉDIO,

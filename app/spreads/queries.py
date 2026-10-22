@@ -198,6 +198,21 @@ def distinct_dates(db: Session, classe: str) -> list[date]:
     return [r[0] for r in rows]
 
 
+def datas_com_dado(db: Session, classe: str) -> list[date]:
+    """Dias em que a classe tem pelo menos um papel PRECIFICADO, do mais
+    antigo ao mais recente -- só esses dias ficam clicáveis no calendário
+    da barra de filtros (22/10/2026)."""
+    rows = (
+        db.query(DebentureSpread.data)
+        .join(Debenture, Debenture.codigo == DebentureSpread.codigo)
+        .filter(Debenture.classe == classe, PRECIFICADO)
+        .distinct()
+        .order_by(DebentureSpread.data.asc())
+        .all()
+    )
+    return [r[0] for r in rows]
+
+
 def latest_date(db: Session, classe: str) -> date | None:
     dates = distinct_dates(db, classe)
     return dates[0] if dates else None
@@ -425,7 +440,8 @@ def _weighted_avg_duration(
 
 
 def time_series(db: Session, classe: str, codigo: str | None = None,
-                filtros: Filtros | None = None) -> list[dict]:
+                filtros: Filtros | None = None, inicio: date | None = None,
+                fim: date | None = None) -> list[dict]:
     """Série diária. Sem `codigo`: spread médio da classe inteira por dia
     (linha "Total" do relatório do Allan). Com `codigo`: a série do próprio
     papel (spread + taxa indicativa), pro drill-down de um ativo específico."""
@@ -463,6 +479,13 @@ def time_series(db: Session, classe: str, codigo: str | None = None,
     )
     if excluidos:
         q = q.filter(DebentureSpread.codigo.notin_(excluidos))
+    # Recorte do eixo x (22/10/2026, pedido do Allan): `fim` é a data de
+    # referência da página ("Dados até"); `inicio`, a ponta inicial do
+    # "Período" quando a base é Personalizado.
+    if inicio is not None:
+        q = q.filter(DebentureSpread.data >= inicio)
+    if fim is not None:
+        q = q.filter(DebentureSpread.data <= fim)
     rows = q.order_by(DebentureSpread.data).all()
 
     out = []

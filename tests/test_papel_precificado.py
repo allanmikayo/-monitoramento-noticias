@@ -83,3 +83,19 @@ def test_desagios_marca_e_filtra_nao_precificado():
     so = queries.maiores_desagios(db, IPCA, so_precificados=True)["papeis"]
     assert "SEMTAXA" not in [p["codigo"] for p in so]
     assert all(p["precificado"] for p in so)
+
+
+def test_datas_com_dado_so_dias_precificados():
+    db = _banco()
+    d_vazio = date(2026, 10, 20)
+    # Dia em que só existe o papel incompleto -> não é dia "com dado".
+    db.add(DebentureSpread(codigo="NOVO", data=d_vazio, spread=900.0, estoque=500.0,
+                           pu=None, pct_pu_par=None, duration=None))
+    db.commit()
+    assert queries.datas_com_dado(db, IPCA) == [D0, D1]
+
+
+def test_serie_recortada_pelo_periodo():
+    db = _banco()
+    assert [p["data"] for p in queries.time_series(db, IPCA, inicio=D1)] == [D1.isoformat()]
+    assert [p["data"] for p in queries.time_series(db, IPCA, fim=D0)] == [D0.isoformat()]

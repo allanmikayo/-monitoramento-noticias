@@ -639,3 +639,40 @@ tr.linha-serie .chart-card { margin: 0; box-shadow: none; }
    fica na dica), números nunca quebram. */
 #tabela-movers td { white-space: nowrap; }
 #tabela-movers td.col-texto { max-width: 0; width: 100%; overflow: hidden; text-overflow: ellipsis; }
+
+/* SELETOR DE DATA (22/10/2026): um campo que abre um calendário próprio --
+   o <input type="date"> nativo não deixa bloquear os dias sem dado. */
+.seletor-data { position: relative; display: flex; align-items: center; gap: 6px; }
+.campo-data {
+  display: inline-flex; align-items: center; gap: 8px; height: 30px; padding: 0 10px;
+  background: #fff; border: 1px solid var(--border); border-radius: 6px; cursor: pointer;
+  font: inherit; font-size: 0.85rem; color: #111; font-variant-numeric: tabular-nums; white-space: nowrap;
+}
+.campo-data:hover, .campo-data[aria-expanded="true"] { border-color: var(--accent); }
+.campo-data svg { color: var(--muted); }
+.calendario {
+  position: absolute; top: calc(100% + 6px); left: 0; z-index: 30; width: 268px;
+  background: #fff; border: 1px solid var(--border); border-radius: 10px;
+  box-shadow: 0 8px 24px rgba(0,0,0,.12); padding: 10px 12px 12px;
+}
+.cal-topo { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
+.cal-topo b { font-size: 0.88rem; text-transform: capitalize; }
+.cal-nav { border: 0; background: none; cursor: pointer; font-size: 1.1rem; width: 28px; height: 28px; border-radius: 6px; color: #111; }
+.cal-nav:hover:not(:disabled) { background: #f2f2f2; }
+.cal-nav:disabled { color: #ccc; cursor: default; }
+.cal-grade { display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px; }
+.cal-semana { font-size: 0.68rem; color: var(--muted); text-align: center; padding: 2px 0 4px; font-weight: 600; }
+.cal-dia {
+  height: 30px; border: 0; background: none; border-radius: 6px; font: inherit; font-size: 0.8rem;
+  color: #111; cursor: pointer; font-variant-numeric: tabular-nums;
+}
+.cal-dia:hover:not(:disabled) { background: #fff3ea; }
+.cal-dia:disabled { color: #cfcfcf; cursor: default; }
+.cal-dia.no-periodo { background: #ffe3d1; border-radius: 0; }
+.cal-dia.escolhido { background: var(--accent); color: #fff; font-weight: 700; border-radius: 6px; }
+.cal-dica { font-size: 0.74rem; color: var(--muted); margin-top: 8px; min-height: 1em; }
+.cal-rodape { display: flex; justify-content: space-between; align-items: center; margin-top: 6px; }
+.cal-rodape button { font-size: 0.76rem; }
+/* "Selecionar todos" ao lado do "Limpar" nos menus de setor/subsetor/grupo. */
+.menu-multi-acoes { display: flex; gap: 6px; margin-top: 6px; }
+.menu-multi-acoes .btn-small { flex: 1; margin-top: 0; }
