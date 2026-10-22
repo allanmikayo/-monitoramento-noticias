@@ -138,6 +138,11 @@ def test_emissor_padrao_e_spread_por_papel():
     db = _banco()
     # B tem o maior estoque precificado (300); NOVO (500) não conta.
     assert queries.emissor_padrao(db) == "EMISSOR B"
+    # Quem tem papel nas duas classes passa na frente, mesmo menor.
+    db.add(Debenture(codigo="A2", nome="EMISSOR A", classe="CDI + Tradicionais"))
+    db.add(DebentureSpread(codigo="A2", data=D1, spread=90.0, estoque=10.0))
+    db.commit()
+    assert queries.emissor_padrao(db) == "EMISSOR A"
     linhas = {t["codigo"]: t for t in queries.emissor_tickers(db, ["EMISSOR B", "EMISSOR NOVO"])["tickers"]}
     assert linhas["B"]["spread"] == 200.0
     assert linhas["NOVO"]["spread"] is None

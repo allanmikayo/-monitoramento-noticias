@@ -923,7 +923,9 @@ def search_debentures(db: Session, q: str, classe: str | None = None, limit: int
 
 def emissor_padrao(db: Session) -> str | None:
     """Emissor que a aba Emissor abre selecionado (22/10/2026): o de maior
-    estoque precificado no boletim mais recente, somando as classes."""
+    estoque precificado no boletim mais recente, somando as classes --
+    entre os que têm papel nas DUAS classes, para a aba abrir completa
+    (se nenhum tiver, o maior de todos)."""
     ultima = db.query(func.max(DebentureSpread.data)).scalar()
     if ultima is None:
         return None
@@ -933,7 +935,8 @@ def emissor_padrao(db: Session) -> str | None:
         .filter(DebentureSpread.data == ultima, PRECIFICADO, Debenture.nome.isnot(None),
                 Debenture.classe.in_(CLASSES))
         .group_by(Debenture.nome)
-        .order_by(func.sum(DebentureSpread.estoque).desc())
+        .order_by(func.count(func.distinct(Debenture.classe)).desc(),
+                  func.sum(DebentureSpread.estoque).desc())
         .first()
     )
     return row[0] if row else None

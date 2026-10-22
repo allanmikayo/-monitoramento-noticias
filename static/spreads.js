@@ -2008,6 +2008,9 @@
     partes.push(`Dívida em circulação <b>${fmtReais(geral.estoque)}</b> em ${geral.n_ativos || 0} `
       + `debênture${geral.n_ativos === 1 ? "" : "s"}`);
     if (outros > 0.5) partes.push(`${fmtReais(outros)} em outros indexadores`);
+    ["IPCA + Incentivadas", "CDI + Tradicionais"].forEach((c) => {
+      if (!(totais[c] || {}).n_ativos) partes.push(`sem dívida em ${c}`);
+    });
     document.getElementById("perfil-linha").innerHTML = partes.join('<span class="sep">·</span>');
   }
 
@@ -2032,11 +2035,12 @@
       ? `${total.n_ativos} papéis · ${geral ? Math.round((100 * (total.estoque || 0)) / geral) : 0}% da dívida`
       : "";
 
-    if (!total.n_ativos) {
-      metricas.innerHTML = `<div class="perfil-classe-vazia" style="grid-column:1/-1;">Sem dívida em ${classe}.</div>`;
-      el.parentElement.style.display = "none";
-      return;
-    }
+    // Classe sem dívida: o card some e a outra coluna ocupa a largura toda
+    // -- um card vazio do tamanho de um gráfico não diz nada. A ausência
+    // vira nota no cabeçalho (renderCabecalhoPerfil).
+    const secao = document.getElementById(`classe-${curto}`);
+    secao.style.display = total.n_ativos ? "" : "none";
+    if (!total.n_ativos) return;
     el.parentElement.style.display = "";
 
     const mercadoPorData = Object.fromEntries((serieResp.mercado || []).map((p) => [p.data, p.spread_medio]));
