@@ -666,6 +666,34 @@ class DebentureSpread(Base):
     )
 
 
+class DebentureCaracteristica(Base):
+    """Arquivo de características do debentures.com.br, INTEIRO (22/10/2026,
+    pedido do Allan): uma linha por debênture registrada ou já excluída,
+    esteja ou não precificada pela Anbima. `Debenture` só conhece quem já
+    apareceu no boletim da Anbima; a aba Emissor precisa da dívida toda do
+    emissor -- "tudo que vem da característica como Registrado".
+
+    Regravado inteiro a cada rodada de `scripts/fetch_debenture_spreads.py`
+    (o arquivo é um retrato do mercado, não um histórico). `estoque` vem da
+    página "estoque por ativo" do mesmo site, no último boletim capturado
+    (R$ milhões, mesma unidade de `DebentureSpread.estoque`)."""
+    __tablename__ = "debenture_caracteristicas"
+
+    codigo: Mapped[str] = mapped_column(String(40), primary_key=True)
+    empresa: Mapped[str | None] = mapped_column(String(300))
+    cnpj: Mapped[str | None] = mapped_column(String(30), index=True)
+    situacao: Mapped[str | None] = mapped_column(String(40))   # "Registrado" | "Excluído"
+    incentivada: Mapped[str | None] = mapped_column(String(20))
+    data_emissao: Mapped[date | None] = mapped_column(Date)
+    data_vencimento: Mapped[date | None] = mapped_column(Date)
+    indice_emissao: Mapped[str | None] = mapped_column(String(30))
+    percentual_emissao: Mapped[float | None] = mapped_column(Float)
+    taxa_emissao: Mapped[float | None] = mapped_column(Float)
+    estoque: Mapped[float | None] = mapped_column(Float)
+    data_estoque: Mapped[date | None] = mapped_column(Date)
+    atualizado_em: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
 class NegocioB3(Base):
     """Negócio a negócio da B3 (Boletim Diário do Mercado -- pedido do
     Allan, 24/07/2026): cada linha é UMA operação individual (não

@@ -43,9 +43,13 @@ from app.spreads.fetch import (
     business_days,
     detect_latest_published_date,
     fetch_caracs,
+    fetch_estoque,
     fetch_spreads,
 )
-from app.spreads.persist import cache_ntnb_referencia, persist_caracteristicas, persist_day
+from app.spreads.persist import (
+    cache_ntnb_referencia, persist_caracteristicas, persist_caracteristicas_completas,
+    persist_day, persist_estoque_ativos,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -81,6 +85,7 @@ def main() -> None:
     dias = list(business_days(start, end))
     logger.info("Capturando spreads de %s a %s (%d dias úteis)", start, end, len(dias))
 
+    ultimo_dia_com_dado = None
     with SessionLocal() as db:
         for i, dt in enumerate(dias, start=1):
             try:
@@ -100,6 +105,7 @@ def main() -> None:
             summary = persist_day(db, dt, rows)
             total_rows += summary["n_rows"]
             total_days_com_dado += 1
+            ultimo_dia_com_dado = dt
             logger.info(
                 "[%d/%d] %s: %d debêntures (%d novas na base)",
                 i, len(dias), dt, summary["n_rows"], summary["n_new_debentures"],
@@ -111,6 +117,20 @@ def main() -> None:
             logger.info("Características atualizadas: %d debênture(s)", n)
         except Exception:
             logger.exception("Falha ao buscar características (CNPJ/incentivada) — não impede o resto")
+
+        # Arquivo de características INTEIRO + estoque de todos os ativos
+        # (22/10/2026): a aba Emissor lista toda a dívida registrada do
+        # emissor, não só o que a Anbima precifica.
+        try:
+            caracs = caracs if "caracs" in locals() else fetch_caracs(session)
+            n = persist_caracteristicas_completas(db, caracs)
+            logger.info("Características completas gravadas: %d debênture(s)", n)
+            if ultimo_dia_com_dado is not None:
+                n = persist_estoque_ativos(
+                    db, fetch_estoque(session, ultimo_dia_com_dado.strftime("%d/%m/%Y")), ultimo_dia_com_dado)
+                logger.info("Estoque por ativo de %s: %d debênture(s)", ultimo_dia_com_dado, n)
+        except Exception:
+            logger.exception("Falha ao gravar características completas/estoque — não impede o resto")
 
     logger.info(
         "Concluído: %d dia(s) com dado, %d linha(s) de spread no total.",

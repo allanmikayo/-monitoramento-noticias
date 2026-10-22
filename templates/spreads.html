@@ -505,16 +505,24 @@
       <h2 style="margin:0;" id="emissor-titulo-tabela">Abertura da Dívida</h2>
       <button type="button" id="emissor-recolher" class="win-btn">Recolher linhas</button>
     </div>
-    <p class="muted small" style="margin:2px 0 10px;">por classe, do papel mais curto ao mais longo · spread do último boletim · estoque em R$ milhões</p>
+    {# TODA A DÍVIDA REGISTRADA (22/10/2026, pedido do Allan): o universo é o
+       arquivo de características (situação "Registrado"), precificado pela
+       Anbima ou não. As duas colunas da Anbima dizem a última taxa
+       indicativa e quando ela saiu -- "—" é papel que a Anbima não
+       precifica. #}
+    <p class="muted small" style="margin:2px 0 10px;">toda a dívida registrada, por classe e vencimento · Anbima: última taxa indicativa e a data em que saiu · estoque em R$ milhões</p>
     <table class="table tabela-casa" id="tabela-emissor-tickers">
       <thead><tr>
         <th class="col-texto">Código</th>
         <th class="col-texto col-emissor-perfil">Emissor</th>
         <th class="col-texto">Remuneração</th>
         <th>Emissão</th>
-        <th>Duration (anos)</th>
+        <th>Vencimento</th>
+        <th>Duration</th>
         <th>Spread (bps)</th>
-        <th>Estoque (R$ mi)</th>
+        <th title="Última taxa indicativa publicada pela Anbima">Taxa Anbima</th>
+        <th title="Última data em que o papel foi precificado pela Anbima">Precificado em</th>
+        <th>Estoque</th>
       </tr></thead>
       <tbody></tbody>
     </table>

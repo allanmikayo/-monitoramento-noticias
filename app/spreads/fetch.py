@@ -352,6 +352,11 @@ class Caracteristicas:
     indice_emissao: str | None = None
     percentual_emissao: float | None = None
     taxa_emissao: float | None = None
+    # Para a tabela completa de características (22/10/2026). Opcionais: o
+    # layout antigo sem essas colunas continua sendo lido.
+    empresa: str | None = None
+    situacao: str | None = None
+    data_vencimento: date | None = None
 
 
 def fetch_caracs(session: requests.Session) -> list[Caracteristicas]:
@@ -380,6 +385,10 @@ COL_DATA_EMISSAO = "Data de Emissao"
 COL_INDICE = "indice"
 COL_PERCENTUAL = "Percentual Multiplicador/Rentabilidade"
 COL_TAXA = "Juros Criterio Novo - Taxa"
+COL_EMPRESA = "Empresa"
+COL_SITUACAO = "Situacao"
+COL_VENCIMENTO = "Data de Vencimento"
+COLS_OPCIONAIS = (COL_EMPRESA, COL_SITUACAO, COL_VENCIMENTO)
 
 
 def parse_caracs(texto: str) -> list[Caracteristicas]:
@@ -407,7 +416,10 @@ def parse_caracs(texto: str) -> list[Caracteristicas]:
     # None` levanta "boolean value of NA is ambiguous" em vez de virar
     # None. Com 85 colunas lidas de um arquivo de terceiro, célula vazia é
     # regra, não exceção.
-    df = df[cols].apply(lambda s: s.astype("string").str.strip()).fillna("")
+    for c in COLS_OPCIONAIS:
+        if c not in df.columns:
+            df[c] = ""
+    df = df[cols + list(COLS_OPCIONAIS)].apply(lambda s: s.astype("string").str.strip()).fillna("")
     # Código passa por normalização mais forte que strip() (ver
     # _normalize_codigo) -- é usado pra CRUZAR com Debenture.codigo (vindo
     # da Anbima), diferente dos outros campos, que só são exibidos.
@@ -421,6 +433,9 @@ def parse_caracs(texto: str) -> list[Caracteristicas]:
             indice_emissao=(r[COL_INDICE] or None),
             percentual_emissao=parse_num(r[COL_PERCENTUAL]),
             taxa_emissao=parse_num(r[COL_TAXA]),
+            empresa=(r[COL_EMPRESA] or None),
+            situacao=(r[COL_SITUACAO] or None),
+            data_vencimento=parse_data_br(r[COL_VENCIMENTO]),
         )
         for r in df.to_dict("records")
         if r[COL_CODIGO]

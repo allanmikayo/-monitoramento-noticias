@@ -17,12 +17,14 @@ from typing import NamedTuple
 from zoneinfo import ZoneInfo
 
 from sqlalchemy import and_, func, or_, select
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from ..models import (
-    AppSetting, Article, Company, Debenture, DebentureSpread, NegocioB3, Sector,
+    AppSetting, Article, Company, Debenture, DebentureCaracteristica, DebentureSpread,
+    NegocioB3, Sector,
 )
-from .fetch import _normalize_codigo
+from .fetch import _normalize_codigo, compute_classe
 
 CLASSES = ["IPCA + Incentivadas", "CDI + Tradicionais"]
 
@@ -1179,6 +1181,23 @@ def emissor_cards(db: Session, nomes_emissor: list[str]) -> dict:
     return {"classes": [_bloco_de_cards(db, c, por_classe.get(c, [])) for c in CLASSES]}
 
 
+def _classe_por_caracteristica(c) -> str | None:
+    """Classe de um papel que a Anbima nunca precificou, a partir da
+    remuneração da emissão: IPCA + taxa -> "IPCA +"; DI + spread (100% do DI)
+    -> "CDI +"; o resto (% do DI, prefixado...) pelo próprio índice. Depois a
+    mesma `compute_classe` do resto da base."""
+    if c is None:
+        return None
+    indice = (c.indice_emissao or "").upper()
+    if "IPCA" in indice:
+        indexador = "IPCA +"
+    elif indice in ("DI", "CDI") and (c.taxa_emissao or 0) > 0 and c.percentual_emissao in (None, 0, 100):
+        indexador = "CDI +"
+    else:
+        indexador = indice or None
+    return compute_classe(indexador, c.incentivada)
+
+
 def emissor_tickers(db: Session, nomes_emissor: list[str]) -> dict:
     """Tabela das dívidas a mercado de um ou mais emissores, agrupada por
     classe, com totalizador de estoque por grupo.
@@ -1217,89 +1236,115 @@ def emissor_tickers(db: Session, nomes_emissor: list[str]) -> dict:
         .all()
     )
     if not debs:
-        return {"tickers": [], "totais": []}
+        return {"tickers": [], "totais": [], "total_geral": {"n_ativos": 0, "estoque": None}}
 
-    codigos = [d.codigo for d in debs]
-    # Última data COM publicação de cada código, e a linha inteira daquele
-    # dia -- em duas etapas para ser portátil (o `DISTINCT ON` do Postgres
-    # não existe no SQLite dos testes).
-    ultimas = (
-        select(DebentureSpread.codigo, func.max(DebentureSpread.data).label("data"))
-        .where(DebentureSpread.codigo.in_(codigos))
-        .group_by(DebentureSpread.codigo)
-        .subquery()
-    )
-    recentes = db.execute(
-        select(DebentureSpread).join(
-            ultimas,
-            (DebentureSpread.codigo == ultimas.c.codigo)
-            & (DebentureSpread.data == ultimas.c.data),
-        )
-    ).scalars().all()
-    por_codigo = {s.codigo: s for s in recentes}
+    # UNIVERSO DA TABELA (22/10/2026, pedido do Allan): toda debênture
+    # REGISTRADA no arquivo de características com o CNPJ do emissor, esteja
+    # ou não precificada pela Anbima ("não quero que tire os que não estão na
+    # Anbima"); excluídas ficam de fora. Os dados da Anbima (spread,
+    # duration, última taxa indicativa e a data dela) vêm da base de spreads.
+    # Enquanto `debenture_caracteristicas` não tiver sido carregada (ou o
+    # emissor não tiver CNPJ cruzado), cai no universo antigo: o que a
+    # Anbima já publicou, sem os papéis vencidos ou parados.
+    cnpjs = {d.cnpj for d in debs if d.cnpj}
+    caracs: list = []
+    if cnpjs:
+        try:
+            caracs = (db.query(DebentureCaracteristica)
+                      .filter(DebentureCaracteristica.cnpj.in_(cnpjs)).all())
+        except SQLAlchemyError:          # tabela ainda não criada neste banco
+            db.rollback()
+            caracs = []
+    registrados = {c.codigo: c for c in caracs
+                   if _chave_alfabetica(c.situacao or "").startswith("registr")}
+    usar_caracs = bool(caracs)
+    if usar_caracs:
+        codigos = list(registrados)
+        por_cod_deb = {d.codigo: d for d in db.query(Debenture)
+                       .filter(Debenture.codigo.in_(codigos)).all()} if codigos else {}
+    else:
+        codigos = [d.codigo for d in debs]
+        por_cod_deb = {d.codigo: d for d in debs}
+
+    # Último boletim de cada código (estoque/duration/spread) e último boletim
+    # COM taxa indicativa (= a última vez que a Anbima precificou o papel).
+    def _ultimas(*condicoes):
+        if not codigos:
+            return {}
+        sub = (select(DebentureSpread.codigo, func.max(DebentureSpread.data).label("data"))
+               .where(DebentureSpread.codigo.in_(codigos), *condicoes)
+               .group_by(DebentureSpread.codigo).subquery())
+        linhas_ = db.execute(select(DebentureSpread).join(
+            sub, (DebentureSpread.codigo == sub.c.codigo) & (DebentureSpread.data == sub.c.data))
+        ).scalars().all()
+        return {s.codigo: s for s in linhas_}
+    por_codigo = _ultimas()
+    precificacao = _ultimas(DebentureSpread.taxa_indicativa.isnot(None))
 
     linhas: list[dict] = []
-    for d in debs:
-        u = por_codigo.get(d.codigo)
+    for codigo in codigos:
+        d = por_cod_deb.get(codigo)
+        c = registrados.get(codigo) if usar_caracs else None
+        u = por_codigo.get(codigo)
+        a = precificacao.get(codigo)
+        classe = d.classe if d is not None else _classe_por_caracteristica(c)
+        estoque = c.estoque if c is not None and c.estoque is not None else (u.estoque if u else None)
+        data_estoque = (c.data_estoque if c is not None and c.estoque is not None
+                        else (u.data if u else None))
+        data_emissao = c.data_emissao if c is not None and c.data_emissao else (d.data_emissao if d else None)
         linhas.append({
-            "codigo": d.codigo,
-            "emissor": d.nome,
-            "indexador": d.indexador,
-            "classe": d.classe,
-            "incentivada": d.incentivada,
-            "estoque": round(u.estoque, 1) if u and u.estoque is not None else None,
-            # TAXA DA EMISSÃO, NÃO A INDICATIVA (11/09/2026, pedido do
-            # Allan). São coisas diferentes: a indicativa é o preço de hoje
-            # no secundário (e muda todo dia), a da emissão é a condição
-            # contratada no papel (e não muda nunca). Numa tabela de
-            # DÍVIDA do emissor, é a segunda que descreve a dívida.
-            # O spread de hoje continua no gráfico e nos cards acima.
-            "data_emissao": d.data_emissao.isoformat() if d.data_emissao else None,
-            "taxa_emissao": formatar_taxa_emissao(
-                d.indice_emissao, d.percentual_emissao, d.taxa_emissao),
+            "codigo": codigo,
+            "emissor": (d.nome if d is not None and d.nome else (c.empresa if c else None)),
+            "indexador": d.indexador if d is not None else (c.indice_emissao if c else None),
+            "classe": classe,
+            "incentivada": (d.incentivada if d is not None and d.incentivada else (c.incentivada if c else None)),
+            "estoque": round(estoque, 1) if estoque is not None else None,
+            # TAXA DA EMISSÃO, NÃO A INDICATIVA (11/09/2026): a condição
+            # contratada no papel. A indicativa de hoje tem coluna própria.
+            "data_emissao": data_emissao.isoformat() if data_emissao else None,
+            "data_vencimento": c.data_vencimento.isoformat() if c is not None and c.data_vencimento else None,
+            "taxa_emissao": (formatar_taxa_emissao(c.indice_emissao, c.percentual_emissao, c.taxa_emissao)
+                             if c is not None else
+                             formatar_taxa_emissao(d.indice_emissao, d.percentual_emissao, d.taxa_emissao)),
             "duration": round(u.duration, 2) if u and u.duration is not None else None,
-            "data_estoque": u.data.isoformat() if u else None,
-            # Spread do último boletim (22/10/2026) -- só se o papel estava
-            # PRECIFICADO nele (spread, PU, % par e duration), a mesma regra
-            # das médias. A tabela do perfil ordena por duration para se ler
-            # a curva do emissor.
+            "data_estoque": data_estoque.isoformat() if data_estoque else None,
+            # Spread do último boletim -- só se o papel estava PRECIFICADO
+            # nele (spread, PU, % par e duration), a mesma regra das médias.
             "spread": (round(u.spread, 1) if u and u.spread is not None and u.pu is not None
                        and u.pct_pu_par is not None and u.duration is not None else None),
-            # Taxonomia (22/10/2026): o cabeçalho do perfil do emissor monta
-            # as etiquetas de grupo, setor e subsetor a partir daqui.
-            "setor": d.setor,
-            "subsetor": d.subsetor,
-            "grupo_economico": d.grupo_economico,
-            "cnpj": d.cnpj,
+            # Última taxa indicativa da Anbima e a data dela (22/10/2026).
+            "taxa_anbima": round(a.taxa_indicativa, 4) if a and a.taxa_indicativa is not None else None,
+            "data_anbima": a.data.isoformat() if a else None,
+            "setor": d.setor if d is not None else None,
+            "subsetor": d.subsetor if d is not None else None,
+            "grupo_economico": d.grupo_economico if d is not None else None,
+            "cnpj": (d.cnpj if d is not None and d.cnpj else (c.cnpj if c else None)),
         })
 
-    # SÓ DÍVIDA EM CIRCULAÇÃO (22/10/2026). O cadastro não tem data de
-    # vencimento, então o sinal vem da própria Anbima. Sai da tabela e dos
-    # totais o papel que:
-    #  - VENCEU: a última publicação tem duration ~zero (< 0,02 ano, uns
-    #    cinco dias úteis) e não é do boletim mais recente; ou
-    #  - PAROU: está há mais de 21 boletins (um mês útil) sem publicação.
-    # Um papel que só falhou um ou outro pregão continua -- ele "traz o dia
-    # anterior", como sempre. Caso que motivou: ENGIA8 (último boletim em
-    # 19/06, duration 0,00) inflava o estoque da Energisa em R$ 102 mi.
-    # Os que saem vêm listados em `fora_de_circulacao`, para a tela dizer.
-    datas_recentes = [r[0] for r in db.query(DebentureSpread.data).distinct()
-                      .order_by(DebentureSpread.data.desc()).limit(22).all()]
-    posicao = {d.isoformat(): i for i, d in enumerate(datas_recentes)}
     fora: list[dict] = []
-    em_circulacao: list[dict] = []
-    for l in linhas:
-        if l["data_estoque"] is None:          # nunca publicado: fica, com campos vazios
-            em_circulacao.append(l)
-            continue
-        pos = posicao.get(l["data_estoque"])
-        venceu = pos is not None and pos > 0 and l["duration"] is not None and l["duration"] < 0.02
-        if pos is None or venceu:
-            fora.append({"codigo": l["codigo"], "data_estoque": l["data_estoque"],
-                         "motivo": "vencido" if venceu else "sem publicação recente"})
-        else:
-            em_circulacao.append(l)
-    linhas = em_circulacao
+    if not usar_caracs:
+        # Universo antigo (sem características): tira papel vencido (duration
+        # ~zero fora do boletim mais recente) ou parado (> 21 boletins sem
+        # publicação) -- sem o arquivo não há como saber a situação.
+        datas_recentes = [r[0] for r in db.query(DebentureSpread.data).distinct()
+                          .order_by(DebentureSpread.data.desc()).limit(22).all()]
+        posicao = {dt.isoformat(): i for i, dt in enumerate(datas_recentes)}
+        mantidas = []
+        for l in linhas:
+            if l["data_estoque"] is None:
+                mantidas.append(l)
+                continue
+            pos = posicao.get(l["data_estoque"])
+            venceu = pos is not None and pos > 0 and l["duration"] is not None and l["duration"] < 0.02
+            if pos is None or venceu:
+                fora.append({"codigo": l["codigo"], "data_estoque": l["data_estoque"],
+                             "motivo": "vencido" if venceu else "sem publicação recente"})
+            else:
+                mantidas.append(l)
+        linhas = mantidas
+    ordem_classe = {c: i for i, c in enumerate(CLASSES)}
+    linhas.sort(key=lambda l: (ordem_classe.get(l["classe"], 9), l["classe"] or "",
+                               l["emissor"] or "", l["codigo"]))
 
     # Totalizadores por classe. Somados aqui, e não no navegador, porque é
     # o mesmo número que precisa bater com o card e com a aba Visão Geral --

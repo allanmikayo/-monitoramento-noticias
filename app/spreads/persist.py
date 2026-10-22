@@ -11,7 +11,7 @@ from datetime import date, datetime, timezone
 from sqlalchemy import insert
 from sqlalchemy.orm import Session
 
-from ..models import Debenture, DebentureSpread, NegocioB3, NtnbReferencia
+from ..models import Debenture, DebentureCaracteristica, DebentureSpread, NegocioB3, NtnbReferencia
 
 # Tamanho do lote de inserção do negócio a negócio da B3.
 #
@@ -152,6 +152,58 @@ def persist_caracteristicas(db: Session, caracs: list[Caracteristicas]) -> int:
         deb.percentual_emissao = c.percentual_emissao
         deb.taxa_emissao = c.taxa_emissao
         deb.classe = compute_classe(deb.indexador, deb.incentivada)
+        n += 1
+    db.commit()
+    return n
+
+
+def persist_caracteristicas_completas(db: Session, caracs: list[Caracteristicas]) -> int:
+    """Grava o arquivo de características INTEIRO em `debenture_caracteristicas`
+    (22/10/2026) -- inclusive papel que nunca passou pela Anbima e papel já
+    excluído (a situação vai junto; quem filtra é a consulta). Upsert por
+    código; o estoque já gravado é preservado (vem de outra fonte, ver
+    `persist_estoque_ativos`)."""
+    if not caracs:
+        return 0
+    agora = datetime.now(timezone.utc)
+    existentes = {c.codigo: c for c in db.query(DebentureCaracteristica).all()}
+    n = 0
+    for c in {x.codigo: x for x in caracs}.values():
+        linha = existentes.get(c.codigo)
+        if linha is None:
+            linha = DebentureCaracteristica(codigo=c.codigo)
+            db.add(linha)
+        linha.empresa = c.empresa
+        linha.cnpj = c.cnpj
+        linha.situacao = c.situacao
+        linha.incentivada = c.incentivada
+        linha.data_emissao = c.data_emissao
+        linha.data_vencimento = c.data_vencimento
+        linha.indice_emissao = c.indice_emissao
+        linha.percentual_emissao = c.percentual_emissao
+        linha.taxa_emissao = c.taxa_emissao
+        linha.atualizado_em = agora
+        n += 1
+    db.commit()
+    return n
+
+
+def persist_estoque_ativos(db: Session, estoque_df, dt: date) -> int:
+    """Estoque oficial (R$ mil -> R$ milhões, mesma conversão de
+    `fetch_spreads`) de TODOS os ativos da página "estoque por ativo" num
+    dia, gravado em `debenture_caracteristicas` (22/10/2026). É o que dá
+    volume aos papéis que a Anbima não precifica."""
+    if estoque_df is None or estoque_df.empty:
+        return 0
+    por_codigo = {}
+    for codigo, valor in zip(estoque_df["Código"], estoque_df["Estoque"]):
+        if codigo and valor is not None and valor == valor:   # descarta NaN
+            por_codigo[codigo] = float(valor) / 1000
+    n = 0
+    for linha in db.query(DebentureCaracteristica).filter(
+            DebentureCaracteristica.codigo.in_(list(por_codigo))).all():
+        linha.estoque = por_codigo[linha.codigo]
+        linha.data_estoque = dt
         n += 1
     db.commit()
     return n

@@ -148,7 +148,10 @@ def test_linhas_saem_agrupadas_e_nao_intercaladas():
     e o agrupamento visual não teria onde se apoiar."""
     db = _base()
     classes = [t["classe"] for t in queries.emissor_tickers(db, ["ENERGISA S/A"])["tickers"]]
-    assert classes == sorted(classes), f"linhas intercaladas: {classes}"
+    # Cada classe num bloco só (22/10/2026: IPCA+ primeiro, como na tela).
+    blocos = [c for i, c in enumerate(classes) if i == 0 or c != classes[i - 1]]
+    assert len(blocos) == len(set(blocos)), f"linhas intercaladas: {classes}"
+    assert blocos[0] == "IPCA + Incentivadas"
 
 
 def test_traz_duration_e_estoque_do_ultimo_dia_publicado():
@@ -246,7 +249,9 @@ def test_o_custo_nao_cresce_com_o_numero_de_tickers():
         f"3 papéis custaram {e1.n} consultas e 50 custaram {e2.n} -- "
         "o custo voltou a seguir o tamanho do emissor"
     )
-    assert e2.n <= 3, f"{e2.n} consultas para montar uma tabela é demais"
+    # 22/10/2026: cadastro, características, último boletim, última
+    # precificação e (sem características) as datas recentes -- fixo.
+    assert e2.n <= 5, f"{e2.n} consultas para montar uma tabela é demais"
 
 
 # ---------------------------------------------------------------------------
@@ -357,3 +362,33 @@ def test_papel_vencido_ou_parado_sai_da_divida_em_circulacao():
     assert {f["codigo"]: f["motivo"] for f in r["fora_de_circulacao"]} == {
         "VENCEU": "vencido", "PAROU": "sem publicação recente"}
     assert r["total_geral"]["estoque"] == sum(t["estoque"] or 0 for t in r["tickers"])
+
+
+
+def test_tabela_usa_caracteristicas_registradas_mesmo_fora_da_anbima():
+    """22/10/2026: tudo que está REGISTRADO nas características com o CNPJ
+    do emissor entra na tabela e no total, precificado pela Anbima ou não;
+    excluído fica de fora. Última taxa indicativa e data vêm da base."""
+    from app.models import DebentureCaracteristica
+    db = _base(n_ipca=1, n_cdi=0)
+    db.query(Debenture).update({"cnpj": "00864214000106"})
+    db.add(DebentureCaracteristica(codigo="IPCA0", cnpj="00864214000106", situacao="Registrado",
+                                   indice_emissao="IPCA", taxa_emissao=6.0, incentivada="S",
+                                   data_vencimento=date(2032, 1, 15), estoque=210.0,
+                                   data_estoque=date(2026, 9, 9)))
+    db.add(DebentureCaracteristica(codigo="SOCVM1", cnpj="00864214000106", situacao="Registrado",
+                                   empresa="ENERGISA S/A", indice_emissao="DI", percentual_emissao=100.0,
+                                   taxa_emissao=1.2, incentivada="N", estoque=55.0,
+                                   data_estoque=date(2026, 9, 9)))
+    db.add(DebentureCaracteristica(codigo="VELHA1", cnpj="00864214000106", situacao="Excluído",
+                                   indice_emissao="DI", taxa_emissao=1.0, estoque=0.0))
+    db.commit()
+    r = queries.emissor_tickers(db, ["ENERGISA S/A"])
+    por = {t["codigo"]: t for t in r["tickers"]}
+    assert set(por) == {"IPCA0", "SOCVM1"}                     # excluído fora
+    assert por["SOCVM1"]["classe"] == "CDI + Tradicionais"      # classe pela remuneração
+    assert por["SOCVM1"]["taxa_anbima"] is None and por["SOCVM1"]["data_anbima"] is None
+    assert por["IPCA0"]["taxa_anbima"] == 7.5 and por["IPCA0"]["data_anbima"] == "2026-09-09"
+    assert por["IPCA0"]["data_vencimento"] == "2032-01-15"
+    assert por["IPCA0"]["estoque"] == 210.0                     # estoque oficial por ativo
+    assert r["total_geral"]["estoque"] == 265.0

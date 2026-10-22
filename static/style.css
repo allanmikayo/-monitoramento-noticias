@@ -788,3 +788,7 @@ button.perfil-tag:hover { outline: 1px solid currentColor; }
   .perfil-metricas { grid-template-columns: 1fr 1fr; }
   .perfil-seletor { flex-wrap: wrap; }
 }
+
+/* Papel que a Anbima não precifica (22/10/2026): linha um tom mais clara. */
+#tabela-emissor-tickers tr.fora-anbima td { color: #6b6b6b; }
+#tabela-emissor-tickers tr.fora-anbima td strong { color: #333; }

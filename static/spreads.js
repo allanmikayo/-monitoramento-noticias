@@ -2006,7 +2006,7 @@
       const cnpjs = [...new Set(tickers.map((t) => t.cnpj).filter(Boolean))];
       if (cnpjs.length === 1) partes.push(`CNPJ ${fmtCnpj(cnpjs[0])}`);
     }
-    partes.push(`Dívida em circulação <b>${fmtReais(geral.estoque)}</b> em ${geral.n_ativos || 0} `
+    partes.push(`Dívida registrada <b>${fmtReais(geral.estoque)}</b> em ${geral.n_ativos || 0} `
       + `debênture${geral.n_ativos === 1 ? "" : "s"}`);
     if (outros > 0.5) partes.push(`${fmtReais(outros)} em outros indexadores`);
     ["IPCA + Incentivadas", "CDI + Tradicionais"].forEach((c) => {
@@ -2062,7 +2062,7 @@
     metricas.innerHTML =
       m("Spread médio", `<span class="valor">${spread !== null && spread !== undefined ? fmtBpsSimples(spread) + " bps" : "—"}</span>`,
         detalheSpread, "principal")
-      + m("Volume", `<span class="valor">${fmtReais(total.estoque)}</span>`, "estoque em circulação")
+      + m("Volume", `<span class="valor">${fmtReais(total.estoque)}</span>`, "toda a dívida registrada")
       + m("Duration", `<span class="valor">${card.duration !== null && card.duration !== undefined
             ? card.duration.toLocaleString("pt-BR", { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + " anos" : "—"}</span>`,
           "ponderada por estoque");
@@ -2114,7 +2114,7 @@
     const num = (v, casas) =>
       v === null || v === undefined ? "—"
         : v.toLocaleString("pt-BR", { minimumFractionDigits: casas, maximumFractionDigits: casas });
-    const ultimaData = (data.tickers || []).map((t) => t.data_estoque).filter(Boolean).sort().pop();
+    const ultimaAnbima = (data.tickers || []).map((t) => t.data_anbima).filter(Boolean).sort().pop();
 
     const porClasse = new Map();
     (data.tickers || []).forEach((t) => {
@@ -2123,7 +2123,7 @@
       porClasse.get(c).push(t);
     });
     // Colunas visíveis: a de Emissor só existe no perfil de grupo.
-    const nCols = grupo ? 7 : 6;
+    const nCols = grupo ? 10 : 9;
     // Mesma ordem das colunas de cima: IPCA+ antes de CDI+, o resto depois.
     const ordemClasse = (c) => (c === "IPCA + Incentivadas" ? 0 : c === "CDI + Tradicionais" ? 1 : 2);
     [...porClasse.entries()].sort((a, b) => ordemClasse(a[0]) - ordemClasse(b[0])).forEach(([classe, lista]) => {
@@ -2132,21 +2132,33 @@
       cab.className = "grupo-classe";
       cab.innerHTML = `<td colspan="${nCols}">${classe}<span class="resumo">${tot.n_ativos || lista.length} papéis · ${fmtReais(tot.estoque)}</span></td>`;
       tbody.appendChild(cab);
-      lista.sort((a, b) => (a.duration === null) - (b.duration === null) || (a.duration || 0) - (b.duration || 0));
+      // Do vencimento mais curto ao mais longo (papel sem vencimento no fim).
+      lista.sort((a, b) => (!a.data_vencimento) - (!b.data_vencimento)
+        || String(a.data_vencimento || "").localeCompare(String(b.data_vencimento || ""))
+        || (a.duration || 0) - (b.duration || 0));
       lista.forEach((t) => {
         const tr = document.createElement("tr");
         tr.className = "linha-ticker";
-        const defasado = t.data_estoque && t.data_estoque !== ultimaData
-          ? `<span class="defasado" title="Último boletim do papel">até ${fmtData(t.data_estoque).slice(0, 5)}</span>` : "";
         const selo = classe !== "IPCA + Incentivadas" && String(t.incentivada || "").toUpperCase().startsWith("S")
           ? '<span class="selo-12431" title="Lei 12.431 — incentivada">12.431</span>' : "";
+        // Anbima: última taxa indicativa e quando saiu. Papel que a Anbima
+        // não precifica fica com "—"; data antiga aparece apagada.
+        const taxaAnbima = t.taxa_anbima !== null && t.taxa_anbima !== undefined
+          ? `${t.taxa_anbima.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 4 })}%` : "—";
+        const dataAnbima = t.data_anbima
+          ? `<span class="${t.data_anbima === ultimaAnbima ? "" : "defasado"}">${fmtData(t.data_anbima)}</span>`
+          : '<span class="defasado">não precificado</span>';
+        tr.className = "linha-ticker" + (t.data_anbima ? "" : " fora-anbima");
         tr.innerHTML = `
-          <td class="col-texto"><strong>${t.codigo}</strong>${defasado}</td>
+          <td class="col-texto"><strong>${t.codigo}</strong></td>
           ${grupo ? `<td class="col-texto">${t.emissor || "—"}</td>` : ""}
           <td class="col-texto">${t.taxa_emissao || t.indexador || "—"}${selo}</td>
           <td>${t.data_emissao ? fmtData(t.data_emissao) : "—"}</td>
+          <td>${t.data_vencimento ? fmtData(t.data_vencimento) : "—"}</td>
           <td>${num(t.duration, 2)}</td>
           <td><strong>${num(t.spread, 1)}</strong></td>
+          <td>${taxaAnbima}</td>
+          <td>${dataAnbima}</td>
           <td>${num(t.estoque, 1)}</td>
         `;
         tbody.appendChild(tr);
