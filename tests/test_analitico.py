@@ -356,11 +356,13 @@ def test_visao_geral_tem_o_que_ficou(cliente):
         # Textos revistos em 22/10/2026 (pedido do Allan) + card de mediana.
         "SPREAD MÉDIO", "MEDIANA DO SPREAD", "DURATION", "ATIVOS", "ESTOQUE",
         "precificados pela Anbima", "Evolução do Spread Médio", "chart-composicao",
-        "chart-dispersao", "Spread por Setor, Subsetor e Emissor", "desagios-tabs", "btn-data", "menu-multi-todos", "painel-dispersao", "chart-mapa", "Média 3M",
+        "chart-dispersao", "Spread por Setor, Subsetor e Emissor", "desagios-tabs", "btn-data", "menu-multi-todos", "painel-dispersao", "chart-mapa", "perfil-kpis", "Abertura da Dívida", "chart-emissor-ipca", "Média 3M",
         "chart-desagios", "Decomposição do Movimento do Spread",
         "Top 10 Aberturas", 'data-lado="fechamentos"', "barra-fixa",
     ):
         assert termo in r.text, f"faltou '{termo}' na Visão Geral"
+    # Perfil do emissor (22/10/2026): o negócio a negócio da B3 saiu da aba.
+    assert "tabela-emissor-negociacoes" not in r.text
 
 
 def test_visao_geral_nao_traz_de_volta_o_que_saiu(cliente):

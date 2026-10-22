@@ -120,3 +120,15 @@ def test_opcoes_de_filtro_em_ordem_alfabetica_sem_acento():
     db.commit()
     assert queries.opcoes_filtro(db, IPCA)["setores"] == [
         "Energia Elétrica", "Óleo & Gás", "Saneamento", "Transportes"]
+
+
+def test_perfil_series_media_mediana_e_mercado():
+    db = _banco()
+    r = queries.perfil_series(db, ["EMISSOR A", "EMISSOR B"], IPCA)
+    ultimo = r["series"][-1]
+    assert ultimo["n_ativos"] == 2
+    assert ultimo["spread_medio"] == pytest.approx((100 * 100 + 200 * 300) / 400, abs=0.1)
+    assert ultimo["spread_mediana"] == 150.0
+    assert [p["data"] for p in r["mercado"]] == [D0.isoformat(), D1.isoformat()]
+    # Papel incompleto (NOVO) não entra nem quando o emissor é pedido.
+    assert queries.perfil_series(db, ["EMISSOR NOVO"], IPCA) == {"series": [], "mercado": []}

@@ -1763,43 +1763,56 @@
   const painelEmissores = document.getElementById("painel-emissores");
   const emissorBusca = document.getElementById("emissor-busca");
   const emissorBuscaResultados = document.getElementById("emissor-busca-resultados");
-  const emissorChips = document.getElementById("emissor-chips");
-  const emissorGrupoBtn = document.getElementById("emissor-grupo-btn");
-  const emissorGrupoPainel = document.getElementById("emissor-grupo-painel");
-  const emissorGrupoBusca = document.getElementById("emissor-grupo-busca");
-  const emissorGrupoLista = document.getElementById("emissor-grupo-lista");
-  const emissorLimpar = document.getElementById("emissor-limpar");
   const emissorRecolher = document.getElementById("emissor-recolher");
-  const emissorNivelTabs = document.querySelectorAll("#emissor-nivel-tabs .win-btn");
   const emissorVazio = document.getElementById("emissor-vazio");
   const emissorConteudo = document.getElementById("emissor-conteudo");
 
+  // ------------------------------------------------------------------
+  // PERFIL DO EMISSOR (22/10/2026, pedido do Allan). Um perfil por vez: um
+  // emissor, ou um grupo econômico consolidado. `currentEmissores` continua
+  // sendo a lista de nomes que as rotas recebem -- um nome para emissor,
+  // todos os do grupo para grupo -- e `perfilAtual` diz o que se escolheu.
+  // ------------------------------------------------------------------
   let emissoresDisponiveis = [];
-  let currentEmissores = []; // selecao multipla, pedido do Allan 24/07/2026
-  // As duas classes aparecem SEMPRE, lado a lado (11/09/2026) -- não há
-  // mais um botão escolhendo uma delas para a aba inteira. A ordem aqui é a
-  // ordem na tela: IPCA+ à esquerda, CDI+ à direita.
-  const CLASSES_EMISSOR = [
-    { classe: "IPCA + Incentivadas", canvas: "chart-emissor-ipca", chave: "emissorIpca" },
-    { classe: "CDI + Tradicionais", canvas: "chart-emissor-cdi", chave: "emissorCdi" },
-  ];
   let gruposEconomicos = [];
+  let currentEmissores = [];
+  let perfilAtual = null;   // { tipo: "emissor" | "grupo", nome }
+  const CLASSES_EMISSOR = [
+    { classe: "IPCA + Incentivadas", canvas: "chart-emissor-ipca", chave: "emissorIpca", fonte: "fonte-grafico-ipca" },
+    { classe: "CDI + Tradicionais", canvas: "chart-emissor-cdi", chave: "emissorCdi", fonte: "fonte-grafico-cdi" },
+  ];
   // Estado do "Recolher linhas" da tabela de dívidas. Guardado aqui, e não
-  // lido do DOM, para sobreviver ao redesenho da tabela a cada seleção.
+  // lido do DOM, para sobreviver ao redesenho da tabela.
   let tickersRecolhidos = false;
+  let emissoresCarregados = false;
 
   // Linha de fonte de cada visual. A data é a DO PRÓPRIO VISUAL, não a do
-  // cabeçalho da página: cada bloco aqui pode se apoiar num dia diferente
-  // (papel sem publicação num pregão traz o dia anterior), e uma data global
-  // afirmaria que todos estão no mesmo dia quando não estão.
+  // cabeçalho da página: cada bloco pode se apoiar num dia diferente.
   function escreverFonte(id, texto, iso) {
     const el = document.getElementById(id);
     if (!el) return;
     const [, m, d] = (iso || "").split("-");
     el.textContent = d ? `${texto} (dado disponível até ${d}/${m})` : texto;
   }
-  let currentNivel = document.querySelector("#emissor-nivel-tabs .win-btn.active")?.dataset.nivel || "emissor";
-  let emissoresCarregados = false;
+
+  function fmtBpsSimples(v) {
+    return v !== null && v !== undefined ? v.toLocaleString("pt-BR", { minimumFractionDigits: 1, maximumFractionDigits: 1 }) : "—";
+  }
+
+  // R$ milhões -> "R$ 1,35 bi" / "R$ 640 mi" (mesma regra do card da Visão Geral).
+  function fmtReais(mi) {
+    if (mi === null || mi === undefined) return "—";
+    return mi >= 1000
+      ? `R$ ${(mi / 1000).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} bi`
+      : `R$ ${mi.toLocaleString("pt-BR", { maximumFractionDigits: 0 })} mi`;
+  }
+
+  function fmtCnpj(c) {
+    const d = String(c || "").replace(/\D/g, "");
+    return d.length === 14 ? `${d.slice(0, 2)}.${d.slice(2, 5)}.${d.slice(5, 8)}/${d.slice(8, 12)}-${d.slice(12)}` : (c || "");
+  }
+
+  const semAcento = (s) => String(s || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
 
   secaoTabs.forEach((btn) => {
     btn.addEventListener("click", () => {
@@ -1812,11 +1825,9 @@
       // painel estava escondido (largura 0) quando os dados chegaram.
       if (secao === "visao-geral") desenharAtribuicao();
       painelEmissores.style.display = secao === "emissores" ? "block" : "none";
+      if (secao === "emissores" && !emissoresCarregados) carregarListaEmissores();
       document.getElementById("painel-dispersao").style.display = secao === "dispersao" ? "block" : "none";
       if (secao === "dispersao") abrirAbaDispersao();
-      if (secao === "emissores" && !emissoresCarregados) {
-        carregarListaEmissores();
-      }
     });
   });
 
@@ -1826,148 +1837,34 @@
       fetchJSON("/api/spreads/emissores", {}),
       fetchJSON("/api/spreads/grupos", {}),
     ]);
-    emissoresDisponiveis = lista.emissores;
+    emissoresDisponiveis = lista.emissores || [];
     gruposEconomicos = grupos.grupos || [];
-    renderGrupos();
   }
 
-  // ------------------------------------------------------------------
-  // GRUPO ECONÔMICO (11/09/2026, pedido do Allan). Escolher um grupo
-  // ADICIONA os emissores dele aos chips -- é um atalho de seleção, não um
-  // segundo filtro. Por isso não guarda estado próprio: depois de clicar,
-  // o que vale são os chips, que continuam editáveis um a um.
-  // ------------------------------------------------------------------
-  function renderGrupos() {
-    const q = (emissorGrupoBusca.value || "").trim().toLowerCase();
-    const visiveis = gruposEconomicos.filter((g) => g.grupo.toLowerCase().includes(q));
-    emissorGrupoLista.innerHTML = "";
-    if (!gruposEconomicos.length) {
-      emissorGrupoLista.innerHTML =
-        '<div class="search-item muted">Nenhum grupo econômico preenchido na taxonomia.</div>';
-      return;
-    }
-    if (!visiveis.length) {
-      emissorGrupoLista.innerHTML = '<div class="search-item muted">Nada encontrado.</div>';
-      return;
-    }
-    visiveis.slice(0, 60).forEach((g) => {
-      // "já selecionado" = TODOS os emissores do grupo já estão nos chips.
-      // Um grupo parcialmente selecionado continua clicável para completar.
-      const todos = g.emissores.every((n) => currentEmissores.includes(n));
-      const div = document.createElement("div");
-      div.className = "search-item" + (todos ? " grupo-selecionado" : "");
-      div.innerHTML = `<span>${g.grupo}</span>` +
-        `<span class="muted small">${g.n_emissores} emissor${g.n_emissores === 1 ? "" : "es"}` +
-        `${todos ? " · clique para remover" : ""}</span>`;
-      div.addEventListener("click", () => {
-        // Alterna: grupo inteiro já selecionado sai da seleção. Sem isto,
-        // desfazer um clique que trouxe 11 emissores seria 11 cliques nos
-        // "×" dos chips.
-        if (todos) {
-          currentEmissores = currentEmissores.filter((n) => !g.emissores.includes(n));
-        } else {
-          registrarUso("grupo", g.grupo);
-          g.emissores.forEach((n) => {
-            if (!currentEmissores.includes(n)) currentEmissores.push(n);
-          });
-        }
-        renderChips();
-        renderGrupos();
-        atualizarPainelEmissor();
-      });
-      emissorGrupoLista.appendChild(div);
-    });
-  }
-
-  emissorGrupoBtn.addEventListener("click", (e) => {
-    e.stopPropagation();
-    const abrindo = emissorGrupoPainel.style.display === "none";
-    emissorGrupoPainel.style.display = abrindo ? "block" : "none";
-    if (abrindo) {
-      renderGrupos();
-      emissorGrupoBusca.focus();
-    }
-  });
-  emissorGrupoBusca.addEventListener("input", renderGrupos);
-  emissorGrupoBusca.addEventListener("click", (e) => e.stopPropagation());
-  document.addEventListener("click", (e) => {
-    if (!emissorGrupoPainel.contains(e.target) && e.target !== emissorGrupoBtn) {
-      emissorGrupoPainel.style.display = "none";
-    }
-  });
-
-  function renderChips() {
-    emissorChips.innerHTML = "";
-    currentEmissores.forEach((nome) => {
-      const chip = document.createElement("span");
-      chip.className = "chip";
-      chip.innerHTML = `<span>${nome}</span>`;
-      const btnRemover = document.createElement("button");
-      btnRemover.type = "button";
-      btnRemover.setAttribute("aria-label", `Remover ${nome}`);
-      btnRemover.textContent = "×";
-      btnRemover.addEventListener("click", () => {
-        currentEmissores = currentEmissores.filter((n) => n !== nome);
-        renderChips();
-        atualizarPainelEmissor();
-      });
-      chip.appendChild(btnRemover);
-      emissorChips.appendChild(chip);
-    });
-    // Só aparece quando há o que limpar -- botão morto na tela é ruído.
-    emissorLimpar.style.display = currentEmissores.length ? "" : "none";
-  }
-
-  function atualizarPainelEmissor() {
-    if (!currentEmissores.length) {
-      emissorVazio.style.display = "block";
-      emissorConteudo.style.display = "none";
-      return;
-    }
-    emissorVazio.style.display = "none";
-    emissorConteudo.style.display = "block";
-    reloadEmissor();
-  }
-
-  // ------------------------------------------------------------------
-  // Ranking B3 vs. Anbima (tela inicial da aba Emissores, pedido do
-  // Allan, 27/07/2026) -- ver templates/spreads.html pro HTML e
-  // queries.emissor_ranking_diferencas pro cálculo.
-  // ------------------------------------------------------------------
-  function fmtBpsSimples(v) {
-    return v !== null && v !== undefined ? v.toLocaleString("pt-BR", { minimumFractionDigits: 1, maximumFractionDigits: 1 }) : "—";
-  }
-
-  // `loadEmissorRanking` e `renderRankingTabela` saíram em 09/09/2026 junto
-  // com o bloco de ranking B3 x Anbima da tela inicial -- ver o comentário
-  // no template. A rota e a consulta continuam existindo; o que deixou de
-  // acontecer é a chamada automática ao abrir a aba.
-
-
+  // Busca única: emissores e grupos na mesma lista, cada um com o tipo à
+  // direita. Quem começa com o termo vem antes; depois, ordem alfabética.
   emissorBusca.addEventListener("input", () => {
-    const q = emissorBusca.value.trim().toLowerCase();
-    if (!q) {
-      emissorBuscaResultados.style.display = "none";
-      return;
-    }
-    const disponiveis = emissoresDisponiveis.filter(
-      (nome) => nome.toLowerCase().includes(q) && !currentEmissores.includes(nome)
-    );
+    const q = semAcento(emissorBusca.value.trim());
+    if (!q) { emissorBuscaResultados.style.display = "none"; return; }
+    const candidatos = [
+      ...gruposEconomicos.map((g) => ({ tipo: "grupo", nome: g.grupo, extra: `${g.n_emissores} emissor${g.n_emissores === 1 ? "" : "es"}` })),
+      ...emissoresDisponiveis.map((n) => ({ tipo: "emissor", nome: n, extra: "" })),
+    ].filter((c) => semAcento(c.nome).includes(q));
+    candidatos.sort((a, b) => (semAcento(b.nome).startsWith(q) - semAcento(a.nome).startsWith(q))
+      || a.nome.localeCompare(b.nome, "pt-BR", { sensitivity: "base" }));
     emissorBuscaResultados.innerHTML = "";
-    if (!disponiveis.length) {
+    if (!candidatos.length) {
       emissorBuscaResultados.innerHTML = '<div class="search-item muted">Nada encontrado.</div>';
     } else {
-      disponiveis.slice(0, 15).forEach((nome) => {
+      candidatos.slice(0, 20).forEach((c) => {
         const div = document.createElement("div");
         div.className = "search-item";
-        div.innerHTML = `<span>${nome}</span>`;
+        div.innerHTML = `<span>${escHtml(c.nome)}</span>`
+          + `<span class="tipo-resultado">${c.tipo === "grupo" ? "Grupo econômico" : "Emissor"}${c.extra ? " · " + c.extra : ""}</span>`;
         div.addEventListener("click", () => {
-          currentEmissores.push(nome);
-          registrarUso("emissor", nome);
           emissorBusca.value = "";
           emissorBuscaResultados.style.display = "none";
-          renderChips();
-          atualizarPainelEmissor();
+          abrirPerfil(c.tipo, c.nome);
         });
         emissorBuscaResultados.appendChild(div);
       });
@@ -1981,21 +1878,27 @@
     }
   });
 
-  emissorLimpar.addEventListener("click", () => {
-    currentEmissores = [];
-    renderChips();
-    renderGrupos();
-    atualizarPainelEmissor();
-  });
+  function abrirPerfil(tipo, nome) {
+    if (tipo === "grupo") {
+      const g = gruposEconomicos.find((x) => x.grupo === nome);
+      currentEmissores = g ? [...g.emissores] : [];
+    } else {
+      currentEmissores = [nome];
+    }
+    perfilAtual = { tipo, nome };
+    registrarUso(tipo === "grupo" ? "grupo" : "emissor", nome);
+    emissorVazio.style.display = currentEmissores.length ? "none" : "block";
+    emissorConteudo.style.display = currentEmissores.length ? "block" : "none";
+    if (currentEmissores.length) reloadEmissor();
+  }
 
   emissorRecolher.addEventListener("click", () => {
     tickersRecolhidos = !tickersRecolhidos;
     aplicarRecolhimento();
   });
 
-  // Esconde/mostra as linhas de papel, deixando cabeçalho de grupo, totais
-  // por classe e total geral sempre visíveis -- é o resumo que a pessoa quer
-  // ver quando recolhe.
+  // Esconde/mostra as linhas de papel, deixando cabeçalho de classe, totais
+  // por classe e total geral sempre visíveis.
   function aplicarRecolhimento() {
     emissorRecolher.textContent = tickersRecolhidos ? "Expandir linhas" : "Recolher linhas";
     document
@@ -2003,99 +1906,127 @@
       .forEach((tr) => { tr.hidden = tickersRecolhidos; });
   }
 
-  emissorNivelTabs.forEach((btn) => {
-    btn.addEventListener("click", () => {
-      emissorNivelTabs.forEach((b) => b.classList.remove("active"));
-      btn.classList.add("active");
-      currentNivel = btn.dataset.nivel;
-      if (currentEmissores.length) loadEmissorCharts();
-    });
-  });
-
   async function reloadEmissor() {
-    await Promise.all([
-      loadEmissorTabela(), loadEmissorCharts(),
-      loadEmissorNegociacoes(), loadEmissorCards(),
+    // Cabeçalho, cards e tabela saem das mesmas duas respostas; os gráficos
+    // vêm em paralelo.
+    const [tabela, cards] = await Promise.all([
+      fetchJSON("/api/spreads/emissor", { nome: currentEmissores }),
+      fetchJSON("/api/spreads/emissor/cards", { nome: currentEmissores }),
+      loadEmissorCharts(),
     ]);
+    renderCabecalhoPerfil(tabela);
+    renderCardsPerfil(tabela, cards);
+    renderTabelaEmissor(tabela);
   }
 
   // ------------------------------------------------------------------
-  // SEIS CARDS, TRÊS POR CLASSE (11/09/2026, pedido do Allan): spread (com
-  // a média 3M embaixo), duration média e estoque total. IPCA+Incentivadas
-  // à esquerda, CDI+Tradicionais à direita.
-  //
-  // As duas colunas NUNCA se somam. As referências são diferentes (NTN-B e
-  // DI) e uma média entre elas não significaria nada -- ficam lado a lado
-  // para comparar, não para juntar. O servidor manda as duas prontas numa
-  // resposta só (queries.emissor_cards), então esta função não faz conta
-  // nenhuma: o mesmo número tem que sair de um lugar só.
-  //
-  // O card "SPREAD NEGOCIADO (B3)" saiu daqui; o negócio a negócio continua
-  // na tabela embaixo.
+  // CABEÇALHO: tipo, grupo econômico, setores e subsetores (do maior
+  // estoque para o menor), nome, e uma linha com CNPJ e contagem de papéis.
   // ------------------------------------------------------------------
-  async function loadEmissorCards() {
-    const alvo = document.getElementById("emissor-cards-duplo");
-    const data = await fetchJSON("/api/spreads/emissor/cards", { nome: currentEmissores });
-    alvo.innerHTML = "";
-    (data.classes || []).forEach((c) => {
-      const col = document.createElement("div");
-      col.className = "cards-classe";
-      const n = c.n_ativos || 0;
-      const media3m = c.spread_3m !== null && c.spread_3m !== undefined
-        ? `Média 3M: ${fmtBpsSimples(c.spread_3m)} bps ${fmtIntervalo(c.spread_3m_inicio, c.spread_3m_fim)}`
-        : "Média 3M: —";
-      col.innerHTML = `
-        <h3 class="cards-classe-titulo">${c.classe}
-          <span class="muted small">${n} ativo${n === 1 ? "" : "s"} precificado${n === 1 ? "" : "s"}</span>
-        </h3>
-        <div class="kpi-row">
-          <div class="kpi-card kpi-highlight">
-            <span class="kpi-label">SPREAD ANBIMA <span class="kpi-tag">${c.data ? fmtData(c.data) : ""}</span></span>
-            <span class="kpi-value">${c.spread !== null && c.spread !== undefined ? fmtBpsSimples(c.spread) + " bps" : "—"}</span>
-            <div class="muted small">${media3m}</div>
-          </div>
-          <div class="kpi-card">
-            <span class="kpi-label">DURATION MÉDIA</span>
-            <span class="kpi-value">${c.duration !== null && c.duration !== undefined ? fmtNum(c.duration, 2) + " anos" : "—"}</span>
-            <div class="muted small">${c.duration_fallback ? "Média simples (sem estoque cruzado)" : "Ponderada pelo estoque"}</div>
-          </div>
-          <div class="kpi-card">
-            <span class="kpi-label">ESTOQUE TOTAL</span>
-            <span class="kpi-value">${c.estoque !== null && c.estoque !== undefined ? fmtNum(c.estoque, 1) : "—"}</span>
-            <div class="muted small">R$ milhões · soma dos papéis</div>
-          </div>
-        </div>
-      `;
-      alvo.appendChild(col);
-    });
-    if (!alvo.children.length) {
-      alvo.innerHTML = '<p class="muted small">Sem papéis precificados para os emissores selecionados.</p>';
+  function renderCabecalhoPerfil(tabela) {
+    const tickers = tabela.tickers || [];
+    const grupo = perfilAtual.tipo === "grupo";
+    document.getElementById("perfil-tipo").textContent = grupo ? "Grupo econômico" : "Emissor";
+    document.getElementById("perfil-nome").textContent = perfilAtual.nome;
+
+    const somaPor = (campo) => {
+      const m = new Map();
+      tickers.forEach((t) => { if (t[campo]) m.set(t[campo], (m.get(t[campo]) || 0) + (t.estoque || 0)); });
+      return [...m.entries()].sort((a, b) => b[1] - a[1]).map(([k]) => k);
+    };
+    const tags = document.getElementById("perfil-tags");
+    tags.innerHTML = "";
+    // Grupo do emissor vira atalho: clicar abre o perfil do grupo inteiro.
+    if (!grupo) {
+      somaPor("grupo_economico").forEach((g) => {
+        const b = document.createElement("button");
+        b.type = "button";
+        b.className = "perfil-tag grupo";
+        b.title = "Abrir o perfil do grupo econômico";
+        b.textContent = `Grupo ${g}`;
+        if (gruposEconomicos.some((x) => x.grupo === g)) b.addEventListener("click", () => abrirPerfil("grupo", g));
+        tags.appendChild(b);
+      });
     }
-    const datasCards = (data.classes || []).map((c) => c.data).filter(Boolean).sort();
-    escreverFonte("fonte-cards", "Fonte: Anbima e Itaú BBA",
-                  datasCards[datasCards.length - 1]);
+    somaPor("setor").forEach((s) => {
+      const span = document.createElement("span");
+      span.className = "perfil-tag setor";
+      span.textContent = s;
+      tags.appendChild(span);
+    });
+    somaPor("subsetor").forEach((s) => {
+      const span = document.createElement("span");
+      span.className = "perfil-tag";
+      span.textContent = s;
+      tags.appendChild(span);
+    });
+
+    const porClasse = (c) => tickers.filter((t) => t.classe === c).length;
+    const nIpca = porClasse("IPCA + Incentivadas"), nCdi = porClasse("CDI + Tradicionais");
+    const nOutros = tickers.length - nIpca - nCdi;
+    const partes = [`${tickers.length} debênture${tickers.length === 1 ? "" : "s"}`
+      + ` (${nIpca} IPCA+ Incentivadas, ${nCdi} CDI+ Tradicionais${nOutros ? `, ${nOutros} outros indexadores` : ""})`];
+    if (grupo) {
+      partes.unshift(`${currentEmissores.length} emissor${currentEmissores.length === 1 ? "" : "es"}`);
+    } else {
+      const cnpjs = [...new Set(tickers.map((t) => t.cnpj).filter(Boolean))];
+      if (cnpjs.length === 1) partes.unshift(`CNPJ ${fmtCnpj(cnpjs[0])}`);
+    }
+    document.getElementById("perfil-linha").textContent = partes.join(" · ");
   }
 
-  async function loadEmissorTabela() {
-    document.getElementById("emissor-titulo-tabela").textContent =
-      currentEmissores.length === 1
-        ? `Debêntures Emitidas — ${currentEmissores[0]}`
-        : `Debêntures Emitidas — ${currentEmissores.length} emissores selecionados`;
-    const data = await fetchJSON("/api/spreads/emissor", { nome: currentEmissores });
+  // ------------------------------------------------------------------
+  // CARDS: estoque total (inclui outros indexadores), volume por classe e
+  // spread médio por classe com a média 3M embaixo. Volume vem da tabela
+  // (último estoque de cada papel); spread vem de /emissor/cards (só papel
+  // precificado, ponderado por estoque) -- mesmo número dos gráficos.
+  // ------------------------------------------------------------------
+  function renderCardsPerfil(tabela, cards) {
+    const totais = Object.fromEntries((tabela.totais || []).map((t) => [t.classe, t]));
+    const geral = tabela.total_geral || {};
+    const porClasse = Object.fromEntries((cards.classes || []).map((c) => [c.classe, c]));
+    const ipca = totais["IPCA + Incentivadas"] || {}, cdi = totais["CDI + Tradicionais"] || {};
+    const outros = (geral.estoque || 0) - (ipca.estoque || 0) - (cdi.estoque || 0);
+    const pct = (v) => (geral.estoque ? ` · ${Math.round((100 * (v || 0)) / geral.estoque)}% do total` : "");
+    const card = (rotulo, valor, sub, tag, destaque) => `
+      <div class="kpi-card${destaque ? " kpi-highlight" : ""}">
+        <span class="kpi-label">${rotulo}${tag ? ` <span class="kpi-tag">${tag}</span>` : ""}</span>
+        <span class="kpi-value">${valor}</span>
+        <span class="kpi-sub">${sub}</span>
+      </div>`;
+    const spreadCard = (classe, rotulo) => {
+      const c = porClasse[classe];
+      if (!c || c.spread === null || c.spread === undefined) return card(rotulo, "—", "sem papel precificado nesta classe", "", false);
+      const m3 = c.spread_3m !== null && c.spread_3m !== undefined ? `Média 3M: ${fmtBpsSimples(c.spread_3m)} bps` : "Média 3M: —";
+      return card(rotulo, `${fmtBpsSimples(c.spread)} bps`, m3, "pond. estoque", false);
+    };
+    document.getElementById("perfil-kpis").innerHTML =
+      card("ESTOQUE TOTAL", fmtReais(geral.estoque),
+           outros > 0.5 ? `inclui ${fmtReais(outros)} em outros indexadores` : `${geral.n_ativos || 0} debêntures`, "", true)
+      + card("VOLUME IPCA+ INCENTIVADAS", ipca.estoque ? fmtReais(ipca.estoque) : "—",
+             ipca.n_ativos ? `${ipca.n_ativos} papéis${pct(ipca.estoque)}` : "sem papel nesta classe", "", false)
+      + card("VOLUME CDI+ TRADICIONAIS", cdi.estoque ? fmtReais(cdi.estoque) : "—",
+             cdi.n_ativos ? `${cdi.n_ativos} papéis${pct(cdi.estoque)}` : "sem papel nesta classe", "", false)
+      + spreadCard("IPCA + Incentivadas", "SPREAD MÉDIO IPCA+")
+      + spreadCard("CDI + Tradicionais", "SPREAD MÉDIO CDI+");
+    const datas = [...(tabela.tickers || []).map((t) => t.data_estoque), ...(cards.classes || []).map((c) => c.data)]
+      .filter(Boolean).sort();
+    escreverFonte("fonte-cards", "Spread médio ponderado por estoque. Fonte: Anbima, Debentures.com e Itaú BBA",
+                  datas[datas.length - 1]);
+    document.getElementById("perfil-contexto").textContent = datas.length
+      ? `Dados até ${fmtData(datas[datas.length - 1])}` : "";
+  }
+
+  function renderTabelaEmissor(data) {
     const tbody = document.querySelector("#tabela-emissor-tickers tbody");
     tbody.innerHTML = "";
-
-    // AGRUPADO POR CLASSE (11/09/2026, pedido do Allan): "para ficar as
-    // semelhantes juntas". O backend já devolve as linhas ordenadas por
-    // classe e os totais por grupo -- aqui é só desenhar as quebras.
-    // Somar no navegador daria um número que poderia divergir do card da
-    // Visão Geral por arredondamento; o total vem pronto de lá.
+    // AGRUPADO POR CLASSE (11/09/2026): o backend já devolve as linhas
+    // ordenadas por classe e os totais por grupo -- aqui só se desenham as
+    // quebras.
     const totalPorClasse = {};
     (data.totais || []).forEach((t) => { totalPorClasse[t.classe] = t; });
-
     const num = (v, casas) =>
-      v === null || v === undefined
-        ? "—"
+      v === null || v === undefined ? "—"
         : v.toLocaleString("pt-BR", { minimumFractionDigits: casas, maximumFractionDigits: casas });
 
     let classeAtual = null;
@@ -2110,8 +2041,6 @@
         tbody.appendChild(cab);
       }
       const tr = document.createElement("tr");
-      // `linha-ticker` é o que o botão "Recolher linhas" esconde -- cabeçalho
-      // de grupo e totais nunca somem, senão recolher apagaria o resumo.
       tr.className = "linha-ticker";
       tr.innerHTML = `
         <td><strong>${t.codigo}</strong></td>
@@ -2128,11 +2057,8 @@
     });
     if (classeAtual !== null) tbody.appendChild(linhaTotal(classeAtual));
 
-    // TOTAL GERAL (11/09/2026, pedido do Allan). Só estoque e contagem.
-    // Spread e duration NÃO entram aqui: IPCA+ se mede contra a NTN-B e CDI+
-    // contra o DI, então uma média entre as duas não significaria nada.
-    // Estoque é saldo em reais -- a dívida a mercado do emissor é a soma de
-    // tudo que ele tem em pé, qualquer que seja o indexador.
+    // TOTAL GERAL: só estoque e contagem -- spread e duration não se somam
+    // entre classes.
     const geral = data.total_geral;
     if (geral && (data.tickers || []).length) {
       const tr = document.createElement("tr");
@@ -2144,7 +2070,6 @@
       `;
       tbody.appendChild(tr);
     }
-
     aplicarRecolhimento();
     const datasTabela = (data.tickers || []).map((t) => t.data_estoque).filter(Boolean).sort();
     escreverFonte("fonte-tabela", "Fonte: Debentures.com.br, Anbima e Itaú BBA",
@@ -2166,131 +2091,57 @@
   }
 
   // ------------------------------------------------------------------
-  // UM GRÁFICO POR CLASSE, LADO A LADO (11/09/2026). Mesma razão dos cards:
-  // as duas séries não compartilham escala nem referência, então duas caixas
-  // separadas dizem a verdade que uma caixa só esconderia.
-  //
-  // Emissor sem papel numa das classes não vira linha naquele lado -- é
-  // informação, não defeito, e o gráfico diz isso com todas as letras em vez
-  // de ficar em branco. Foi exatamente o que confundiu em 11/09/2026: com
-  // três CPFLs selecionadas apareceu uma linha só, porque as outras duas não
-  // têm papel na classe que estava escolhida no botão.
+  // UM GRÁFICO POR CLASSE (as duas não compartilham referência): spread
+  // médio do perfil (laranja), mediana (preta tracejada) e o spread médio
+  // do mercado da mesma classe (cinza, fino) como régua.
   // ------------------------------------------------------------------
   async function loadEmissorCharts() {
     await Promise.all(CLASSES_EMISSOR.map((c) => desenharGraficoClasse(c)));
   }
 
-  async function desenharGraficoClasse({ classe, canvas, chave }) {
-    const data = await fetchJSON("/api/spreads/emissor/series", {
-      nome: currentEmissores, classe, nivel: currentNivel,
-    });
+  async function desenharGraficoClasse({ classe, canvas, chave, fonte }) {
+    const data = await fetchJSON("/api/spreads/emissor/perfil-series", { nome: currentEmissores, classe });
     destroyChart(chave);
     const el = document.getElementById(canvas);
-    const ctx = el.getContext("2d");
-    const card = el.parentElement;
-    card.querySelector(".muted-msg")?.remove();
-
-    const seriesList = data.series || [];
-    const mercado = data.mercado || [];
-
-    const datasEncontradas = new Set();
-    seriesList.forEach((s) => s.pontos.forEach((p) => datasEncontradas.add(p.data)));
-    mercado.forEach((p) => datasEncontradas.add(p.data));
-    const labels = Array.from(datasEncontradas).sort();
-    const sufixo = chave === "emissorIpca" ? "ipca" : "cdi";
-    escreverFonte(`fonte-grafico-${sufixo}`, "Fonte: Anbima e Itaú BBA",
-                  labels[labels.length - 1]);
-
-    // Emissor sem papel nesta classe simplesmente não vira linha (decisão do
-    // Allan, 11/09/2026). A versão anterior listava os ausentes no subtítulo;
-    // virava um parágrafo comprido dizendo o que NÃO está no gráfico.
-
-    if (!labels.length) {
-      charts[chave] = null;
+    const caixa = el.parentElement;
+    caixa.querySelector(".muted-msg")?.remove();
+    const serie = data.series || [];
+    if (!serie.length) {
       el.style.display = "none";
       const msg = document.createElement("p");
       msg.className = "muted small muted-msg";
       msg.textContent = "Sem papel precificado nesta classe.";
-      card.appendChild(msg);
+      caixa.appendChild(msg);
+      escreverFonte(fonte, "Fonte: Anbima e Itaú BBA", null);
       return;
     }
     el.style.display = "";
-
-    const cores = ["#FF6200", "#111111", "#8a5a2b", "#2b6e8a", "#6e2b8a", "#1a7f4e", "#a4302a", "#5c5c9e"];
-    const datasets = seriesList.map((s, i) => {
-      const porData = Object.fromEntries(s.pontos.map((p) => [p.data, p.spread]));
-      return {
-        label: s.codigo,
-        data: labels.map((d) => (d in porData ? porData[d] : null)),
-        borderColor: cores[i % cores.length],
-        backgroundColor: "transparent",
-        borderWidth: 2,
-        pointRadius: 0,
-        tension: 0.15,
-        spanGaps: true,
-      };
-    });
-
-    const mercadoPorData = Object.fromEntries(mercado.map((p) => [p.data, p.spread_medio]));
-    datasets.push({
-      label: "Mercado (mesma classe)",
-      data: labels.map((d) => (d in mercadoPorData ? mercadoPorData[d] : null)),
-      borderColor: "#bbbbbb",
-      backgroundColor: "transparent",
-      borderWidth: 1,
-      borderDash: [4, 4],
-      pointRadius: 0,
-      tension: 0.15,
-      spanGaps: true,
-    });
-
-    charts[chave] = new Chart(ctx, {
+    const labels = serie.map((p) => p.data);
+    const mercado = Object.fromEntries((data.mercado || []).map((p) => [p.data, p.spread_medio]));
+    escreverFonte(fonte, "Fonte: Anbima e Itaú BBA", labels[labels.length - 1]);
+    charts[chave] = new Chart(el.getContext("2d"), {
       type: "line",
-      data: { labels, datasets },
+      data: {
+        labels,
+        datasets: [
+          { label: "Spread médio", data: serie.map((p) => p.spread_medio), borderColor: "#FF6200",
+            backgroundColor: "rgba(255, 98, 0, 0.08)", fill: true, borderWidth: 2, pointRadius: 0, tension: 0.15 },
+          { label: "Mediana", data: serie.map((p) => p.spread_mediana), borderColor: "#111111",
+            borderDash: [5, 3], borderWidth: 1.5, pointRadius: 0, tension: 0.15, fill: false },
+          { label: "Mercado", data: labels.map((d) => (d in mercado ? mercado[d] : null)), borderColor: "#c4c4c4",
+            borderWidth: 1.2, pointRadius: 0, tension: 0.15, fill: false, spanGaps: true },
+        ],
+      },
       options: PADRAO_GRAFICO.eixoData(labels, {
         responsive: true,
-        plugins: { legend: { display: true, position: "bottom" } },
+        maintainAspectRatio: false,
+        interaction: { mode: "index", intersect: false },
+        plugins: {
+          legend: { display: false },
+          tooltip: { callbacks: { label: (it) => ` ${it.dataset.label}: ${it.raw === null ? "—" : fmtBpsSimples(it.raw) + " bps"}` } },
+        },
         scales: { y: { title: { display: true, text: "bps" } } },
       }),
-    });
-  }
-
-  // O PAINEL DE NOTÍCIAS SAIU DESTA ABA (11/09/2026, pedido do Allan) --
-  // a tela ficou densa demais e notícia tem a aba própria dela. A rota
-  // /api/spreads/emissor/noticias e as consultas (`company_news`,
-  // `sector_news`, `setores_dos_emissores`) continuam de pé e testadas: o
-  // que saiu foi a caixa, não a capacidade.
-
-  // Últimas negociações (negócio a negócio, B3 -- pedido do Allan,
-  // 24/07/2026). Filtrado pelos mesmos tickers do(s) emissor(es)
-  // selecionados; hoje só aparece coisa pra DEB de verdade (CRI/CRA não
-  // têm emissor ligado no cadastro ainda, ver queries.emissor_trades).
-  async function loadEmissorNegociacoes() {
-    // SEM FILTRO DE CLASSE (11/09/2026): o botão que escolhia uma classe
-    // para a aba inteira saiu da tela. Em 27/07/2026 esta tabela passou a
-    // filtrar por classe porque a contagem do card não batia com as linhas
-    // daqui -- aquele card não existe mais, e esta é uma LISTAGEM, não uma
-    // média: cada linha é um negócio isolado, com seu indexador na coluna.
-    const data = await fetchJSON("/api/spreads/emissor/negociacoes", { nome: currentEmissores });
-    const negociacoes = data.negociacoes || [];
-    const tbody = document.querySelector("#tabela-emissor-negociacoes tbody");
-    const vazio = document.getElementById("emissor-negociacoes-vazio");
-    tbody.innerHTML = "";
-    vazio.style.display = negociacoes.length ? "none" : "block";
-    negociacoes.forEach((n) => {
-      const tr = document.createElement("tr");
-      tr.innerHTML = `
-        <td>${fmtData(n.data_negocio)}</td>
-        <td>${n.horario || "—"}</td>
-        <td>${n.instrument_type || "—"}</td>
-        <td><strong>${n.codigo}</strong></td>
-        <td>${n.emissor || "—"}</td>
-        <td>${n.indexador || "—"}</td>
-        <td>${n.preco !== null ? n.preco.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 4 }) : "—"}</td>
-        <td>${n.volume !== null ? n.volume.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "—"}</td>
-        <td>${n.taxa !== null ? n.taxa.toLocaleString("pt-BR", { minimumFractionDigits: 4, maximumFractionDigits: 4 }) + "%" : "—"}</td>
-      `;
-      tbody.appendChild(tr);
     });
   }
 

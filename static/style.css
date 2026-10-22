@@ -712,3 +712,35 @@ tr.linha-serie .chart-card { margin: 0; box-shadow: none; }
   .disp-grafico { height: 420px; }
   .disp-lateral { max-height: 320px; }
 }
+
+/* PERFIL DO EMISSOR (22/10/2026). Cabeçalho com nome em destaque e
+   etiquetas -- tipo (emissor/grupo), grupo econômico, setores. */
+.perfil-busca { position: relative; min-width: 340px; flex: 0 1 460px; }
+.perfil-busca input { width: 100%; }
+.perfil-busca .search-results { position: absolute; z-index: 20; width: 100%; max-height: 360px; overflow: auto; }
+.perfil-busca .search-item { display: flex; justify-content: space-between; gap: 10px; align-items: center; }
+.perfil-busca .tipo-resultado { font-size: 0.66rem; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); white-space: nowrap; }
+.perfil-vazio { padding: 22px 24px; }
+.perfil-cabecalho { margin: 4px 0 14px; }
+.perfil-topo { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.perfil-tipo {
+  background: #111; color: #fff; font-weight: 700; font-size: 0.72rem; letter-spacing: .03em;
+  padding: 4px 9px; border-radius: 5px; text-transform: uppercase;
+}
+.perfil-tags { display: inline-flex; flex-wrap: wrap; gap: 6px; }
+.perfil-tag {
+  background: #ececec; color: #333; font-size: 0.74rem; padding: 4px 10px; border-radius: 999px;
+  border: 0; font: inherit; font-size: 0.74rem; line-height: 1.2;
+}
+.perfil-tag.setor { background: #fff0e6; color: #b34500; }
+.perfil-tag.grupo { background: #e9eef5; color: #1f4e79; }
+button.perfil-tag { cursor: pointer; }
+button.perfil-tag:hover { outline: 1px solid currentColor; }
+.perfil-nome { margin: 10px 0 2px; font-size: 1.45rem; line-height: 1.2; }
+.perfil-linha { margin: 0; }
+.perfil-grafico { position: relative; height: 260px; }
+.legenda-tracejada {
+  background: repeating-linear-gradient(90deg, #111 0 4px, transparent 4px 7px) !important;
+  height: 2px !important; width: 14px !important; vertical-align: 3px !important; border-radius: 0 !important;
+}
+.kpi-sub { font-size: 0.74rem; color: var(--muted); }

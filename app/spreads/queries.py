@@ -1238,6 +1238,12 @@ def emissor_tickers(db: Session, nomes_emissor: list[str]) -> dict:
                 d.indice_emissao, d.percentual_emissao, d.taxa_emissao),
             "duration": round(u.duration, 2) if u and u.duration is not None else None,
             "data_estoque": u.data.isoformat() if u else None,
+            # Taxonomia (22/10/2026): o cabeçalho do perfil do emissor monta
+            # as etiquetas de grupo, setor e subsetor a partir daqui.
+            "setor": d.setor,
+            "subsetor": d.subsetor,
+            "grupo_economico": d.grupo_economico,
+            "cnpj": d.cnpj,
         })
 
     # Totalizadores por classe. Somados aqui, e não no navegador, porque é
@@ -2420,3 +2426,42 @@ def mapa_dispersao(
         pontos.append(ponto)
     pontos.sort(key=lambda p: -(p["estoque"] or 0))
     return {"data_referencia": hoje.isoformat(), "nivel": nivel, "pontos": pontos}
+
+
+
+# ---------------------------------------------------------------------------
+# PERFIL DO EMISSOR (22/10/2026, pedido do Allan) -- aba Emissores
+# remodelada. Uma série por classe com o spread médio (ponderado por
+# estoque) e a mediana (sem peso) do conjunto escolhido -- um emissor, ou
+# todos os emissores de um grupo econômico juntos. Mesma base de toda a
+# página: regra PRECIFICADO e lista manual de exclusão. Junto vai o spread
+# médio do mercado da mesma classe, como referência.
+# ---------------------------------------------------------------------------
+
+def perfil_series(db: Session, nomes_emissor: list[str], classe: str) -> dict:
+    codigos = [c for (c,) in db.query(Debenture.codigo)
+               .filter(Debenture.nome.in_(nomes_emissor), Debenture.classe == classe).all()]
+    excluidos = tickers_excluidos_spread(db)
+    codigos = [c for c in codigos if c not in excluidos]
+    if not codigos:
+        return {"series": [], "mercado": []}
+    rows = (
+        db.query(DebentureSpread.data, DebentureSpread.spread, DebentureSpread.estoque)
+        .filter(DebentureSpread.codigo.in_(codigos), PRECIFICADO)
+        .order_by(DebentureSpread.data)
+        .all()
+    )
+    series = []
+    for dia, grupo in itertools.groupby(rows, key=lambda r: r[0]):
+        pares = [(s, e) for _, s, e in grupo]
+        media, _ = _ponderar(pares)
+        series.append({
+            "data": dia.isoformat(),
+            "spread_medio": round(media, 1) if media is not None else None,
+            "spread_mediana": round(statistics.median(s for s, _ in pares), 1),
+            "n_ativos": len(pares),
+        })
+    inicio = series[0]["data"] if series else None
+    mercado = [{"data": p["data"], "spread_medio": p["spread_medio"]}
+               for p in time_series(db, classe) if inicio and p["data"] >= inicio]
+    return {"series": series, "mercado": mercado}

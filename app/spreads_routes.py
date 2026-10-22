@@ -196,6 +196,15 @@ def register_spreads_routes(require_user_dep) -> APIRouter:
             raise HTTPException(status_code=400, detail="nivel inválido")
         return queries.mapa_dispersao(db, _validar_classe(classe), _parse_data(data), nivel)
 
+    # Perfil do emissor (22/10/2026): spread médio + mediana do emissor (ou
+    # grupo) numa classe, com o mercado da classe como referência.
+    @router.get("/api/spreads/emissor/perfil-series")
+    def api_spreads_perfil_series(
+        classe: str, nome: list[str] = Query(...),
+        user: User | None = Depends(require_user_dep), db: Session = Depends(get_db),
+    ):
+        return queries.perfil_series(db, nome, _validar_classe(classe))
+
     # Dias com dado da classe -- alimenta o calendário da barra de filtros
     # (22/10/2026): só esses dias podem ser escolhidos.
     @router.get("/api/spreads/datas")
