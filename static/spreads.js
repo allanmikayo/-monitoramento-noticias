@@ -1897,7 +1897,10 @@
       emissorBusca.placeholder = `Buscar ${rotulo}…`;
       emissorBusca.setAttribute("aria-label", `Buscar ${rotulo}`);
       emissorBusca.value = "";
-      emissorBusca.focus();   // já abre a lista do tipo novo
+      emissorBusca.focus();
+      // Redesenha na hora: se a caixa já estava em foco, `focus()` não
+      // dispara evento e a lista continuaria a do tipo anterior.
+      listarBusca();
     });
   });
 
