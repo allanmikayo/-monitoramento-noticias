@@ -3,6 +3,7 @@ de fontes/empresas/keywords e painel administrativo."""
 from __future__ import annotations
 
 import json
+import re
 import logging
 import os
 import threading
@@ -18,7 +19,7 @@ from sqlalchemy.orm import Session, selectinload
 
 from . import auth, config, email_utils, login_codigo, refresh_state, store
 from .db import Base, SessionLocal, engine, get_db, run_migrations
-from .models import AppSetting, Company, RunLog, Sector, SectorKeyword, Session as SessionModel, Source, User
+from .models import AppSetting, Article, Company, RunLog, Sector, SectorKeyword, Session as SessionModel, Source, User
 from .pipeline import run_pipeline
 from .scheduler import start_scheduler, trigger_now
 from .spreads import queries as spreads_queries
@@ -470,6 +471,63 @@ def dashboard(request: Request, user: User = Depends(require_user), db: Session 
     )
 
 
+# LINKS DE DOCUMENTO (22/10/2026, pedido do Allan: "os arquivos CVM quero
+# ter opção de abrir e opção de download"). Conferido ao vivo no RAD:
+#  - abrir:  /ENET/frmExibirArquivoIPEExterno.aspx?NumeroProtocoloEntrega=N
+#            abre o documento direto, fora da busca do RAD;
+#  - baixar: /ENET/frmDownloadDocumento.aspx?Tela=ext&numProtocolo=N&...
+#            devolve o próprio PDF como anexo.
+# O link antigo usava o caminho /ENETWeb/, que não abre fora da navegação do
+# site -- era por isso que todo documento CVM apontava para a página de
+# busca. Sem número de protocolo (raro: o scraper caiu no link genérico), o
+# documento continua apontando para a busca, sem botão de download.
+# Assembleia (agentes fiduciários): abrir é o próprio link do arquivo;
+# baixar passa por /api/documentos/{id}/baixar, que devolve como anexo.
+_RAD = "https://www.rad.cvm.gov.br/ENET/"
+_PROTOCOLO_RE = re.compile(r"NumeroProtocoloEntrega=(\d+)", re.I)
+
+
+def _links_documento(a) -> tuple[str, str | None]:
+    if a.article_type == "fato_relevante":
+        m = _PROTOCOLO_RE.search(a.url or "")
+        if not m:
+            return config.CVM_SEARCH_URL, None
+        p = m.group(1)
+        return (f"{_RAD}frmExibirArquivoIPEExterno.aspx?NumeroProtocoloEntrega={p}",
+                f"{_RAD}frmDownloadDocumento.aspx?Tela=ext&numProtocolo={p}&descTipo=IPE&CodigoInstituicao=1")
+    if a.article_type == "assembleia":
+        return a.url, f"/api/documentos/{a.id}/baixar"
+    return a.url, None
+
+
+@app.get("/api/documentos/{article_id}/baixar")
+def api_documento_baixar(article_id: int, user: User = Depends(require_user), db: Session = Depends(get_db)):
+    """Baixa o arquivo de uma assembleia como anexo (o link do agente
+    fiduciário abre no navegador; aqui vira download). Só para artigos do
+    tipo assembleia e só a URL que o próprio robô gravou -- nunca uma URL
+    vinda do navegador."""
+    import requests
+    from fastapi.responses import Response
+
+    art = db.get(Article, article_id)
+    if art is None or art.article_type != "assembleia" or not (art.url or "").startswith("http"):
+        raise HTTPException(status_code=404, detail="documento não encontrado")
+    try:
+        resp = requests.get(art.url, timeout=25)
+        resp.raise_for_status()
+    except requests.RequestException:
+        return RedirectResponse(url=art.url, status_code=302)
+    nome = (art.url.split("?")[0].rstrip("/").rsplit("/", 1)[-1] or f"documento-{article_id}")
+    nome = re.sub(r"[^A-Za-z0-9._ ()-]", "_", requests.utils.unquote(nome))[:150]
+    if "." not in nome:
+        nome += ".pdf"
+    return Response(
+        content=resp.content,
+        media_type=resp.headers.get("content-type", "application/octet-stream").split(";")[0],
+        headers={"Content-Disposition": f'attachment; filename="{nome}"'},
+    )
+
+
 @app.get("/api/articles")
 def api_articles(
     window: str = "24h",
@@ -481,7 +539,8 @@ def api_articles(
     source_domain: str | None = None,
     # `?source_name=A&source_name=B` -- mesma mecânica de sector_id.
     source_name: list[str] = Query(default=[]),
-    article_type: str | None = None,
+    # Um ou mais tipos (`?article_type=news&article_type=rating_action`).
+    article_type: list[str] = Query(default=[]),
     coverage: list[str] = Query(default=["minha"]),
     # Fechado junto com o dashboard (13/08/2026): é o endpoint que devolve
     # as notícias captadas, não faria sentido a página exigir login e a API
@@ -493,7 +552,7 @@ def api_articles(
     articles = store.list_articles(
         db, window_hours=hours, sector_ids=sector_id, company_ids=company_id,
         source_domain=source_domain, source_names=source_name,
-        article_type=article_type, coverage=coverage,
+        article_type=article_type or None, coverage=coverage,
     )
     out = []
     for a in articles:
@@ -505,11 +564,12 @@ def api_articles(
         # aponta pra página de busca do RAD em vez do documento específico.
         # `a.url` continua guardando o link específico internamente (usado
         # só pra dedupe, nunca mais exibido pro usuário nesse tipo).
-        link_url = config.CVM_SEARCH_URL if a.article_type == "fato_relevante" else a.url
+        link_url, download_url = _links_documento(a)
         out.append({
             "id": a.id,
             "title": a.title,
             "url": link_url,
+            "download_url": download_url,
             "snippet": a.snippet,
             "source_name": a.source_name,
             "domain": a.domain,
@@ -832,10 +892,22 @@ def admin_page(request: Request, user: User = Depends(require_admin), db: Sessio
     # volta pro Allan exatamente o que ele digitou da última vez).
     tickers_excluidos_row = db.get(AppSetting, spreads_queries.TICKERS_EXCLUIDOS_SETTING_KEY)
     spread_tickers_excluidos = tickers_excluidos_row.value if tickers_excluidos_row else ""
+    # DIAGNÓSTICO DA ÚLTIMA VARREDURA (22/10/2026): saiu da aba Notícias --
+    # é informação de operação do robô, não de leitura -- e veio para cá.
+    ultima = db.query(RunLog).order_by(RunLog.id.desc()).first()
+    varredura = None
+    if ultima:
+        try:
+            fontes_varredura = json.loads(ultima.sources_json or "[]")
+        except (json.JSONDecodeError, TypeError):
+            fontes_varredura = []
+        varredura = {"quando": ultima.finished_at or ultima.started_at, "origem": ultima.triggered_by,
+                     "n_novos": ultima.n_found, "fontes": fontes_varredura}
     return templates.TemplateResponse(
         request,
         "admin.html",
         {
+            "varredura": varredura,
             "user": user, "users": users, "sessions": sessions, "session_ttl_minutes": ttl, "now": now,
             "spread_tickers_excluidos": spread_tickers_excluidos,
             "exige_aprovacao": login_codigo.exige_aprovacao(db),

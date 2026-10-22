@@ -792,3 +792,74 @@ button.perfil-tag:hover { outline: 1px solid currentColor; }
 /* Papel que a Anbima não precifica (22/10/2026): linha um tom mais clara. */
 #tabela-emissor-tickers tr.fora-anbima td { color: #6b6b6b; }
 #tabela-emissor-tickers tr.fora-anbima td strong { color: #333; }
+
+/* --------------------------------------------------------------------- */
+/* NOTÍCIAS EM DUAS COLUNAS (22/10/2026). Imprensa (feed de leitura) à    */
+/* esquerda; CVM e agentes fiduciários (painel fixo, rolagem própria) à   */
+/* direita. Separadores por dia nas duas.                                 */
+/* --------------------------------------------------------------------- */
+.busca-noticias { flex: 1 1 220px; min-width: 200px; max-width: 340px; }
+.noticias-layout {
+  display: grid; grid-template-columns: minmax(0, 1.7fr) minmax(340px, 1fr);
+  gap: 18px; align-items: start;
+}
+.painel-noticias {
+  background: var(--card-bg); border: 1px solid var(--border); border-radius: 12px;
+  padding: 14px 18px 8px; min-width: 0;
+}
+.painel-topo {
+  display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap;
+  padding-bottom: 10px; border-bottom: 1px solid var(--border);
+}
+.painel-titulo { display: flex; align-items: baseline; gap: 10px; }
+.painel-titulo h2 { margin: 0; font-size: 1.05rem; }
+.painel-contagem { font-size: 0.78rem; color: var(--muted); }
+.feed-dia {
+  font-size: 0.68rem; font-weight: 700; letter-spacing: .06em; text-transform: uppercase;
+  color: var(--muted); padding: 14px 0 6px; border-bottom: 1px solid #f0f0f0;
+}
+.feed-item { padding: 12px 0; border-bottom: 1px solid #f2f2f2; }
+.feed-item:last-child { border-bottom: 0; }
+.feed-meta { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; font-size: 0.74rem; color: var(--muted); }
+.feed-hora { font-variant-numeric: tabular-nums; color: #8a8a8a; min-width: 34px; }
+.feed-fonte { font-weight: 700; color: #333; }
+.feed-item h3 { margin: 4px 0 4px; font-size: 0.98rem; line-height: 1.35; }
+.feed-item h3 a { color: var(--header); }
+.feed-item h3 a:hover { color: var(--accent); text-decoration: none; }
+.feed-item .snippet {
+  margin: 0; font-size: 0.84rem; color: #555; line-height: 1.45;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+}
+.feed-item .companies, .doc-item .companies { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 6px; }
+.vazio-noticias { color: var(--muted); font-size: 0.86rem; padding: 28px 4px; text-align: center; line-height: 1.6; }
+
+.painel-docs { position: sticky; top: 12px; display: flex; flex-direction: column; max-height: calc(100vh - 24px); }
+.docs-controles { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; padding: 10px 0 2px; }
+.docs-controles select { flex: 1 1 160px; min-width: 0; font-size: 0.8rem; }
+.aba-n { font-size: 0.7rem; opacity: .8; margin-left: 2px; }
+.docs-lista { overflow-y: auto; flex: 1; min-height: 120px; margin: 0 -6px; padding: 0 6px; }
+.doc-item { padding: 10px 0; border-bottom: 1px solid #f2f2f2; }
+.doc-topo { display: flex; justify-content: space-between; gap: 8px; align-items: baseline; }
+.doc-empresa { font-weight: 700; font-size: 0.88rem; color: #111; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.doc-hora { font-size: 0.72rem; color: #8a8a8a; font-variant-numeric: tabular-nums; flex: none; }
+.doc-categoria {
+  display: inline-block; margin-top: 4px; font-size: 0.68rem; font-weight: 700; letter-spacing: .02em;
+  background: #111; color: #fff; border-radius: 4px; padding: 2px 7px;
+}
+.doc-assunto {
+  margin-top: 4px; font-size: 0.8rem; color: #555; line-height: 1.4;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+}
+.doc-acoes { display: flex; gap: 6px; margin-top: 8px; align-items: center; }
+.btn-doc {
+  font-size: 0.74rem; font-weight: 700; padding: 4px 12px; border-radius: 6px;
+  border: 1px solid var(--border); color: #111; background: #fff;
+}
+.btn-doc:hover { border-color: var(--accent); color: var(--accent); text-decoration: none; }
+.btn-doc-baixar { background: var(--accent); border-color: var(--accent); color: #fff; }
+.btn-doc-baixar:hover { background: var(--accent-dark); color: #fff; }
+@media (max-width: 1000px) {
+  .noticias-layout { grid-template-columns: 1fr; }
+  .painel-docs { position: static; max-height: none; }
+  .docs-lista { max-height: 520px; }
+}

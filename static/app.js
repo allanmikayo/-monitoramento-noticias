@@ -11,17 +11,14 @@
     console.error("Falha ao carregar lista de empresas (companies-data):", e);
     companiesData = [];
   }
-  const typeSelect = document.getElementById("filter-type");
-  const winButtons = document.querySelectorAll(".win-btn");
-  const listEl = document.getElementById("article-list");
+  // Só os botões de JANELA -- a página tem outras abas (.win-btn) nas colunas.
+  const winButtons = document.querySelectorAll("#window-tabs .win-btn");
   const statusEl = document.getElementById("status-text");
   const countdownEl = document.getElementById("countdown");
   const refreshBtn = document.getElementById("btn-refresh");
   const progressWrap = document.getElementById("progress-wrap");
   const progressFill = document.getElementById("progress-fill");
   const progressLabel = document.getElementById("progress-label");
-  const diagnosticSummary = document.getElementById("diagnostic-summary");
-  const diagnosticTbody = document.getElementById("diagnostic-tbody");
 
   // Padrao 30 dias (pedido do Allan, 17/07/2026) -- noticias/documentos
   // CVM tem published_at mais "curto" que acoes de rating (paginas de
@@ -168,6 +165,26 @@
 
   document.addEventListener("click", () => closeAllPanels(null));
 
+  // ==================================================================
+  // DUAS COLUNAS (22/10/2026, pedido do Allan): Imprensa à esquerda; CVM e
+  // agentes fiduciários à direita. Cada uma com a própria consulta; os
+  // filtros de cima valem para as duas; a busca filtra no navegador.
+  // ==================================================================
+  const TIPOS_IMPRENSA = ["news", "rating_action", "research"];
+  const TIPOS_DOCS = ["fato_relevante", "assembleia"];
+  const imprensaLista = document.getElementById("imprensa-lista");
+  const docsLista = document.getElementById("docs-lista");
+  const docsCategoria = document.getElementById("docs-categoria");
+  const buscaNoticias = document.getElementById("busca-noticias");
+  let imprensaDados = [];
+  let docsDados = [];
+  let imprensaTipo = "todos";
+  let docsTipo = "fato_relevante";
+
+  function esc(s) {
+    return String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+  }
+
   function typeLabel(t) {
     return {
       news: "Notícia",
@@ -178,119 +195,222 @@
     }[t] || t;
   }
 
-  function fmtDate(iso) {
-    if (!iso) return "";
-    const d = new Date(iso);
-    return d.toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" });
+  // Dia de calendário em Brasília, para os separadores "Hoje / Ontem / 20/10".
+  const fmtDiaChave = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Sao_Paulo" });
+  function diaChave(iso) { return iso ? fmtDiaChave.format(new Date(iso)) : ""; }
+  function rotuloDia(chave) {
+    const hoje = fmtDiaChave.format(new Date());
+    const ontem = fmtDiaChave.format(new Date(Date.now() - 86400000));
+    if (chave === hoje) return "Hoje";
+    if (chave === ontem) return "Ontem";
+    const [a, m, d] = chave.split("-");
+    const sem = new Date(`${chave}T12:00:00-03:00`).toLocaleDateString("pt-BR", { weekday: "long", timeZone: "America/Sao_Paulo" });
+    return `${d}/${m}/${a} · ${sem}`;
+  }
+  function hora(iso) {
+    return iso ? new Date(iso).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit", timeZone: "America/Sao_Paulo" }) : "";
   }
 
-  function render(articles) {
-    listEl.innerHTML = "";
-    if (articles.length === 0) {
-      listEl.innerHTML = '<p class="muted">Nenhuma notícia encontrada para este filtro. Veja o painel "Diagnóstico da última varredura" acima para entender o que cada fonte retornou.</p>';
+  function casaBusca(a) {
+    const termo = (buscaNoticias.value || "").trim().toLowerCase();
+    if (!termo) return true;
+    const alvo = [a.title, a.snippet, a.source_name, ...(a.companies || []).map((c) => c.name),
+                  ...(a.sector_tags || []).map((s) => s.name)].join(" ").toLowerCase();
+    return termo.split(/\s+/).every((t) => alvo.includes(t));
+  }
+
+  // Agrupa por dia (já vem do mais novo para o mais antigo).
+  function porDia(lista) {
+    const grupos = [];
+    lista.forEach((a) => {
+      const chave = diaChave(a.published_at || a.found_at);
+      if (!grupos.length || grupos[grupos.length - 1].chave !== chave) grupos.push({ chave, itens: [] });
+      grupos[grupos.length - 1].itens.push(a);
+    });
+    return grupos;
+  }
+
+  function chipsDe(a) {
+    // Empresas casadas viram chips para auditar de relance o vínculo; notícia
+    // setorial (só termo de setor) ganha a tag do setor.
+    const empresas = (a.companies || [])
+      .map((c) => `<span class="company-chip" title="Empresa casada por keyword/alias">${esc(c.name)}</span>`).join("");
+    const setores = (a.sector_tags || [])
+      .map((s) => `<span class="sector-chip" title="Notícia setorial">Setor: ${esc(s.name)}</span>`).join("");
+    return empresas || setores ? `<div class="companies">${setores}${empresas}</div>` : "";
+  }
+
+  function renderImprensa() {
+    const lista = imprensaDados.filter((a) => (imprensaTipo === "todos" || a.article_type === imprensaTipo) && casaBusca(a));
+    document.getElementById("imprensa-contagem").textContent =
+      `${lista.length} ${lista.length === 1 ? "item" : "itens"}`;
+    imprensaLista.innerHTML = "";
+    if (!lista.length) {
+      imprensaLista.innerHTML = '<p class="vazio-noticias">Nada na imprensa para estes filtros.</p>';
       return;
     }
-    articles.forEach((a) => {
-      const card = document.createElement("article");
-      card.className = "card";
-      // Empresas casadas viram chips destacados (nao so' texto simples) --
-      // pedido do Allan pra conseguir auditar de relance se a empresa
-      // vinculada faz sentido pro conteudo da noticia (achamos e corrigimos
-      // um bug em que uma empresa errada podia ficar grudada no artigo
-      // pra sempre, mesmo depois do casamento de keywords ser corrigido).
-      const companyChips = (a.companies || [])
-        .map((c) => `<span class="company-chip" title="Empresa casada por keyword/alias nesta noticia">${c.name}</span>`)
-        .join("");
-      // Noticia setorial (bateu so' termo de setor, sem citar empresa
-      // especifica) ganha uma tag do SETOR em vez de ficar "grudada" em
-      // toda empresa do setor -- pedido do Allan, 17/07/2026.
-      const sectorChips = (a.sector_tags || [])
-        .map((s) => `<span class="sector-chip" title="Noticia setorial: afeta todo o setor, sem citar empresa especifica">Setor: ${s.name}</span>`)
-        .join("");
-      const foraCobertura = a.is_covered === false && a.article_type !== "rating_action";
-      card.innerHTML = `
-        <div class="card-meta">
-          <span class="badge badge-${a.article_type}">${typeLabel(a.article_type)}</span>
-          <span class="source">${a.source_name}</span>
-          <span class="muted">${fmtDate(a.published_at || a.found_at)}</span>
-          ${foraCobertura ? '<span class="tag" title="Não bateu com nenhuma empresa/setor da sua cobertura">fora da cobertura nomeada</span>' : ""}
-        </div>
-        <h3><a href="${a.url}" target="_blank" rel="noopener">${a.title}</a></h3>
-        ${a.snippet ? `<p class="snippet">${a.snippet}</p>` : ""}
-        ${sectorChips ? `<div class="companies">${sectorChips}</div>` : ""}
-        ${companyChips ? `<div class="companies">${companyChips}</div>` : ""}
-      `;
-      listEl.appendChild(card);
+    const frag = document.createDocumentFragment();
+    porDia(lista).forEach((g) => {
+      const dia = document.createElement("div");
+      dia.className = "feed-dia";
+      dia.textContent = rotuloDia(g.chave);
+      frag.appendChild(dia);
+      g.itens.forEach((a) => {
+        const item = document.createElement("article");
+        item.className = "feed-item";
+        const rating = a.article_type === "rating_action";
+        const fora = a.is_covered === false && !rating;
+        item.innerHTML = `
+          <div class="feed-meta">
+            <span class="feed-hora">${hora(a.published_at || a.found_at)}</span>
+            <span class="feed-fonte">${esc(a.source_name)}</span>
+            ${rating ? '<span class="badge badge-rating_action">Ação de rating</span>' : ""}
+            ${a.article_type === "research" ? '<span class="badge badge-research">Research</span>' : ""}
+            ${fora ? '<span class="tag" title="Não bateu com nenhuma empresa/setor da sua cobertura">fora da cobertura</span>' : ""}
+          </div>
+          <h3><a href="${esc(a.url)}" target="_blank" rel="noopener">${esc(a.title)}</a></h3>
+          ${a.snippet ? `<p class="snippet">${esc(a.snippet)}</p>` : ""}
+          ${chipsDe(a)}
+        `;
+        frag.appendChild(item);
+      });
     });
+    imprensaLista.appendChild(frag);
   }
 
-  function situacaoFonte(s) {
-    if (s.error) return { texto: "Erro: " + s.error, classe: "tag-off" };
-    if (s.found === 0) return { texto: "Nada encontrado no site agora", classe: "" };
-    if (s.matched === 0) return { texto: "Nada mencionando suas empresas cobertas", classe: "" };
-    if (s.new === 0) return { texto: "Sem novidades (já coletado antes)", classe: "" };
-    return { texto: s.new + " novo(s)", classe: "tag-ok" };
+  // Título do RAD: "EMPRESA — Categoria — Assunto". Assembleias e títulos
+  // fora desse formato caem inteiros no assunto.
+  function partesDocumento(a) {
+    const p = String(a.title || "").split(" — ");
+    if (a.article_type === "fato_relevante" && p.length >= 2) {
+      return { emissor: p[0], categoria: p[1], assunto: p.slice(2).join(" — ") };
+    }
+    return { emissor: "", categoria: a.article_type === "assembleia" ? "Assembleia (AGD/AGT)" : typeLabel(a.article_type),
+             assunto: a.title };
   }
 
-  function renderDiagnostic(lastRun) {
-    if (!lastRun) {
-      diagnosticSummary.textContent = "(ainda não rodou nenhuma varredura)";
-      diagnosticTbody.innerHTML = "";
+  function atualizarCategorias() {
+    // Categorias presentes na aba atual, da mais frequente para a menos.
+    const contagem = new Map();
+    docsDados.filter((a) => a.article_type === docsTipo).forEach((a) => {
+      const c = partesDocumento(a).categoria;
+      contagem.set(c, (contagem.get(c) || 0) + 1);
+    });
+    const atual = docsCategoria.value;
+    docsCategoria.innerHTML = '<option value="">Todas as categorias</option>'
+      + [...contagem.entries()].sort((x, y) => y[1] - x[1])
+        .map(([c, n]) => `<option value="${esc(c)}">${esc(c)} (${n})</option>`).join("");
+    docsCategoria.value = contagem.has(atual) ? atual : "";
+  }
+
+  function renderDocs() {
+    const daAba = docsDados.filter((a) => a.article_type === docsTipo);
+    document.getElementById("n-cvm").textContent = docsDados.filter((a) => a.article_type === "fato_relevante").length || "";
+    document.getElementById("n-agd").textContent = docsDados.filter((a) => a.article_type === "assembleia").length || "";
+    const cat = docsCategoria.value;
+    const lista = daAba.filter((a) => (!cat || partesDocumento(a).categoria === cat) && casaBusca(a));
+    document.getElementById("docs-contagem").textContent =
+      `${lista.length} documento${lista.length === 1 ? "" : "s"}`;
+    docsLista.innerHTML = "";
+    if (!lista.length) {
+      docsLista.innerHTML = docsTipo === "assembleia" && !daAba.length
+        ? '<p class="vazio-noticias">Nenhuma assembleia (AGD/AGT) das empresas cobertas nesta janela.<br>'
+          + '<span class="muted small">Fontes: Oliveira Trust, Vórtx e Pentágono.</span></p>'
+        : '<p class="vazio-noticias">Nenhum documento para estes filtros.</p>';
       return;
     }
-    const quando = fmtDate(lastRun.finished_at || lastRun.started_at);
-    const origem = lastRun.triggered_by === "manual" ? "manual" : "automática";
-    diagnosticSummary.textContent = `— ${quando} (${origem}), ${lastRun.n_found} novo(s) no total`;
-
-    diagnosticTbody.innerHTML = "";
-    (lastRun.sources || []).forEach((s) => {
-      const sit = situacaoFonte(s);
-      const tr = document.createElement("tr");
-      tr.innerHTML = `
-        <td>${s.name}</td>
-        <td>${s.found}</td>
-        <td>${s.matched}</td>
-        <td>${s.new}</td>
-        <td><span class="tag ${sit.classe}">${sit.texto}</span></td>
-      `;
-      diagnosticTbody.appendChild(tr);
+    const frag = document.createDocumentFragment();
+    porDia(lista).forEach((g) => {
+      const dia = document.createElement("div");
+      dia.className = "feed-dia";
+      dia.textContent = rotuloDia(g.chave);
+      frag.appendChild(dia);
+      g.itens.forEach((a) => {
+        const p = partesDocumento(a);
+        // Nome curto da empresa da cobertura quando houver; o nome oficial
+        // (como veio do RAD) fica na dica.
+        const curto = (a.companies || [])[0]?.name || p.emissor || a.source_name;
+        const item = document.createElement("div");
+        item.className = "doc-item";
+        item.innerHTML = `
+          <div class="doc-topo">
+            <span class="doc-empresa" title="${esc(p.emissor || curto)}">${esc(curto)}</span>
+            <span class="doc-hora">${hora(a.published_at || a.found_at)}</span>
+          </div>
+          <div class="doc-categoria">${esc(p.categoria)}</div>
+          ${p.assunto ? `<div class="doc-assunto">${esc(p.assunto)}</div>` : ""}
+          <div class="doc-acoes">
+            <a class="btn-doc" href="${esc(a.url)}" target="_blank" rel="noopener" title="Abrir o documento em outra aba">Abrir</a>
+            ${a.download_url
+              ? `<a class="btn-doc btn-doc-baixar" href="${esc(a.download_url)}" download rel="noopener" title="Baixar o arquivo">Baixar</a>`
+              : '<span class="muted small" title="O RAD não informou o número do documento">só pela busca do RAD</span>'}
+          </div>
+        `;
+        frag.appendChild(item);
+      });
     });
+    docsLista.appendChild(frag);
   }
 
-  async function loadStatus() {
-    try {
-      const resp = await fetch("/api/status");
-      const data = await resp.json();
-      renderDiagnostic(data.last_run);
-    } catch (e) {
-      // silencioso -- painel de diagnostico e' informativo, nao critico
-    }
-  }
-
-  async function loadArticles() {
+  function parametrosBase() {
     const params = new URLSearchParams({ window: currentWindow });
-    // Setor/empresa/cobertura mandam um par `chave=valor` por item
-    // selecionado (URLSearchParams.append, não .set) -- o backend
-    // (`Query(default=[...])` em app.py) junta parâmetros repetidos numa
-    // lista sozinho. Nenhum selecionado = comportamento de sempre (sem
-    // filtro de setor/empresa; cobertura cai no default "minha" do backend
-    // quando a lista vem vazia).
+    // Um par `chave=valor` por item selecionado -- o backend junta em lista.
     selectedSectors.forEach((id) => params.append("sector_id", id));
     selectedCompanies.forEach((id) => params.append("company_id", id));
     selectedSources.forEach((v) => params.append("source_name", v));
     selectedCoverage.forEach((v) => params.append("coverage", v));
-    if (typeSelect.value) params.set("article_type", typeSelect.value);
+    return params;
+  }
 
+  async function loadArticles() {
+    const pImprensa = parametrosBase();
+    TIPOS_IMPRENSA.forEach((t) => pImprensa.append("article_type", t));
+    const pDocs = parametrosBase();
+    TIPOS_DOCS.forEach((t) => pDocs.append("article_type", t));
     statusEl.textContent = "Atualizando…";
     try {
-      const resp = await fetch(`/api/articles?${params.toString()}`);
-      const data = await resp.json();
-      render(data.articles);
-      statusEl.textContent = `${data.count} notícia(s) encontrada(s) — atualizado às ${new Date().toLocaleTimeString("pt-BR")}`;
+      const [imp, docs] = await Promise.all([
+        fetch(`/api/articles?${pImprensa.toString()}`).then((r) => r.json()),
+        fetch(`/api/articles?${pDocs.toString()}`).then((r) => r.json()),
+      ]);
+      imprensaDados = imp.articles || [];
+      docsDados = docs.articles || [];
+      renderImprensa();
+      atualizarCategorias();
+      renderDocs();
+      statusEl.textContent = `${imprensaDados.length} na imprensa · ${docsDados.length} documento(s) — atualizado às ${new Date().toLocaleTimeString("pt-BR")}`;
     } catch (e) {
       statusEl.textContent = "Erro ao carregar notícias.";
     }
   }
+
+  function ligarAbasNoticias(id, aoTrocar) {
+    document.querySelectorAll(`#${id} .win-btn`).forEach((btn) => {
+      btn.addEventListener("click", () => {
+        document.querySelectorAll(`#${id} .win-btn`).forEach((b) => b.classList.remove("active"));
+        btn.classList.add("active");
+        aoTrocar(btn.dataset.tipo, btn);
+      });
+    });
+  }
+  ligarAbasNoticias("imprensa-tabs", (t, btn) => {
+    imprensaTipo = t;
+    if (window.registrarUso) registrarUso("filtro", "Imprensa: " + btn.textContent.trim());
+    renderImprensa();
+  });
+  ligarAbasNoticias("docs-tabs", (t, btn) => {
+    docsTipo = t;
+    if (window.registrarUso) registrarUso("filtro", "Documentos: " + btn.textContent.trim());
+    docsCategoria.value = "";
+    atualizarCategorias();
+    renderDocs();
+  });
+  docsCategoria.addEventListener("change", renderDocs);
+  let buscaTimer = null;
+  buscaNoticias.addEventListener("input", () => {
+    clearTimeout(buscaTimer);
+    buscaTimer = setTimeout(() => { renderImprensa(); renderDocs(); }, 120);
+  });
 
   function setProgress(current, total, sourceName) {
     progressWrap.style.display = "flex";
@@ -326,7 +446,6 @@
         statusEl.textContent = `Atualização concluída: ${s.summary.n_new} notícia(s) nova(s).`;
       }
       secondsLeft = Math.floor(scanIntervalMs / 1000);
-      await loadStatus();
       await loadArticles();
     } catch (e) {
       hideProgress();
@@ -351,7 +470,7 @@
         hideProgress();
         setRefreshBtnState(false, "Forçar atualização");
         statusEl.textContent = "Atualização disparada no GitHub Actions — leva alguns minutos pra aparecer aqui.";
-        setTimeout(() => { loadArticles(); loadStatus(); }, 90000);
+        setTimeout(() => { loadArticles(); }, 90000);
         return;
       }
 
@@ -439,11 +558,6 @@
     },
   });
 
-  typeSelect.addEventListener("change", loadArticles);
-  typeSelect.addEventListener("change", () => {
-    const op = typeSelect.options[typeSelect.selectedIndex];
-    if (typeSelect.value && window.registrarUso) registrarUso("filtro", "Tipo: " + op.textContent.trim());
-  });
   if (refreshBtn) refreshBtn.addEventListener("click", forceRefresh);
 
   setInterval(() => {
@@ -452,7 +566,6 @@
     if (secondsLeft <= 0) {
       secondsLeft = Math.floor(scanIntervalMs / 1000);
       loadArticles();
-      loadStatus();
     }
     const m = Math.floor(secondsLeft / 60).toString().padStart(2, "0");
     const s = (secondsLeft % 60).toString().padStart(2, "0");
@@ -474,5 +587,4 @@
 
   populateCompanies();
   loadArticles();
-  loadStatus();
 })();

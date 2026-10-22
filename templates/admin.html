@@ -10,6 +10,35 @@
 <p class="alert alert-error">O envio de e-mail não está configurado: ninguém consegue receber o código de acesso.
   Configure SMTP_HOST, SMTP_USER, SMTP_PASSWORD e FROM_EMAIL nas variáveis de ambiente da Vercel.</p>
 {% endif %}
+{# DIAGNÓSTICO DA ÚLTIMA VARREDURA DE NOTÍCIAS (22/10/2026): veio da aba
+   Notícias, onde ocupava espaço de leitura com informação de operação. #}
+<details class="diagnostic-panel" style="margin-bottom:18px;">
+  <summary><b>Robô de notícias — última varredura</b>
+    {% if varredura %}<span class="muted">· {{ varredura.quando | brt("%d/%m/%Y %H:%M") }}
+      ({{ 'manual' if varredura.origem == 'manual' else 'automática' }}) · {{ varredura.n_novos }} novo(s)</span>
+    {% else %}<span class="muted">· ainda não rodou</span>{% endif %}
+  </summary>
+  {% if varredura %}
+  <table class="table">
+    <thead><tr><th>Fonte</th><th>Encontrados</th><th>Relevantes p/ cobertura</th><th>Novos no banco</th><th>Situação</th></tr></thead>
+    <tbody>
+      {% for s in varredura.fontes %}
+      <tr>
+        <td>{{ s.name }}</td><td>{{ s.found }}</td><td>{{ s.matched }}</td><td>{{ s.new }}</td>
+        <td>
+          {% if s.error %}<span class="tag tag-off">Erro: {{ s.error }}</span>
+          {% elif s.found == 0 %}<span class="tag">Nada encontrado no site agora</span>
+          {% elif s.matched == 0 %}<span class="tag">Nada mencionando empresas cobertas</span>
+          {% elif s.new == 0 %}<span class="tag">Sem novidades (já coletado antes)</span>
+          {% else %}<span class="tag tag-ok">{{ s.new }} novo(s)</span>{% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% endif %}
+</details>
+
 <h1>Usuários</h1>
 <table class="table">
   <thead><tr><th>Nome</th><th>E-mail</th><th>Papel</th><th>Status</th><th>Criado em</th><th></th></tr></thead>

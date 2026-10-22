@@ -228,7 +228,7 @@ def list_articles(
     # "valor.globo.com"). `source_domain` continua existindo para quem
     # chama por domínio.
     source_names: list[str] | None = None,
-    article_type: str | None = None,
+    article_type: str | list[str] | None = None,
     coverage: list[str] | None = None,  # ["minha"] (default) | ["todos"] | ["minha","todos"]
     limit: int = 500,
 ):
@@ -265,8 +265,12 @@ def list_articles(
         stmt = stmt.where(Article.domain == source_domain)
     if source_names:
         stmt = stmt.where(Article.source_name.in_(source_names))
+    # Um tipo ou uma lista (22/10/2026): a página de notícias pede
+    # "imprensa" (notícia + rating + research) e "documentos" (CVM +
+    # assembleias) em duas consultas, cada uma com o próprio limite.
     if article_type:
-        stmt = stmt.where(Article.article_type == article_type)
+        tipos = [article_type] if isinstance(article_type, str) else list(article_type)
+        stmt = stmt.where(Article.article_type.in_(tipos))
     coverage = coverage or ["minha"]
     if "todos" not in coverage:
         # "Minha cobertura": bateu com alguma empresa/setor OU é ação de
