@@ -1998,7 +1998,7 @@
       const c = porClasse[classe];
       if (!c || c.spread === null || c.spread === undefined) return card(rotulo, "—", "sem papel precificado nesta classe", "", false);
       const m3 = c.spread_3m !== null && c.spread_3m !== undefined ? `Média 3M: ${fmtBpsSimples(c.spread_3m)} bps` : "Média 3M: —";
-      return card(rotulo, `${fmtBpsSimples(c.spread)} bps`, m3, "pond. estoque", false);
+      return card(rotulo, `${fmtBpsSimples(c.spread)} bps`, m3, "", false);
     };
     document.getElementById("perfil-kpis").innerHTML =
       card("ESTOQUE TOTAL", fmtReais(geral.estoque),
@@ -2013,8 +2013,6 @@
       .filter(Boolean).sort();
     escreverFonte("fonte-cards", "Spread médio ponderado por estoque. Fonte: Anbima, Debentures.com e Itaú BBA",
                   datas[datas.length - 1]);
-    document.getElementById("perfil-contexto").textContent = datas.length
-      ? `Dados até ${fmtData(datas[datas.length - 1])}` : "";
   }
 
   function renderTabelaEmissor(data) {
@@ -2070,6 +2068,14 @@
       `;
       tbody.appendChild(tr);
     }
+    // Papéis que saíram da conta (vencidos ou parados) -- ditos, não escondidos.
+    const fora = data.fora_de_circulacao || [];
+    const notaFora = document.getElementById("emissor-fora");
+    notaFora.style.display = fora.length ? "" : "none";
+    notaFora.textContent = fora.length
+      ? `Fora da conta (vencidos ou sem publicação recente na Anbima): `
+        + fora.map((f) => `${f.codigo} (último boletim ${fmtData(f.data_estoque)})`).join(", ")
+      : "";
     aplicarRecolhimento();
     const datasTabela = (data.tickers || []).map((t) => t.data_estoque).filter(Boolean).sort();
     escreverFonte("fonte-tabela", "Fonte: Debentures.com.br, Anbima e Itaú BBA",

@@ -330,3 +330,30 @@ def test_a_rota_entrega_json_serializavel(cliente_rota):
 
     r = cliente_rota.get("/api/spreads/emissor?nome=CPFL+TRANSMISSAO+S.A")
     json.dumps(r.json())  # explode se algo não for serializável
+
+
+def test_papel_vencido_ou_parado_sai_da_divida_em_circulacao():
+    """22/10/2026: ENGIA8 (último boletim em junho, duration 0,00) inflava o
+    estoque da Energisa. Vencido = duration ~zero numa publicação que não é
+    a mais recente; parado = mais de 21 boletins sem publicação."""
+    from datetime import timedelta
+    db = _base(n_ipca=1, n_cdi=0)
+    db.add(Debenture(codigo="VENCEU", nome="ENERGISA S/A", indexador="CDI +",
+                     classe="CDI + Tradicionais", incentivada="N"))
+    db.add(DebentureSpread(codigo="VENCEU", data=date(2026, 9, 8), estoque=99.0,
+                           taxa_indicativa=1.5, duration=0.0, spread=150.0))
+    db.add(Debenture(codigo="PAROU", nome="ENERGISA S/A", indexador="CDI +",
+                     classe="CDI + Tradicionais", incentivada="N"))
+    db.add(DebentureSpread(codigo="PAROU", data=date(2026, 6, 1), estoque=50.0,
+                           taxa_indicativa=1.5, duration=2.0, spread=150.0))
+    # 25 boletins de outro papel para "PAROU" ficar mais de 21 posições atrás.
+    db.add(Debenture(codigo="OUTRO9", nome="OUTRA S/A", classe="CDI + Tradicionais"))
+    for i in range(25):
+        db.add(DebentureSpread(codigo="OUTRO9", data=date(2026, 8, 1) + timedelta(days=i), spread=1.0))
+    db.commit()
+    r = queries.emissor_tickers(db, ["ENERGISA S/A"])
+    codigos = {t["codigo"] for t in r["tickers"]}
+    assert "VENCEU" not in codigos and "PAROU" not in codigos and "IPCA0" in codigos
+    assert {f["codigo"]: f["motivo"] for f in r["fora_de_circulacao"]} == {
+        "VENCEU": "vencido", "PAROU": "sem publicação recente"}
+    assert r["total_geral"]["estoque"] == sum(t["estoque"] or 0 for t in r["tickers"])

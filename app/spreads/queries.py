@@ -1246,6 +1246,34 @@ def emissor_tickers(db: Session, nomes_emissor: list[str]) -> dict:
             "cnpj": d.cnpj,
         })
 
+    # SÓ DÍVIDA EM CIRCULAÇÃO (22/10/2026). O cadastro não tem data de
+    # vencimento, então o sinal vem da própria Anbima. Sai da tabela e dos
+    # totais o papel que:
+    #  - VENCEU: a última publicação tem duration ~zero (< 0,02 ano, uns
+    #    cinco dias úteis) e não é do boletim mais recente; ou
+    #  - PAROU: está há mais de 21 boletins (um mês útil) sem publicação.
+    # Um papel que só falhou um ou outro pregão continua -- ele "traz o dia
+    # anterior", como sempre. Caso que motivou: ENGIA8 (último boletim em
+    # 19/06, duration 0,00) inflava o estoque da Energisa em R$ 102 mi.
+    # Os que saem vêm listados em `fora_de_circulacao`, para a tela dizer.
+    datas_recentes = [r[0] for r in db.query(DebentureSpread.data).distinct()
+                      .order_by(DebentureSpread.data.desc()).limit(22).all()]
+    posicao = {d.isoformat(): i for i, d in enumerate(datas_recentes)}
+    fora: list[dict] = []
+    em_circulacao: list[dict] = []
+    for l in linhas:
+        if l["data_estoque"] is None:          # nunca publicado: fica, com campos vazios
+            em_circulacao.append(l)
+            continue
+        pos = posicao.get(l["data_estoque"])
+        venceu = pos is not None and pos > 0 and l["duration"] is not None and l["duration"] < 0.02
+        if pos is None or venceu:
+            fora.append({"codigo": l["codigo"], "data_estoque": l["data_estoque"],
+                         "motivo": "vencido" if venceu else "sem publicação recente"})
+        else:
+            em_circulacao.append(l)
+    linhas = em_circulacao
+
     # Totalizadores por classe. Somados aqui, e não no navegador, porque é
     # o mesmo número que precisa bater com o card e com a aba Visão Geral --
     # uma soma só, num lugar só.
@@ -1287,7 +1315,8 @@ def emissor_tickers(db: Session, nomes_emissor: list[str]) -> dict:
         "n_ativos": len(linhas),
         "estoque": round(sum(com_estoque), 1) if com_estoque else None,
     }
-    return {"tickers": linhas, "totais": totais, "total_geral": total_geral}
+    return {"tickers": linhas, "totais": totais, "total_geral": total_geral,
+            "fora_de_circulacao": fora}
 
 
 def emissor_series(db: Session, nomes_emissor: list[str], classe: str, nivel: str = "emissor") -> dict:
