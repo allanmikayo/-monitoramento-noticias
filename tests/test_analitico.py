@@ -350,11 +350,15 @@ def test_visao_geral_tem_o_que_ficou(cliente):
     aqui."""
     r = cliente.get("/spreads")
     assert r.status_code == 200
+    # A decomposição fica logo abaixo da evolução (22/10/2026).
+    assert r.text.index("chart-series") < r.text.index("atribuicao-mapa") < r.text.index("chart-composicao")
     for termo in (
-        "SPREAD MÉDIO", "DURATION MÉDIA", "ATIVOS PRECIFICADOS", "ESTOQUE NA BASE",
-        "Evolução do spread médio", "chart-composicao", "chart-dispersao",
-        "Spread por setor", "Média 3M", "chart-desagios",
-        "Top 10 aberturas", 'data-lado="fechamentos"', "barra-fixa",
+        # Textos revistos em 22/10/2026 (pedido do Allan) + card de mediana.
+        "SPREAD MÉDIO", "MEDIANA DO SPREAD", "DURATION", "ATIVOS", "ESTOQUE",
+        "precificados pela Anbima", "Evolução do Spread Médio", "chart-composicao",
+        "chart-dispersao", "Spread por Setor, Subsetor e Grupo Econômico", "Média 3M",
+        "chart-desagios", "Decomposição do Movimento do Spread",
+        "Top 10 Aberturas", 'data-lado="fechamentos"', "barra-fixa",
     ):
         assert termo in r.text, f"faltou '{termo}' na Visão Geral"
 

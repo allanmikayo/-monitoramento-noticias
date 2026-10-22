@@ -36,7 +36,7 @@ def _banco() -> Session:
     return Session(eng)
 
 
-def _add(db, codigo, pontos, classe=IPCA, estoque=100.0, pu=None, nome=None):
+def _add(db, codigo, pontos, classe=IPCA, estoque=100.0, pu=100.0, nome=None):
     db.add(Debenture(codigo=codigo, nome=nome or f"EMISSOR {codigo}", classe=classe))
     for d, spread in pontos:
         db.add(DebentureSpread(codigo=codigo, data=d, spread=spread, estoque=estoque,

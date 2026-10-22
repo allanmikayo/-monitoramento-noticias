@@ -163,14 +163,22 @@
         ? data.duration_media_ponderada.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
         : "—";
 
-    const deltaEl = document.getElementById("kpi-variacao");
-    if (data.variacao_bps === null || data.variacao_bps === undefined) {
-      deltaEl.textContent = "sem dado suficiente pra comparar";
-      deltaEl.className = "kpi-delta flat";
-    } else {
-      deltaEl.textContent = `${fmtBps(data.variacao_bps)} vs. ${fmtData(data.data_comparacao)}`;
-      deltaEl.className = "kpi-delta " + (data.variacao_bps > 0.05 ? "up" : data.variacao_bps < -0.05 ? "down" : "flat");
-    }
+    // Delta de média e mediana: mesma regra de cor (abriu = laranja).
+    const escreverDelta = (id, v) => {
+      const el = document.getElementById(id);
+      if (v === null || v === undefined) {
+        el.textContent = "sem dado suficiente pra comparar";
+        el.className = "kpi-delta flat";
+      } else {
+        el.textContent = `${fmtBps(v)} vs. ${fmtData(data.data_comparacao)}`;
+        el.className = "kpi-delta " + (v > 0.05 ? "up" : v < -0.05 ? "down" : "flat");
+      }
+    };
+    escreverDelta("kpi-variacao", data.variacao_bps);
+    // MEDIANA (22/10/2026): sem peso, mesma base de papéis do spread médio.
+    document.getElementById("kpi-mediana").textContent =
+      data.spread_mediana !== null && data.spread_mediana !== undefined ? `${num1(data.spread_mediana)} bps` : "—";
+    escreverDelta("kpi-variacao-mediana", data.variacao_mediana_bps);
 
     // ESTOQUE (09/09/2026). Vem em R$ milhões da captura; acima de mil vira
     // bilhão, porque "1.347,2 mi" é mais difícil de ler do que "R$ 1,35 bi"
@@ -180,7 +188,6 @@
       est === null || est === undefined ? "—"
       : est >= 1000 ? `R$ ${(est / 1000).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} bi`
       : `R$ ${est.toLocaleString("pt-BR", { maximumFractionDigits: 0 })} mi`;
-    document.getElementById("kpi-estoque-cobertura").textContent = data.estoque_cobertura || 0;
 
     // A linha de contexto que sobrou no lugar dos textos que saíram: diz a
     // data-base e contra o que se está comparando, e nada além disso.
@@ -191,7 +198,7 @@
           (data.data_comparacao ? ` vs ${PADRAO_GRAFICO.diaMesCurto(data.data_comparacao)}`
                                 : ` · ${currentBase} sem histórico para comparar`)
         : "Sem dado para a data selecionada.";
-    escreverFonte("kpi-nota", "Médias ponderadas por estoque. Fonte: Anbima, Debentures.com e Itaú BBA",
+    escreverFonte("kpi-nota", "Spread médio e duration ponderados por estoque; mediana sem ponderação. Fonte: Anbima, Debentures.com e Itaú BBA",
                   data.data_referencia);
   }
 
@@ -222,6 +229,18 @@
           pointRadius: 0,
           tension: 0.15,
           fill: true,
+        }, {
+          // MEDIANA (22/10/2026, pedido do Allan): sem peso por estoque.
+          // Preto e tracejada -- a média continua sendo a linha principal.
+          label: "Mediana",
+          data: series.map((r) => r.spread_mediana),
+          borderColor: "#111111",
+          backgroundColor: "#111111",
+          borderWidth: 1.5,
+          borderDash: [5, 3],
+          pointRadius: 0,
+          tension: 0.15,
+          fill: false,
         }],
         // A linha "Base comparável" SAIU DO GRÁFICO (01/10/2026, pedido do
         // Allan: "vamos ter que pensar melhor nessa métrica"). O servidor
@@ -231,7 +250,16 @@
       },
       options: PADRAO_GRAFICO.eixoData(datasIso, {
         responsive: true,
-        plugins: { legend: { display: false } },
+        // Uma dica por data com as duas linhas (média e mediana).
+        interaction: { mode: "index", intersect: false },
+        plugins: {
+          legend: { display: false },
+          tooltip: {
+            callbacks: {
+              label: (item) => ` ${item.dataset.label}: ${item.raw === null ? "—" : num1(item.raw) + " bps"}`,
+            },
+          },
+        },
         scales: { y: { title: { display: true, text: "bps" } } },
       }),
     });
@@ -260,7 +288,7 @@
     if (!moversDados) return;
     const aberturas = moversLado === "aberturas";
     document.getElementById("titulo-movers").textContent =
-      `Top 10 ${aberturas ? "aberturas" : "fechamentos"}`;
+      `Top 10 ${aberturas ? "Aberturas" : "Fechamentos"}`;
     renderMoversTable("tabela-movers",
       (aberturas ? moversDados.aberturas : moversDados.fechamentos) || [],
       aberturas ? "cell-abertura" : "cell-fechamento");
@@ -635,8 +663,8 @@
     destroyChart("composicao");
     const el = document.getElementById("chart-composicao");
     el.parentElement.querySelector(".muted-msg")?.remove();
-    document.getElementById("titulo-composicao").textContent =
-      `Evolução da variação de spreads — ${currentClasse}`;
+    // Título sem a classe (22/10/2026): ela já está no filtro, no topo.
+    document.getElementById("titulo-composicao").textContent = "Evolução da Variação de Spreads";
 
     const cols = data.snapshots || [];
     const faixas = data.faixas || [];
@@ -733,8 +761,7 @@
     const el = document.getElementById("chart-dispersao");
     el.parentElement.querySelector(".muted-msg")?.remove();
     const porSpread = modoDispersao === "spread";
-    document.getElementById("titulo-dispersao").textContent =
-      `Spread x Duration — ${currentClasse}`;
+    document.getElementById("titulo-dispersao").textContent = "Spread x Duration";
 
     const pontos = data.pontos || [];
     if (!pontos.length) {
@@ -848,10 +875,11 @@
   // ------------------------------------------------------------------
   // MAIORES DESÁGIOS (21/09/2026, pedido do Allan): os 15 papéis com menor
   // % do PU par na data analisada -- "deixar claro quais papéis mais
-  // depreciaram". Cada barra vai do PU atual até o par (100%): o
-  // COMPRIMENTO da barra é o deságio. Uma barra começando no zero do eixo
-  // mostraria 71% e 99% quase do mesmo tamanho e esconderia justamente a
-  // diferença que interessa.
+  // depreciaram".
+  // INVERTIDO EM 22/10/2026 (pedido do Allan): a barra agora sai do zero
+  // (junção dos eixos) e vai até o % do PU par -- o papel com o maior
+  // deságio tem a MENOR barra e aparece primeiro, no topo. A linha do par
+  // (100%) continua como referência. Nomes alinhados à esquerda.
   // ------------------------------------------------------------------
   async function loadDesagios() {
     const data = await fetchJSON("/api/spreads/desagios", {
@@ -861,8 +889,7 @@
     destroyChart("desagios");
     const el = document.getElementById("chart-desagios");
     el.parentElement.querySelector(".muted-msg")?.remove();
-    document.getElementById("titulo-desagios").textContent =
-      `Maiores deságios — ${currentClasse}`;
+    document.getElementById("titulo-desagios").textContent = "Maiores Deságios";
     const papeis = data.papeis || [];
     if (!papeis.length) {
       el.style.display = "none";
@@ -874,7 +901,6 @@
     }
     el.style.display = "";
     const fmt = (v, c) => v.toLocaleString("pt-BR", { minimumFractionDigits: c, maximumFractionDigits: c });
-    const menor = Math.min(...papeis.map((p) => p.pct_pu_par));
     // Rótulo do eixo: emissor encurtado + ticker. O nome completo e os
     // demais dados ficam na dica de ferramenta.
     // PAPEL SEM TAXA INDICATIVA (24/09/2026, dúvida do Allan sobre a
@@ -896,7 +922,7 @@
         labels: papeis.map(rotulo),
         datasets: [{
           label: "% do PU par",
-          data: papeis.map((p) => [p.pct_pu_par, 100]),
+          data: papeis.map((p) => p.pct_pu_par),
           backgroundColor: "#FF6200",
           borderWidth: 0,
           barPercentage: 0.7,
@@ -904,8 +930,7 @@
         }],
       },
       plugins: [{
-        // Valor escrito à esquerda da barra, onde ela começa -- é o número
-        // que se lê primeiro.
+        // Valor escrito logo depois da ponta da barra.
         id: "valorDesagio",
         afterDatasetsDraw(chart) {
           const { ctx } = chart;
@@ -913,11 +938,11 @@
           ctx.save();
           ctx.font = `600 11px ${Chart.defaults.font.family}`;
           ctx.fillStyle = PADRAO_GRAFICO.PRETO;
-          ctx.textAlign = "right";
+          ctx.textAlign = "left";
           ctx.textBaseline = "middle";
           meta.data.forEach((barra, i) => {
-            const { x, base, y } = barra.getProps(["x", "base", "y"], true);
-            ctx.fillText(chart.data.datasets[0].rotulos[i], Math.min(x, base) - 5, y);
+            const { x, y } = barra.getProps(["x", "y"], true);
+            ctx.fillText(chart.data.datasets[0].rotulos[i], x + 5, y);
           });
           ctx.restore();
         },
@@ -944,14 +969,15 @@
         interaction: { mode: "nearest", intersect: true, axis: "y" },
         scales: {
           x: {
-            // Espaço à esquerda para o rótulo de valor da barra mais longa.
-            min: Math.floor((menor - 6) / 5) * 5,
-            max: 102,
+            min: 0,
+            max: 100,
             title: { display: true, text: "% do PU par" },
             ticks: { callback: (v) => `${v}%` },
             grid: { color: PADRAO_GRAFICO.GRADE },
           },
-          y: { grid: { display: false }, ticks: { autoSkip: false, font: { size: 10.5 } } },
+          // crossAlign "far": nomes encostados na margem esquerda, alinhados
+          // entre si, em vez de colados no eixo com tamanhos diferentes.
+          y: { grid: { display: false }, ticks: { autoSkip: false, crossAlign: "far", font: { size: 10.5 } } },
         },
         plugins: {
           legend: { display: false },
@@ -1090,16 +1116,50 @@
     return comValor(visiveis.concat(comp)).concat(comValor(outros));
   }
 
+  // TOM POR RANKING (22/10/2026, pedido do Allan). Cada cor (abriu,
+  // fechou, entrou/saiu) continua sendo a cor-base, mas o tom clareia com
+  // a posição do bloco dentro dela: o maior de cada cor fica com a cor
+  // cheia, o 2º um pouco mais claro, e assim por diante até o último
+  // (misturado com branco até CLAREAMENTO_MAX). O texto troca para preto
+  // quando o fundo fica claro demais para o branco ser lido.
+  const CLAREAMENTO_MAX = { abriu: 0.72, fechou: 0.68, composicao: 0.55 };
+
+  function categoriaDoBloco(b) {
+    if (b.tipo === "entrada" || b.tipo === "saida") return "composicao";
+    return b.contribuicao_bps > 0 ? "abriu" : "fechou";
+  }
+
+  function atribuirTons(blocos) {
+    const porCor = { abriu: [], fechou: [], composicao: [] };
+    blocos.forEach((b) => { if (b.tipo !== "outros") porCor[categoriaDoBloco(b)].push(b); });
+    Object.entries(porCor).forEach(([cor, lista]) => {
+      lista.sort((a, b) => Math.abs(b.contribuicao_bps) - Math.abs(a.contribuicao_bps));
+      lista.forEach((b, i) => {
+        b.clareamento = lista.length > 1 ? (i / (lista.length - 1)) * CLAREAMENTO_MAX[cor] : 0;
+      });
+    });
+    return blocos;
+  }
+
+  function clarear(hex, t) {
+    const n = parseInt(hex.slice(1), 16);
+    const canal = (c) => Math.round(c + (255 - c) * t);
+    const [r, g, b] = [canal(n >> 16), canal((n >> 8) & 255), canal(n & 255)];
+    const luz = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+    return { fundo: `rgb(${r}, ${g}, ${b})`, texto: luz > 0.62 ? "#111111" : "#ffffff" };
+  }
+
   function corDoBloco(b) {
-    if (b.tipo === "entrada" || b.tipo === "saida") return COR_BLOCO.composicao;
-    // "Outros" listrado na cor do lado: lê-se "abriu"/"fechou" sem confundir
-    // com o cinza de entradas e saídas.
-    if (b.tipo === "outros") {
-      const base = b.contribuicao_bps > 0 ? "#FF6200" : "#111111";
-      const claro = b.contribuicao_bps > 0 ? "#ffb380" : "#6b6b6b";
-      return { fundo: `repeating-linear-gradient(135deg, ${base} 0 8px, ${claro} 8px 16px)`, texto: "#ffffff" };
+    if (b.tipo !== "outros") {
+      return clarear(COR_BLOCO[categoriaDoBloco(b)].fundo, b.clareamento || 0);
     }
-    return b.contribuicao_bps > 0 ? COR_BLOCO.abriu : COR_BLOCO.fechou;
+    // "Outros" listrado na cor do lado: lê-se "abriu"/"fechou" sem confundir
+    // com o cinza de entradas e saídas. Listras no tom MAIS CLARO da cor
+    // (22/10/2026): é a soma dos menores, então fica no fim da escala.
+    const cor = categoriaDoBloco(b);
+    const base = clarear(COR_BLOCO[cor].fundo, CLAREAMENTO_MAX[cor]);
+    const claro = clarear(COR_BLOCO[cor].fundo, Math.min(0.9, CLAREAMENTO_MAX[cor] + 0.18));
+    return { fundo: `repeating-linear-gradient(135deg, ${base.fundo} 0 8px, ${claro.fundo} 8px 16px)`, texto: "#111111" };
   }
 
   function textoPct(b) {
@@ -1171,7 +1231,7 @@
     area.style.display = vazio ? "none" : "";
     if (vazio) return;
 
-    const blocos = squarify(montarBlocosAtribuicao(dados), 0, 0, area.clientWidth, area.clientHeight);
+    const blocos = squarify(atribuirTons(montarBlocosAtribuicao(dados)), 0, 0, area.clientWidth, area.clientHeight);
     blocos.forEach((b) => {
       const el = document.createElement("div");
       const cor = corDoBloco(b);

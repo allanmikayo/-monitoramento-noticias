@@ -146,31 +146,76 @@
     <span class="kpi-value" id="kpi-spread">—</span>
     <span class="kpi-delta" id="kpi-variacao">—</span>
   </div>
+  {# MEDIANA (22/10/2026, pedido do Allan): mediana SIMPLES, sem peso --
+     o papel "do meio" da base. Ao lado da média para mostrar quanto a média
+     está sendo puxada pelos papéis de estoque grande. #}
   <div class="kpi-card">
-    <span class="kpi-label">DURATION MÉDIA <span class="kpi-tag" id="kpi-duration-tag"></span></span>
+    <span class="kpi-label">MEDIANA DO SPREAD <span class="kpi-tag">sem peso</span></span>
+    <span class="kpi-value" id="kpi-mediana">—</span>
+    <span class="kpi-delta" id="kpi-variacao-mediana">—</span>
+  </div>
+  <div class="kpi-card">
+    <span class="kpi-label">DURATION <span class="kpi-tag" id="kpi-duration-tag"></span></span>
     <span class="kpi-value" id="kpi-duration">—</span>
     <span class="kpi-delta muted">anos</span>
   </div>
   <div class="kpi-card">
-    <span class="kpi-label">ATIVOS PRECIFICADOS</span>
+    <span class="kpi-label">ATIVOS</span>
     <span class="kpi-value" id="kpi-n-ativos">—</span>
-    <span class="kpi-delta muted">com spread na data</span>
+    <span class="kpi-delta muted">precificados pela Anbima</span>
   </div>
+  {# ESTOQUE (22/10/2026): só dos ativos precificados -- a mesma base da
+     contagem e da média ao lado. #}
   <div class="kpi-card">
-    <span class="kpi-label">ESTOQUE NA BASE</span>
+    <span class="kpi-label">ESTOQUE</span>
     <span class="kpi-value" id="kpi-estoque">—</span>
-    <span class="kpi-delta muted"><span id="kpi-estoque-cobertura">—</span> ativos com estoque</span>
+    <span class="kpi-delta muted">dos ativos precificados</span>
   </div>
 </div>
-<p class="fonte-visual" id="kpi-nota" style="margin:-4px 0 16px;">Médias ponderadas por estoque. Fonte: Anbima, Debentures.com e Itaú BBA</p>
+<p class="fonte-visual" id="kpi-nota" style="margin:-4px 0 16px;">Spread médio e duration ponderados por estoque; mediana sem ponderação. Fonte: Anbima, Debentures.com e Itaú BBA</p>
 
 {# EVOLUÇÃO -- metade da altura de antes (21/09/2026). É o visual que menos
    muda de uma semana para outra; ocupava uma tela inteira. #}
 <div class="chart-card" style="margin-bottom:16px;">
-  <h2 style="margin:0;">Evolução do spread médio</h2>
-  <p class="muted small" style="margin:2px 0 8px;">bps, ponderado por estoque</p>
+  <h2 style="margin:0;">Evolução do Spread Médio</h2>
+  <p class="muted small" style="margin:2px 0 6px;">bps · média ponderada por estoque; mediana sem ponderação</p>
+  <div class="treemap-legenda">
+    <span><i style="background:#FF6200;"></i>Spread médio</span>
+    <span><i style="background:#111111;"></i>Mediana</span>
+  </div>
   <canvas id="chart-series" height="52"></canvas>
   <p class="fonte-visual" id="fonte-series">Fonte: Anbima, Debentures.com e Itaú BBA</p>
+</div>
+
+{# DECOMPOSIÇÃO DO MOVIMENTO DO SPREAD (01/10/2026; renomeado e movido para
+   logo abaixo da evolução em 22/10/2026, pedido do Allan). Treemap que
+   reparte a variação do card SPREAD MÉDIO -- mesma classe, base, data e
+   recorte -- entre grupos econômicos (ou setores, ou emissores). A área de
+   cada bloco é o tamanho da contribuição em bps; laranja abriu, preto
+   fechou, cinza é papel que entrou ou saiu da base (não reprecificou). O tom
+   clareia com o ranking dentro de cada cor (22/10/2026). A
+   soma dos blocos é a variação do card. Conta em
+   queries.atribuicao_variacao. #}
+<div class="chart-card" style="margin-bottom:16px;" id="atribuicao-card">
+  <div class="titulo-com-acao" style="margin-bottom:2px;">
+    <h2 style="margin:0;">Decomposição do Movimento do Spread</h2>
+    <div class="window-tabs" id="atribuicao-tabs">
+      <button data-nivel="grupo" class="win-btn active">Grupo econômico</button>
+      <button data-nivel="setor" class="win-btn">Setor</button>
+      <button data-nivel="emissor" class="win-btn">Emissor</button>
+    </div>
+  </div>
+  <p class="muted small" style="margin:2px 0 6px;" id="atribuicao-sub">—</p>
+  <div class="treemap-legenda">
+    <span><i style="background:#FF6200;"></i>Abriu</span>
+    <span><i style="background:#111111;"></i>Fechou</span>
+    <span><i style="background:#c9c9c9;"></i>Entrou ou saiu da base</span>
+    <span class="muted" id="atribuicao-totais"></span>
+  </div>
+  <div class="treemap-area" id="atribuicao-mapa"></div>
+  <div class="treemap-dica" id="atribuicao-dica" style="display:none;"></div>
+  <p class="muted small" id="atribuicao-vazio" style="display:none;">Sem as duas datas da comparação para repartir o movimento.</p>
+  <p class="fonte-visual" id="fonte-atribuicao">Fonte: Anbima, Debentures.com e Itaú BBA</p>
 </div>
 
 {# ABERTURAS E FECHAMENTOS (21/09/2026, pedido do Allan) -- os dois
@@ -179,7 +224,7 @@
    queries._variacoes_no_par). #}
 <div class="emissor-duplo" style="margin-bottom:16px;">
   <div class="chart-card">
-    <h2 style="margin:0;" id="titulo-composicao">Evolução da variação de spreads</h2>
+    <h2 style="margin:0;" id="titulo-composicao">Evolução da Variação de Spreads</h2>
     <p class="muted small" style="margin:2px 0 8px;" id="sub-composicao">% da base de ativos por faixa</p>
     <canvas id="chart-composicao" height="210"></canvas>
     <p class="fonte-visual" id="fonte-composicao">Fonte: Anbima, Debentures.com e Itaú BBA</p>
@@ -211,7 +256,7 @@
    os comprimentos serem comparáveis entre si. #}
 <div class="chart-card" style="margin-bottom:16px;">
   <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;">
-    <h2 style="margin:0;">Spread por setor</h2>
+    <h2 style="margin:0;">Spread por Setor, Subsetor e Grupo Econômico</h2>
     <span class="muted small" id="setor-trilha"></span>
   </div>
   <p class="muted small" style="margin:2px 0 10px;" id="setor-sub">bps, ponderado por estoque · clique numa linha para abrir o nível seguinte</p>
@@ -240,8 +285,8 @@
    tabela é o lugar de LER os nomes, não de revê-los. #}
 <div class="emissor-duplo" style="margin-bottom:16px;">
   <div class="chart-card">
-    <h2 style="margin:0;" id="titulo-desagios">Maiores deságios</h2>
-    <p class="muted small" style="margin:2px 0 8px;">% do PU par · os 15 papéis mais abaixo do par · clique numa barra para ver a série</p>
+    <h2 style="margin:0;" id="titulo-desagios">Maiores Deságios</h2>
+    <p class="muted small" style="margin:2px 0 8px;">% do PU par · os 15 papéis mais abaixo do par, do maior deságio para o menor · clique numa barra para ver a série</p>
     <div style="position:relative;height:372px;">
       <canvas id="chart-desagios"></canvas>
     </div>
@@ -249,7 +294,7 @@
   </div>
   <div class="chart-card">
     <div class="titulo-com-acao" style="margin-bottom:2px;">
-      <h2 style="margin:0;" id="titulo-movers">Top 10 aberturas</h2>
+      <h2 style="margin:0;" id="titulo-movers">Top 10 Aberturas</h2>
       <div class="window-tabs" id="movers-tabs">
         <button data-lado="aberturas" class="win-btn active">Aberturas</button>
         <button data-lado="fechamentos" class="win-btn">Fechamentos</button>
@@ -264,35 +309,6 @@
     </table>
     <p class="fonte-visual" id="fonte-movers">Fonte: Anbima, Debentures.com e Itaú BBA</p>
   </div>
-</div>
-
-{# DE ONDE VEIO O MOVIMENTO (01/10/2026, pedido do Allan). Treemap que
-   reparte a variação do card SPREAD MÉDIO -- mesma classe, base, data e
-   recorte -- entre grupos econômicos (ou setores, ou emissores). A área de
-   cada bloco é o tamanho da contribuição em bps; laranja abriu, preto
-   fechou, cinza é papel que entrou ou saiu da base (não reprecificou). A
-   soma dos blocos é a variação do card. Conta em
-   queries.atribuicao_variacao. #}
-<div class="chart-card" style="margin-bottom:16px;" id="atribuicao-card">
-  <div class="titulo-com-acao" style="margin-bottom:2px;">
-    <h2 style="margin:0;">De onde veio o movimento</h2>
-    <div class="window-tabs" id="atribuicao-tabs">
-      <button data-nivel="grupo" class="win-btn active">Grupo econômico</button>
-      <button data-nivel="setor" class="win-btn">Setor</button>
-      <button data-nivel="emissor" class="win-btn">Emissor</button>
-    </div>
-  </div>
-  <p class="muted small" style="margin:2px 0 6px;" id="atribuicao-sub">—</p>
-  <div class="treemap-legenda">
-    <span><i style="background:#FF6200;"></i>Abriu</span>
-    <span><i style="background:#111111;"></i>Fechou</span>
-    <span><i style="background:#c9c9c9;"></i>Entrou ou saiu da base</span>
-    <span class="muted" id="atribuicao-totais"></span>
-  </div>
-  <div class="treemap-area" id="atribuicao-mapa"></div>
-  <div class="treemap-dica" id="atribuicao-dica" style="display:none;"></div>
-  <p class="muted small" id="atribuicao-vazio" style="display:none;">Sem as duas datas da comparação para repartir o movimento.</p>
-  <p class="fonte-visual" id="fonte-atribuicao">Fonte: Anbima, Debentures.com e Itaú BBA</p>
 </div>
 
 <div id="drilldown-wrap" class="chart-card" style="display:none;">

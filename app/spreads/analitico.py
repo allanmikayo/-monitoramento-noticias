@@ -113,6 +113,7 @@ def _linhas(
           FROM v_spread_rating
          WHERE data = :data AND classe = :classe
            AND spread IS NOT NULL AND duration IS NOT NULL
+           AND pu IS NOT NULL AND pct_pu_par IS NOT NULL  -- regra PRECIFICADO (queries.py)
     """
     rows = db.execute(text(sql), {"data": data, "classe": classe}).mappings().all()
     ex = excluidos or set()

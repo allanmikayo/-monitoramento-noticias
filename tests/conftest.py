@@ -39,3 +39,22 @@ atexit.register(lambda: shutil.rmtree(_TMP, ignore_errors=True))
 
 # Permite `from app...` rodando pytest da raiz do projeto.
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
+
+# PAPEL COMPLETO POR PADRÃO (22/10/2026). As contas de spread passaram a
+# exigir PU, % do PU par e duration publicados (`queries.PRECIFICADO`). Os
+# testes antigos criam `DebentureSpread` só com spread/estoque; em vez de
+# reescrever cada um, um papel criado SEM esses campos ganha valores
+# neutros. Passar `pu=None` (etc.) EXPLICITAMENTE continua valendo -- é como
+# se testa o papel que a regra deixa de fora.
+from sqlalchemy import event as _event  # noqa: E402
+
+from app.models import DebentureSpread as _DebentureSpread  # noqa: E402
+
+_PADRAO_PAPEL = {"pu": 1000.0, "pct_pu_par": 100.0, "duration": 5.0}
+
+
+@_event.listens_for(_DebentureSpread, "init")
+def _papel_completo(target, args, kwargs):
+    for campo, valor in _PADRAO_PAPEL.items():
+        kwargs.setdefault(campo, valor)

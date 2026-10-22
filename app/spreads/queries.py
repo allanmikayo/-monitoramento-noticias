@@ -11,11 +11,12 @@ e dias sem publicação não distorcem a janela "última semana"."""
 from __future__ import annotations
 
 import itertools
+import statistics
 from datetime import date, datetime, timedelta
 from typing import NamedTuple
 from zoneinfo import ZoneInfo
 
-from sqlalchemy import func, or_, select
+from sqlalchemy import and_, func, or_, select
 from sqlalchemy.orm import Session
 
 from ..models import (
@@ -24,6 +25,22 @@ from ..models import (
 from .fetch import _normalize_codigo
 
 CLASSES = ["IPCA + Incentivadas", "CDI + Tradicionais"]
+
+# PAPEL PRECIFICADO (22/10/2026, pedido do Allan). Só entra em conta de
+# spread -- média, mediana, contagem, estoque, séries, setor, movers,
+# atribuição, dispersão -- o papel que tem, na data, spread calculado E PU,
+# % do PU par e duration publicados. Achado conferindo o card contra o
+# controle em Excel dele: o ASER12 (Águas do Sertão, estreou na Anbima em
+# 07/10/2026) vinha com taxa indicativa mas sem PU, % do PU par nem
+# duration, e sozinho levava o spread médio IPCA+ de 21/10 de 108,7 para
+# 109,7 bps (e a contagem de 610 para 611). Regra única aqui para nenhum
+# bloco da página usar uma base diferente do card.
+PRECIFICADO = and_(
+    DebentureSpread.spread.isnot(None),
+    DebentureSpread.pu.isnot(None),
+    DebentureSpread.pct_pu_par.isnot(None),
+    DebentureSpread.duration.isnot(None),
+)
 
 # Chave em AppSetting (config chave-valor genérica, ver app/auth.py) pra
 # lista de tickers excluídos manualmente da conta de spread -- pedido do
@@ -232,7 +249,8 @@ def kpi_summary(
         return {
             "data_referencia": None, "data_comparacao": None, "spread_medio": None,
             "spread_medio_fallback": False,
-            "variacao_bps": None, "n_ativos": 0, "duration_media_ponderada": None,
+            "variacao_bps": None, "spread_mediana": None, "variacao_mediana_bps": None,
+            "n_ativos": 0, "duration_media_ponderada": None,
             "duration_ponderada_fallback": False,
             "estoque_total": None, "estoque_cobertura": 0,
         }
@@ -243,7 +261,7 @@ def kpi_summary(
         db.query(func.count(DebentureSpread.id))
         .join(Debenture, Debenture.codigo == DebentureSpread.codigo)
         .filter(Debenture.classe == classe, DebentureSpread.data == hoje,
-                DebentureSpread.spread.isnot(None)),
+                PRECIFICADO),
         filtros,
     )
     if excluidos:
@@ -271,6 +289,16 @@ def kpi_summary(
 
     duration_pond, fallback = _weighted_avg_duration(db, classe, hoje, excluidos, filtros)
 
+    # MEDIANA (22/10/2026, pedido do Allan): mediana SIMPLES dos spreads da
+    # data, sem peso -- é o papel "do meio" da base, não faz sentido
+    # ponderar por estoque como a média.
+    mediana_hoje = _mediana_spread(db, classe, hoje, excluidos, filtros)
+    variacao_mediana = None
+    if anterior is not None and mediana_hoje is not None:
+        mediana_anterior = _mediana_spread(db, classe, anterior, excluidos, filtros)
+        if mediana_anterior is not None:
+            variacao_mediana = mediana_hoje - mediana_anterior
+
     # Estoque total e quantos ativos têm estoque cruzado -- a cobertura de
     # debentures.com.br é esparsa em datas antigas (ver fetch.py), então o
     # total só é interpretável junto com a contagem que o compõe.
@@ -281,6 +309,9 @@ def kpi_summary(
             Debenture.classe == classe,
             DebentureSpread.data == hoje,
             DebentureSpread.estoque.isnot(None),
+            # Estoque dos papéis PRECIFICADOS (22/10/2026): o card mostra o
+            # estoque dos mesmos ativos que entram na contagem e na média.
+            PRECIFICADO,
         ),
         filtros,
     )
@@ -299,6 +330,8 @@ def kpi_summary(
         # verdade quando não é (mesmo padrão de `duration_ponderada_fallback`).
         "spread_medio_fallback": spread_fallback,
         "variacao_bps": round(variacao, 1) if variacao is not None else None,
+        "spread_mediana": round(mediana_hoje, 1) if mediana_hoje is not None else None,
+        "variacao_mediana_bps": round(variacao_mediana, 1) if variacao_mediana is not None else None,
         "n_ativos": n_hoje or 0,
         "duration_media_ponderada": round(duration_pond, 2) if duration_pond is not None else None,
         "duration_ponderada_fallback": fallback,
@@ -324,7 +357,7 @@ def _weighted_avg_spread(
         db.query(DebentureSpread.spread, DebentureSpread.estoque)
         .join(Debenture, Debenture.codigo == DebentureSpread.codigo)
         .filter(Debenture.classe == classe, DebentureSpread.data == data,
-                DebentureSpread.spread.isnot(None)),
+                PRECIFICADO),
         filtros,
     )
     if excluidos:
@@ -339,6 +372,23 @@ def _weighted_avg_spread(
         return (soma_pond / soma_peso if soma_peso else None), False
     valores = [s for s, _ in rows]
     return (sum(valores) / len(valores) if valores else None), True
+
+
+def _mediana_spread(
+    db: Session, classe: str, data: date, excluidos: set[str] | None = None,
+    filtros: Filtros | None = None,
+) -> float | None:
+    """Mediana simples (sem peso) dos spreads dos papéis precificados na data."""
+    q = _aplicar_filtros(
+        db.query(DebentureSpread.spread)
+        .join(Debenture, Debenture.codigo == DebentureSpread.codigo)
+        .filter(Debenture.classe == classe, DebentureSpread.data == data, PRECIFICADO),
+        filtros,
+    )
+    if excluidos:
+        q = q.filter(DebentureSpread.codigo.notin_(excluidos))
+    valores = [r[0] for r in q.all()]
+    return statistics.median(valores) if valores else None
 
 
 def _weighted_avg_duration(
@@ -356,7 +406,7 @@ def _weighted_avg_duration(
         .join(Debenture, Debenture.codigo == DebentureSpread.codigo)
         .filter(
             Debenture.classe == classe, DebentureSpread.data == data,
-            DebentureSpread.duration.isnot(None), DebentureSpread.spread.isnot(None),
+            DebentureSpread.duration.isnot(None), PRECIFICADO,
         ),
         filtros,
     )
@@ -401,15 +451,14 @@ def time_series(db: Session, classe: str, codigo: str | None = None,
     # (`itertools.groupby` sobre as linhas cruas ordenadas por data) já
     # que o SQL não dá pra fazer "SUM(spread*estoque)/SUM(estoque) com
     # fallback pra AVG(spread) quando soma de estoque é zero" numa única
-    # expressão limpa por GROUP BY. (Chegou a ganhar uma linha de
-    # mediana no mesmo dia, pedido do próprio Allan -- revertida no dia
-    # seguinte, "não gostei", ver CLAUDE.md.)
+    # expressão limpa por GROUP BY. A mediana (sem peso) voltou em
+    # 22/10/2026, pedido do Allan, como segunda curva do gráfico.
     excluidos = tickers_excluidos_spread(db)
     q = _aplicar_filtros(
         db.query(DebentureSpread.data, DebentureSpread.codigo,
                  DebentureSpread.spread, DebentureSpread.estoque)
         .join(Debenture, Debenture.codigo == DebentureSpread.codigo)
-        .filter(Debenture.classe == classe, DebentureSpread.spread.isnot(None)),
+        .filter(Debenture.classe == classe, PRECIFICADO),
         filtros,
     )
     if excluidos:
@@ -425,6 +474,8 @@ def time_series(db: Session, classe: str, codigo: str | None = None,
         out.append({
             "data": dia.isoformat(),
             "spread_medio": round(media, 1) if media is not None else None,
+            # Mediana simples, sem peso (22/10/2026) -- mesma conta do card.
+            "spread_mediana": round(statistics.median(s for s, _ in papeis.values()), 1),
             "n_ativos": len(papeis),
         })
 
@@ -516,12 +567,12 @@ def movers(
     q_hoje = (
         db.query(DebentureSpread)
         .join(Debenture, Debenture.codigo == DebentureSpread.codigo)
-        .filter(Debenture.classe == classe, DebentureSpread.data == hoje, DebentureSpread.spread.isnot(None))
+        .filter(Debenture.classe == classe, DebentureSpread.data == hoje, PRECIFICADO)
     )
     q_ant = (
         db.query(DebentureSpread.codigo, DebentureSpread.spread)
         .join(Debenture, Debenture.codigo == DebentureSpread.codigo)
-        .filter(Debenture.classe == classe, DebentureSpread.data == anterior, DebentureSpread.spread.isnot(None))
+        .filter(Debenture.classe == classe, DebentureSpread.data == anterior, PRECIFICADO)
     )
     if excluidos:
         q_hoje = q_hoje.filter(DebentureSpread.codigo.notin_(excluidos))
@@ -630,7 +681,7 @@ def _variacoes_no_par(
         .filter(
             Debenture.classe == classe,
             DebentureSpread.data == d,
-            DebentureSpread.spread.isnot(None),
+            PRECIFICADO,
             DebentureSpread.duration.isnot(None),
             DebentureSpread.duration >= DURATION_MINIMA_VARIACAO,
         ),
@@ -645,7 +696,7 @@ def _variacoes_no_par(
         .filter(
             Debenture.classe == classe,
             DebentureSpread.data == anterior,
-            DebentureSpread.spread.isnot(None),
+            PRECIFICADO,
         ),
         filtros,
     )
@@ -982,7 +1033,7 @@ def _bloco_de_cards(db: Session, classe: str, codigos: list[str]) -> dict:
     # fazia uma consulta POR TICKER dentro de um laço.
     ultimas = (
         select(DebentureSpread.codigo, func.max(DebentureSpread.data).label("data"))
-        .where(DebentureSpread.codigo.in_(codigos), DebentureSpread.spread.isnot(None))
+        .where(DebentureSpread.codigo.in_(codigos), PRECIFICADO)
         .group_by(DebentureSpread.codigo)
         .subquery()
     )
@@ -1008,7 +1059,7 @@ def _bloco_de_cards(db: Session, classe: str, codigos: list[str]) -> dict:
     datas_desc = [
         row[0]
         for row in db.query(DebentureSpread.data)
-        .filter(DebentureSpread.codigo.in_(codigos), DebentureSpread.spread.isnot(None))
+        .filter(DebentureSpread.codigo.in_(codigos), PRECIFICADO)
         .distinct().order_by(DebentureSpread.data.desc()).limit(63).all()
     ]
     spread_3m = spread_3m_inicio = spread_3m_fim = None
@@ -1019,7 +1070,7 @@ def _bloco_de_cards(db: Session, classe: str, codigos: list[str]) -> dict:
             db.query(DebentureSpread.spread, DebentureSpread.estoque)
             .filter(
                 DebentureSpread.codigo.in_(codigos),
-                DebentureSpread.spread.isnot(None),
+                PRECIFICADO,
                 DebentureSpread.data >= cutoff,
             ).all()
         )
@@ -1223,7 +1274,7 @@ def emissor_series(db: Session, nomes_emissor: list[str], classe: str, nivel: st
 
     rows = (
         db.query(DebentureSpread.codigo, DebentureSpread.data, DebentureSpread.spread, DebentureSpread.estoque)
-        .filter(DebentureSpread.codigo.in_(codigos), DebentureSpread.spread.isnot(None))
+        .filter(DebentureSpread.codigo.in_(codigos), PRECIFICADO)
         .order_by(DebentureSpread.data)
         .all()
     )
@@ -1341,7 +1392,7 @@ def emissor_taxas(db: Session, nomes_emissor: list[str], classe: str) -> dict:
     for codigo in codigos:
         row = (
             db.query(DebentureSpread)
-            .filter(DebentureSpread.codigo == codigo, DebentureSpread.spread.isnot(None))
+            .filter(DebentureSpread.codigo == codigo, PRECIFICADO)
             .order_by(DebentureSpread.data.desc())
             .first()
         )
@@ -1366,7 +1417,7 @@ def emissor_taxas(db: Session, nomes_emissor: list[str], classe: str) -> dict:
     datas_desc = [
         row[0]
         for row in db.query(DebentureSpread.data)
-        .filter(DebentureSpread.codigo.in_(codigos), DebentureSpread.spread.isnot(None))
+        .filter(DebentureSpread.codigo.in_(codigos), PRECIFICADO)
         .distinct()
         .order_by(DebentureSpread.data.desc())
         .limit(63)
@@ -1383,7 +1434,7 @@ def emissor_taxas(db: Session, nomes_emissor: list[str], classe: str) -> dict:
             db.query(DebentureSpread.spread, DebentureSpread.estoque)
             .filter(
                 DebentureSpread.codigo.in_(codigos),
-                DebentureSpread.spread.isnot(None),
+                PRECIFICADO,
                 DebentureSpread.data >= cutoff,
             )
             .all()
@@ -1533,7 +1584,7 @@ def emissor_ranking_diferencas(
     # -- lado Anbima: última linha com spread de cada ticker (até
     # `data_referencia`, quando informada) --
     sub_q = db.query(DebentureSpread.codigo, func.max(DebentureSpread.data).label("max_data")).filter(
-        DebentureSpread.codigo.in_(codigos), DebentureSpread.spread.isnot(None)
+        DebentureSpread.codigo.in_(codigos), PRECIFICADO
     )
     if data_referencia is not None:
         sub_q = sub_q.filter(DebentureSpread.data <= data_referencia)
@@ -1808,7 +1859,7 @@ def detalhes_latest_date(db: Session, classe: str) -> date | None:
     q = (
         db.query(func.max(DebentureSpread.data))
         .join(Debenture, Debenture.codigo == DebentureSpread.codigo)
-        .filter(DebentureSpread.spread.isnot(None))
+        .filter(PRECIFICADO)
     )
     q = q.filter(Debenture.classe == classe) if classe else q.filter(Debenture.classe.in_(CLASSES))
     return q.scalar()
@@ -1864,7 +1915,7 @@ def detalhes_rows(db: Session, classe: str, data: date | None) -> dict:
     q = (
         db.query(DebentureSpread, Debenture)
         .join(Debenture, Debenture.codigo == DebentureSpread.codigo)
-        .filter(DebentureSpread.data == data, DebentureSpread.spread.isnot(None))
+        .filter(DebentureSpread.data == data, PRECIFICADO)
     )
     q = q.filter(Debenture.classe == classe) if classe else q.filter(Debenture.classe.in_(CLASSES))
     if excluidos:
@@ -1980,7 +2031,7 @@ def spread_por_setor(
                      Debenture.nome, Debenture.grupo_economico, DebentureSpread.duration)
             .join(Debenture, Debenture.codigo == DebentureSpread.codigo)
             .filter(Debenture.classe == classe,
-                    DebentureSpread.spread.isnot(None), *filtros_de_data)
+                    PRECIFICADO, *filtros_de_data)
         )
         q = _aplicar_filtros(q, filtros)
         if excluidos:
@@ -2141,7 +2192,7 @@ def atribuicao_variacao(
                      Debenture.nome, Debenture.grupo_economico, Debenture.setor)
             .join(Debenture, Debenture.codigo == DebentureSpread.codigo)
             .filter(Debenture.classe == classe, DebentureSpread.data == d,
-                    DebentureSpread.spread.isnot(None)),
+                    PRECIFICADO),
             filtros,
         )
         if excluidos:
