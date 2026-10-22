@@ -763,7 +763,7 @@ button.perfil-tag:hover { outline: 1px solid currentColor; }
 .perfil-classe-topo h3 { margin: 0; font-size: 0.95rem; }
 .perfil-peso { font-size: 0.78rem; color: var(--muted); }
 .perfil-metricas {
-  display: grid; grid-template-columns: 1.35fr 1fr 1fr 1fr; gap: 12px;
+  display: grid; grid-template-columns: 1.6fr 1fr 1fr; gap: 12px;
   margin: 12px 0 10px; padding-bottom: 12px; border-bottom: 1px solid #f0f0f0;
 }
 .perfil-metrica { display: flex; flex-direction: column; gap: 2px; min-width: 0; }

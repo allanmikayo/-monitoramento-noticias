@@ -2046,26 +2046,23 @@
 
     const mercadoPorData = Object.fromEntries((serieResp.mercado || []).map((p) => [p.data, p.spread_medio]));
     const ultimo = serie[serie.length - 1];
-    const mercadoHoje = ultimo ? mercadoPorData[ultimo.data] : null;
     const spread = card.spread;
-    const dif = spread !== null && spread !== undefined && mercadoHoje !== null && mercadoHoje !== undefined
-      ? spread - mercadoHoje : null;
-    const sinal = (v) => (v > 0 ? "+" : v < 0 ? "−" : "");
-    const fmtDif = (v) => `${sinal(v)}${fmtBpsSimples(Math.abs(v))} bps`;
+    // Três números por classe (22/10/2026: o "vs. mercado" saiu do card --
+    // a comparação com o mercado fica na curva cinza do gráfico).
     const m = (rotulo, valor, detalhe, extra) => `
       <div class="perfil-metrica ${extra || ""}">
         <span class="rotulo">${rotulo}</span>
         ${valor}
         <span class="detalhe">${detalhe}</span>
       </div>`;
+    const detalheSpread = [
+      ultimo ? `mediana ${fmtBpsSimples(ultimo.spread_mediana)} bps` : null,
+      card.spread_3m !== null && card.spread_3m !== undefined ? `média 3M ${fmtBpsSimples(card.spread_3m)} bps` : null,
+    ].filter(Boolean).join(" · ");
     metricas.innerHTML =
       m("Spread médio", `<span class="valor">${spread !== null && spread !== undefined ? fmtBpsSimples(spread) + " bps" : "—"}</span>`,
-        card.spread_3m !== null && card.spread_3m !== undefined ? `média 3M ${fmtBpsSimples(card.spread_3m)} bps` : "média 3M —",
-        "principal")
-      + m("vs. mercado", `<span class="valor${dif > 0.05 ? " acima" : ""}">${dif !== null ? fmtDif(dif) : "—"}</span>`,
-          mercadoHoje !== null && mercadoHoje !== undefined ? `mercado ${fmtBpsSimples(mercadoHoje)} bps` : "")
-      + m("Volume", `<span class="valor">${fmtReais(total.estoque)}</span>`,
-          ultimo ? `mediana ${fmtBpsSimples(ultimo.spread_mediana)} bps` : "")
+        detalheSpread, "principal")
+      + m("Volume", `<span class="valor">${fmtReais(total.estoque)}</span>`, "estoque em circulação")
       + m("Duration", `<span class="valor">${card.duration !== null && card.duration !== undefined
             ? card.duration.toLocaleString("pt-BR", { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + " anos" : "—"}</span>`,
           "ponderada por estoque");
