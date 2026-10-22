@@ -324,9 +324,11 @@
       const tr = document.createElement("tr");
       tr.style.cursor = "pointer";
       tr.title = "Clique para ver a série histórica deste ativo";
+      // Nome sem o sufixo societário: ganha espaço e evita reticências.
+      const nomeCurto = (r.nome || "—").replace(/\s*-?\s*(S\.?\s?\/?\s?A\.?|LTDA\.?)\s*$/i, "");
       tr.innerHTML = `
         <td><strong>${r.codigo}</strong></td>
-        <td class="col-texto">${r.nome || "—"}</td>
+        <td class="col-texto" title="${r.nome || ""}">${nomeCurto}</td>
         <td>${num1(r.spread)}</td>
         <td class="${cellClass}">${fmtBps(r.variacao_bps)}</td>
       `;
@@ -994,7 +996,7 @@
           const { ctx } = chart;
           const meta = chart.getDatasetMeta(0);
           ctx.save();
-          ctx.font = `600 11px ${Chart.defaults.font.family}`;
+          ctx.font = `600 12px ${Chart.defaults.font.family}`;
           ctx.fillStyle = PADRAO_GRAFICO.PRETO;
           ctx.textAlign = "left";
           ctx.textBaseline = "middle";
@@ -1035,7 +1037,8 @@
           },
           // crossAlign "far": nomes encostados na margem esquerda, alinhados
           // entre si, em vez de colados no eixo com tamanhos diferentes.
-          y: { grid: { display: false }, ticks: { autoSkip: false, crossAlign: "far", font: { size: 10.5 } } },
+          y: { grid: { display: false },
+               ticks: { autoSkip: false, crossAlign: "far", color: PADRAO_GRAFICO.PRETO, font: { size: 12 } } },
         },
         plugins: {
           legend: { display: false },

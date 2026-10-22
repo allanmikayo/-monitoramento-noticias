@@ -222,7 +222,7 @@
    gráficos do relatório semanal, lado a lado. Mesma base nos dois: papéis
    da classe com duration >= 1 e spread nas duas datas da comparação (ver
    queries._variacoes_no_par). #}
-<div class="emissor-duplo" style="margin-bottom:16px;">
+<div class="emissor-duplo duplo-alinhado" style="margin-bottom:16px;">
   <div class="chart-card">
     <h2 style="margin:0;" id="titulo-composicao">Evolução da Variação de Spreads</h2>
     <p class="muted small" style="margin:2px 0 8px;" id="sub-composicao">% da base de ativos por faixa</p>
@@ -283,7 +283,12 @@
    aberturas e Top 20 fechamentos (40 linhas, ~800 px) viraram um Top 10 com
    alternância -- a dispersão acima já destaca os maiores de cada lado, e a
    tabela é o lugar de LER os nomes, não de revê-los. #}
-<div class="emissor-duplo" style="margin-bottom:16px;">
+{# PAR ALINHADO (22/10/2026, Allan: "a diagramação não conversa"). Os dois
+   cards têm a mesma altura, cabeçalho e subtítulo de uma linha nos dois, o
+   gráfico estica para preencher o card e a fonte fica no rodapé dos dois.
+   A tabela não quebra linha (nome longo vira reticências), então cada
+   linha tem a mesma altura. #}
+<div class="emissor-duplo duplo-alinhado" style="margin-bottom:16px;">
   <div class="chart-card">
     <div class="titulo-com-acao" style="margin-bottom:2px;">
       <h2 style="margin:0;" id="titulo-desagios">Maiores Deságios</h2>
@@ -292,8 +297,8 @@
         <button data-modo="precificados" class="win-btn" title="Só papéis precificados pela Anbima (entram nas contas de spread)">Só precificados</button>
       </div>
     </div>
-    <p class="muted small" style="margin:2px 0 8px;">% do PU par · os 15 papéis mais abaixo do par, do maior deságio para o menor · clique numa barra para ver a série</p>
-    <div style="position:relative;height:372px;">
+    <p class="muted small" style="margin:2px 0 10px;">% do PU par · 15 papéis mais abaixo do par · clique numa barra para ver a série</p>
+    <div class="area-desagios">
       <canvas id="chart-desagios"></canvas>
     </div>
     <p class="fonte-visual" id="fonte-desagios">Fonte: Anbima e Itaú BBA</p>

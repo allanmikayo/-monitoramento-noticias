@@ -625,3 +625,17 @@ tr.linha-serie .chart-card { margin: 0; box-shadow: none; }
 /* Números da tabela de setor não quebram em duas linhas quando o rótulo é
    um nome de emissor longo. */
 #tabela-setor td:not(.col-texto) { white-space: nowrap; }
+
+/* PAR ALINHADO (22/10/2026). Cards lado a lado com a mesma altura; a fonte
+   desce para o rodapé dos dois, então as linhas de fonte ficam na mesma
+   altura. */
+.duplo-alinhado { align-items: stretch; }
+.duplo-alinhado > .chart-card { display: flex; flex-direction: column; }
+.duplo-alinhado > .chart-card > .fonte-visual { margin-top: auto; padding-top: 8px; }
+/* O gráfico de deságios estica até a altura do card vizinho (base 0 +
+   altura mínima: o tamanho do canvas não realimenta a altura do card). */
+.area-desagios { position: relative; flex: 1 1 0; min-height: 380px; }
+/* Top 10: uma linha por papel. Nome longo vira reticências (o nome inteiro
+   fica na dica), números nunca quebram. */
+#tabela-movers td { white-space: nowrap; }
+#tabela-movers td.col-texto { max-width: 0; width: 100%; overflow: hidden; text-overflow: ellipsis; }
