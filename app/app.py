@@ -485,12 +485,21 @@ def dashboard(request: Request, user: User = Depends(require_user), db: Session 
 # baixar passa por /api/documentos/{id}/baixar, que devolve como anexo.
 _RAD = "https://www.rad.cvm.gov.br/ENET/"
 _PROTOCOLO_RE = re.compile(r"NumeroProtocoloEntrega=(\d+)", re.I)
+# Formulários estruturados do RAD (FRE, Código de Governança): abrem por
+# página própria, com número sequencial -- não há um arquivo único para
+# baixar, então só "Abrir" (o navegador mostra o formulário).
+_FORMULARIO_RE = re.compile(
+    r"(frmGerenciaPaginaFRE\.aspx|frmExibirCodigoGovernancaExt\.aspx)\?([^#]*NumeroSequencialDocumento=\d+[^#]*)",
+    re.I)
 
 
 def _links_documento(a) -> tuple[str, str | None]:
     if a.article_type == "fato_relevante":
         m = _PROTOCOLO_RE.search(a.url or "")
         if not m:
+            f = _FORMULARIO_RE.search(a.url or "")
+            if f:
+                return f"{_RAD}{f.group(1)}?{f.group(2)}", None
             return config.CVM_SEARCH_URL, None
         p = m.group(1)
         return (f"{_RAD}frmExibirArquivoIPEExterno.aspx?NumeroProtocoloEntrega={p}",

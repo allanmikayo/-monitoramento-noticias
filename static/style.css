@@ -863,3 +863,83 @@ button.perfil-tag:hover { outline: 1px solid currentColor; }
   .painel-docs { position: static; max-height: none; }
   .docs-lista { max-height: 520px; }
 }
+
+/* --------------------------------------------------------------------- */
+/* DOCUMENTOS -- cartão (23/10/2026). Empresa + categoria na mesma linha, */
+/* "Tema:" embaixo; Visualizar e Baixar no canto direito do cartão.       */
+/* --------------------------------------------------------------------- */
+.doc-card {
+  display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 12px; align-items: start;
+  border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; margin: 8px 0;
+  background: #fff; transition: border-color .15s ease, box-shadow .15s ease;
+}
+.doc-card:hover { border-color: #cfcfcf; box-shadow: 0 2px 10px rgba(0,0,0,.05); }
+.doc-corpo { min-width: 0; }
+.doc-linha1 { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.doc-linha1 .doc-empresa { font-size: 0.9rem; }
+.doc-tag {
+  font-size: 0.66rem; font-weight: 700; letter-spacing: .02em; color: #444;
+  background: #f0f0f0; border-radius: 999px; padding: 2px 9px; white-space: nowrap;
+}
+.doc-tag.relevante { background: var(--accent-tint); color: var(--accent-dark); }
+.doc-tema {
+  margin-top: 5px; font-size: 0.8rem; color: #444; line-height: 1.4;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+}
+.doc-tema span { color: var(--muted); font-weight: 600; }
+.doc-card .doc-hora { margin-top: 4px; font-size: 0.7rem; color: #9a9a9a; }
+.doc-card .doc-acoes { display: flex; gap: 6px; margin: 0; }
+.btn-doc-off { color: #bdbdbd; border-color: #eee; cursor: not-allowed; background: #fafafa; }
+.docs-lista .feed-dia { border-bottom: 0; padding-bottom: 0; }
+
+/* --------------------------------------------------------------------- */
+/* DESTAQUE DE RATINGS no topo da Imprensa (23/10/2026).                  */
+/* --------------------------------------------------------------------- */
+.ratings-destaque {
+  margin: 12px 0 4px; padding: 12px 14px; border-radius: 10px;
+  background: #faf8f6; border: 1px solid #efe7df;
+}
+.ratings-destaque.vazio { display: flex; gap: 10px; flex-wrap: wrap; align-items: baseline; padding: 9px 14px; }
+.ratings-destaque.vazio .rd-texto { font-size: 0.82rem; color: #555; }
+.rd-ultima { font-size: 0.78rem; color: var(--muted); }
+.rd-topo { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; }
+.rd-titulo { display: flex; align-items: baseline; gap: 8px; }
+.rd-numero { font-size: 1.6rem; font-weight: 800; color: #111; line-height: 1; font-variant-numeric: tabular-nums; }
+.rd-texto { font-size: 0.86rem; font-weight: 600; color: #333; }
+.rd-contadores { display: flex; gap: 6px; flex-wrap: wrap; }
+.rd-cont {
+  font: inherit; font-size: 0.74rem; border-radius: 999px; padding: 3px 10px; cursor: pointer;
+  border: 1px solid transparent; background: #fff;
+}
+.rd-cont b { font-weight: 800; }
+.rd-cont.ativo { border-color: currentColor; box-shadow: inset 0 0 0 1px currentColor; }
+.rd-lista { list-style: none; margin: 10px 0 0; padding: 0; }
+.rd-lista li {
+  display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 10px; align-items: center;
+  padding: 6px 0; border-top: 1px solid #efe7df; font-size: 0.82rem;
+}
+.rd-manchete { color: #222; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.rd-manchete:hover { color: var(--accent); text-decoration: none; }
+.rd-meta { font-size: 0.72rem; color: var(--muted); white-space: nowrap; }
+.rd-mais {
+  margin-top: 6px; font: inherit; font-size: 0.76rem; font-weight: 700; color: var(--accent);
+  background: none; border: 0; padding: 2px 0; cursor: pointer;
+}
+/* Cor por tipo de ação -- a mesma no destaque, no contador e no feed. */
+.rt-pill { font-size: 0.66rem; font-weight: 700; border-radius: 999px; padding: 2px 8px; white-space: nowrap; }
+.rt-rebaixamento { color: #b42318; background: #fdecea; }
+.rt-elevacao { color: #1e7a3a; background: #e8f5ec; }
+.rt-perspectiva { color: #9a6700; background: #fff4d6; }
+.rt-novo { color: #1f4e79; background: #e8eff7; }
+.rt-afirmacao { color: #555; background: #efefef; }
+.rt-outra { color: #555; background: #efefef; }
+.feed-rating { padding-left: 12px; border-left: 3px solid #d9d9d9; }
+.rt-borda-rebaixamento { border-left-color: #d9442f; }
+.rt-borda-elevacao { border-left-color: #2e9e52; }
+.rt-borda-perspectiva { border-left-color: #e0a100; }
+.rt-borda-novo { border-left-color: #3b6fa3; }
+@media (max-width: 760px) {
+  .rd-lista li { grid-template-columns: auto minmax(0, 1fr); }
+  .rd-meta { display: none; }
+  .doc-card { grid-template-columns: 1fr; }
+}

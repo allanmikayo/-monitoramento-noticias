@@ -77,7 +77,9 @@
 </div>
 
 {# DUAS COLUNAS (22/10/2026, pedido do Allan): "separar Imprensa e CVM e
-   agentes fiduciários na mesma tela de maneira organizada".
+   agentes fiduciários na mesma tela de maneira organizada". A coluna da
+   direita virou "Documentos" (23/10/2026): CVM (fatos relevantes, FRE,
+   ITR, convocações) e agentes fiduciários.
    - Imprensa (esquerda, larga): feed de leitura -- notícias e ações de
      rating, agrupado por dia.
    - CVM e agentes fiduciários (direita): painel fixo com rolagem própria,
@@ -93,19 +95,20 @@
         <h2 id="titulo-imprensa">Imprensa</h2>
         <span class="painel-contagem" id="imprensa-contagem">—</span>
       </div>
-      <div class="window-tabs" id="imprensa-tabs">
-        <button data-tipo="todos" class="win-btn active">Todas</button>
-        <button data-tipo="news" class="win-btn">Notícias</button>
-        <button data-tipo="rating_action" class="win-btn">Ações de rating</button>
-      </div>
     </header>
+    {# DESTAQUE DE RATINGS (23/10/2026, pedido do Allan: "essas ações podem se
+       perder no meio das notícias"). Quantas ações de rating saíram nos
+       últimos 2 dias, por tipo (rebaixamento, elevação, perspectiva,
+       afirmação, novo rating), e as mais recentes. Os contadores filtram a
+       lista. No feed abaixo elas continuam, marcadas com barra lateral. #}
+    <div id="ratings-destaque" class="ratings-destaque"></div>
     <div id="imprensa-lista" class="feed"></div>
   </section>
 
   <aside class="painel-noticias painel-docs" id="painel-docs" aria-labelledby="titulo-docs">
     <header class="painel-topo">
       <div class="painel-titulo">
-        <h2 id="titulo-docs">CVM e Agentes Fiduciários</h2>
+        <h2 id="titulo-docs">Documentos</h2>
         <span class="painel-contagem" id="docs-contagem">—</span>
       </div>
     </header>

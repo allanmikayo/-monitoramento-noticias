@@ -30,3 +30,20 @@ def test_assembleia_abre_o_arquivo_e_baixa_pelo_proxy():
 
 def test_noticia_nao_tem_download():
     assert app_mod._links_documento(_art("news", "https://valor.globo.com/x")) == ("https://valor.globo.com/x", None)
+
+
+def test_formulario_fre_abre_no_enet_sem_download():
+    abrir, baixar = app_mod._links_documento(_art(
+        "fato_relevante",
+        "https://rad.cvm.gov.br/ENETWeb/frmGerenciaPaginaFRE.aspx?NumeroSequencialDocumento=159533"
+        "&CodigoTipoInstituicao=1#02471-6-202607161051-frmGerenciaPaginaFRE.aspx"))
+    assert abrir == ("https://www.rad.cvm.gov.br/ENET/frmGerenciaPaginaFRE.aspx"
+                     "?NumeroSequencialDocumento=159533&CodigoTipoInstituicao=1")
+    assert baixar is None
+
+
+def test_pagina_tem_documentos_e_destaque_de_ratings():
+    from pathlib import Path
+    html = (Path(__file__).resolve().parent.parent / "templates" / "dashboard.html").read_text(encoding="utf-8")
+    assert ">Documentos</h2>" in html and 'id="ratings-destaque"' in html
+    assert 'id="imprensa-tabs"' not in html          # filtro Notícias/Ratings saiu

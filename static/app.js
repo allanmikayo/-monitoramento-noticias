@@ -178,7 +178,6 @@
   const buscaNoticias = document.getElementById("busca-noticias");
   let imprensaDados = [];
   let docsDados = [];
-  let imprensaTipo = "todos";
   let docsTipo = "fato_relevante";
 
   function esc(s) {
@@ -240,8 +239,98 @@
     return empresas || setores ? `<div class="companies">${setores}${empresas}</div>` : "";
   }
 
+  // ------------------------------------------------------------------
+  // AÇÕES DE RATING (23/10/2026): tipo lido do título da agência. A ordem
+  // importa -- "Rebaixa ...; Perspectiva Negativa" é rebaixamento, e
+  // "Revisa Perspectiva ...; Afirma Rating" é perspectiva, não afirmação.
+  // ------------------------------------------------------------------
+  const TIPOS_RATING = {
+    rebaixamento: { rotulo: "Rebaixamento", plural: "rebaixamentos", simbolo: "▼" },
+    elevacao: { rotulo: "Elevação", plural: "elevações", simbolo: "▲" },
+    perspectiva: { rotulo: "Perspectiva / observação", plural: "perspectiva / observação", simbolo: "◐" },
+    novo: { rotulo: "Novo rating", plural: "novos ratings", simbolo: "+" },
+    afirmacao: { rotulo: "Afirmação", plural: "afirmações", simbolo: "●" },
+    outra: { rotulo: "Outra ação", plural: "outras", simbolo: "·" },
+  };
+  const semAcentoN = (s) => String(s || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
+  function tipoRating(titulo) {
+    const s = semAcentoN(titulo);
+    if (/rebaix|downgrade/.test(s)) return "rebaixamento";
+    if (/\beleva|elevad|upgrade/.test(s)) return "elevacao";
+    if (/coloca|observacao|creditwatch|revisa (a )?perspectiva|altera (a )?perspectiva/.test(s)) return "perspectiva";
+    if (/atribui|atribuid|novo rating/.test(s)) return "novo";
+    if (/afirma|reafirm|mantem|mantid/.test(s)) return "afirmacao";
+    return "outra";
+  }
+  const agenciaCurta = (fonte) => (/fitch/i.test(fonte) ? "Fitch" : /s&p|standard/i.test(fonte) ? "S&P"
+    : /moody/i.test(fonte) ? "Moody's" : fonte);
+
+  const JANELA_DESTAQUE_H = 48;
+  let filtroRating = null;          // tipo escolhido nos contadores do destaque
+  let destaqueAberto = false;
+  const destaqueEl = document.getElementById("ratings-destaque");
+
+  function pillRating(tipo) {
+    const t = TIPOS_RATING[tipo];
+    return `<span class="rt-pill rt-${tipo}">${t.simbolo} ${t.rotulo}</span>`;
+  }
+
+  function renderRatingsDestaque() {
+    const limite = Date.now() - JANELA_DESTAQUE_H * 3600 * 1000;
+    const todas = imprensaDados.filter((a) => a.article_type === "rating_action" && casaBusca(a));
+    const recentes = todas.filter((a) => new Date(a.published_at || a.found_at).getTime() >= limite);
+    if (!recentes.length) {
+      const ultima = todas[0];
+      destaqueEl.className = "ratings-destaque vazio";
+      destaqueEl.innerHTML = `<span class="rd-texto">Nenhuma ação de rating nos últimos 2 dias</span>`
+        + (ultima ? `<span class="rd-ultima">última: ${esc(agenciaCurta(ultima.source_name))} · `
+          + `<a href="${esc(ultima.url)}" target="_blank" rel="noopener">${esc((ultima.companies || [])[0]?.name || ultima.title.slice(0, 60))}</a>`
+          + ` · ${esc(rotuloDia(diaChave(ultima.published_at || ultima.found_at)))}</span>` : "");
+      return;
+    }
+    const porTipo = {};
+    recentes.forEach((a) => { const t = tipoRating(a.title); porTipo[t] = (porTipo[t] || 0) + 1; });
+    if (filtroRating && !porTipo[filtroRating]) filtroRating = null;
+    const lista = recentes.filter((a) => !filtroRating || tipoRating(a.title) === filtroRating);
+    const visiveis = destaqueAberto ? lista : lista.slice(0, 4);
+    const contadores = Object.keys(TIPOS_RATING).filter((t) => porTipo[t]).map((t) => `
+      <button type="button" class="rd-cont rt-${t}${filtroRating === t ? " ativo" : ""}" data-tipo="${t}"
+              aria-pressed="${filtroRating === t}" title="Filtrar: ${TIPOS_RATING[t].plural}">
+        <b>${porTipo[t]}</b> ${TIPOS_RATING[t].simbolo} ${porTipo[t] === 1 ? TIPOS_RATING[t].rotulo.toLowerCase() : TIPOS_RATING[t].plural}
+      </button>`).join("");
+    destaqueEl.className = "ratings-destaque";
+    destaqueEl.innerHTML = `
+      <div class="rd-topo">
+        <div class="rd-titulo"><span class="rd-numero">${recentes.length}</span>
+          <span class="rd-texto">${recentes.length === 1 ? "ação de rating" : "ações de rating"} nos últimos 2 dias</span></div>
+        <div class="rd-contadores">${contadores}</div>
+      </div>
+      <ul class="rd-lista">
+        ${visiveis.map((a) => {
+          const tipo = tipoRating(a.title);
+          const empresa = (a.companies || [])[0]?.name;
+          return `<li>
+            ${pillRating(tipo)}
+            <a href="${esc(a.url)}" target="_blank" rel="noopener" class="rd-manchete" title="${esc(a.title)}">
+              ${empresa ? `<b>${esc(empresa)}</b> · ` : ""}${esc(a.title)}</a>
+            <span class="rd-meta">${esc(agenciaCurta(a.source_name))} · ${hora(a.published_at || a.found_at)}</span>
+          </li>`;
+        }).join("")}
+      </ul>
+      ${lista.length > 4 ? `<button type="button" class="rd-mais">${destaqueAberto ? "Mostrar menos" : `Ver todas as ${lista.length}`}</button>` : ""}
+    `;
+    destaqueEl.querySelectorAll(".rd-cont").forEach((b) => b.addEventListener("click", () => {
+      filtroRating = filtroRating === b.dataset.tipo ? null : b.dataset.tipo;
+      if (filtroRating && window.registrarUso) registrarUso("filtro", "Ratings: " + TIPOS_RATING[filtroRating].plural);
+      renderRatingsDestaque();
+    }));
+    const mais = destaqueEl.querySelector(".rd-mais");
+    if (mais) mais.addEventListener("click", () => { destaqueAberto = !destaqueAberto; renderRatingsDestaque(); });
+  }
+
   function renderImprensa() {
-    const lista = imprensaDados.filter((a) => (imprensaTipo === "todos" || a.article_type === imprensaTipo) && casaBusca(a));
+    renderRatingsDestaque();
+    const lista = imprensaDados.filter(casaBusca);
     document.getElementById("imprensa-contagem").textContent =
       `${lista.length} ${lista.length === 1 ? "item" : "itens"}`;
     imprensaLista.innerHTML = "";
@@ -257,14 +346,16 @@
       frag.appendChild(dia);
       g.itens.forEach((a) => {
         const item = document.createElement("article");
-        item.className = "feed-item";
         const rating = a.article_type === "rating_action";
+        const tipo = rating ? tipoRating(a.title) : null;
+        // Ação de rating: barra lateral na cor do tipo -- não se perde no feed.
+        item.className = "feed-item" + (rating ? ` feed-rating rt-borda-${tipo}` : "");
         const fora = a.is_covered === false && !rating;
         item.innerHTML = `
           <div class="feed-meta">
             <span class="feed-hora">${hora(a.published_at || a.found_at)}</span>
             <span class="feed-fonte">${esc(a.source_name)}</span>
-            ${rating ? '<span class="badge badge-rating_action">Ação de rating</span>' : ""}
+            ${rating ? pillRating(tipo) : ""}
             ${a.article_type === "research" ? '<span class="badge badge-research">Research</span>' : ""}
             ${fora ? '<span class="tag" title="Não bateu com nenhuma empresa/setor da sua cobertura">fora da cobertura</span>' : ""}
           </div>
@@ -314,7 +405,7 @@
     docsLista.innerHTML = "";
     if (!lista.length) {
       docsLista.innerHTML = docsTipo === "assembleia" && !daAba.length
-        ? '<p class="vazio-noticias">Nenhuma assembleia (AGD/AGT) das empresas cobertas nesta janela.<br>'
+        ? '<p class="vazio-noticias">Nenhum documento de agente fiduciário das empresas cobertas nesta janela.<br>'
           + '<span class="muted small">Fontes: Oliveira Trust, Vórtx e Pentágono.</span></p>'
         : '<p class="vazio-noticias">Nenhum documento para estes filtros.</p>';
       return;
@@ -327,23 +418,31 @@
       frag.appendChild(dia);
       g.itens.forEach((a) => {
         const p = partesDocumento(a);
-        // Nome curto da empresa da cobertura quando houver; o nome oficial
-        // (como veio do RAD) fica na dica.
+        // CARTÃO DE DOCUMENTO (23/10/2026): à esquerda, empresa com a
+        // categoria ao lado e "Tema:"; à direita, no canto, Visualizar e
+        // Baixar. Fato Relevante ganha a etiqueta laranja.
         const curto = (a.companies || [])[0]?.name || p.emissor || a.source_name;
+        const relevante = /fato relevante/i.test(p.categoria);
+        const formulario = (a.url || "").includes("NumeroSequencialDocumento");
+        const baixar = a.download_url
+          ? `<a class="btn-doc btn-doc-baixar" href="${esc(a.download_url)}" download rel="noopener" title="Baixar o arquivo">Baixar</a>`
+          : `<span class="btn-doc btn-doc-off" title="${formulario
+              ? "Formulário estruturado do RAD (FRE, Código de Governança): abre por página, sem arquivo único"
+              : "O RAD não informou o número do documento"}">Baixar</span>`;
         const item = document.createElement("div");
-        item.className = "doc-item";
+        item.className = "doc-card";
         item.innerHTML = `
-          <div class="doc-topo">
-            <span class="doc-empresa" title="${esc(p.emissor || curto)}">${esc(curto)}</span>
-            <span class="doc-hora">${hora(a.published_at || a.found_at)}</span>
+          <div class="doc-corpo">
+            <div class="doc-linha1">
+              <span class="doc-empresa" title="${esc(p.emissor || curto)}">${esc(curto)}</span>
+              <span class="doc-tag${relevante ? " relevante" : ""}">${esc(p.categoria)}</span>
+            </div>
+            ${p.assunto ? `<div class="doc-tema"><span>Tema:</span> ${esc(p.assunto)}</div>` : ""}
+            <div class="doc-hora">${hora(a.published_at || a.found_at)}${a.article_type === "assembleia" ? ` · ${esc(a.source_name)}` : ""}</div>
           </div>
-          <div class="doc-categoria">${esc(p.categoria)}</div>
-          ${p.assunto ? `<div class="doc-assunto">${esc(p.assunto)}</div>` : ""}
           <div class="doc-acoes">
-            <a class="btn-doc" href="${esc(a.url)}" target="_blank" rel="noopener" title="Abrir o documento em outra aba">Abrir</a>
-            ${a.download_url
-              ? `<a class="btn-doc btn-doc-baixar" href="${esc(a.download_url)}" download rel="noopener" title="Baixar o arquivo">Baixar</a>`
-              : '<span class="muted small" title="O RAD não informou o número do documento">só pela busca do RAD</span>'}
+            <a class="btn-doc" href="${esc(a.url)}" target="_blank" rel="noopener" title="Abrir o documento em outra aba">Visualizar</a>
+            ${baixar}
           </div>
         `;
         frag.appendChild(item);
@@ -393,11 +492,6 @@
       });
     });
   }
-  ligarAbasNoticias("imprensa-tabs", (t, btn) => {
-    imprensaTipo = t;
-    if (window.registrarUso) registrarUso("filtro", "Imprensa: " + btn.textContent.trim());
-    renderImprensa();
-  });
   ligarAbasNoticias("docs-tabs", (t, btn) => {
     docsTipo = t;
     if (window.registrarUso) registrarUso("filtro", "Documentos: " + btn.textContent.trim());
