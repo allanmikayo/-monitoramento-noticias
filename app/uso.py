@@ -22,7 +22,7 @@ from sqlalchemy.orm import Session
 
 from .models import UsoEvento, User
 
-ABAS = ("Repositório", "Notícias", "Spreads", "Balcão B3", "Mercado Primário",
+ABAS = ("Repositório", "Notícias", "Spreads", "Mercado Secundário", "Mercado Primário",
         "Fontes & Empresas", "Administração", "Minha conta")
 
 # O que cada `acao` quer dizer -- é também o rótulo que o painel mostra.

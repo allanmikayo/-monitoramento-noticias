@@ -12,7 +12,7 @@
 (function () {
   var ABAS = {
     "/cobertura": "Repositório", "/": "Notícias", "/spreads": "Spreads",
-    "/balcao": "Balcão B3", "/primario": "Mercado Primário", "/fontes": "Fontes & Empresas",
+    "/mercado-secundario": "Mercado Secundário", "/primario": "Mercado Primário", "/fontes": "Fontes & Empresas",
     "/admin": "Administração", "/minha-conta": "Minha conta",
   };
   var aba = ABAS[location.pathname];

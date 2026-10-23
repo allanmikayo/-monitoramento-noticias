@@ -132,5 +132,5 @@ def test_painel_so_admin(cliente):
 def test_todas_as_paginas_carregam_o_registro(cliente):
     c, tok_adm, _ = cliente
     c.cookies.set("session_token", tok_adm)
-    for pagina in ("/", "/spreads", "/balcao", "/cobertura", "/fontes", "/admin"):
+    for pagina in ("/", "/spreads", "/mercado-secundario", "/cobertura", "/fontes", "/admin"):
         assert "/static/uso.js?v=" in c.get(pagina).text, pagina

@@ -1424,6 +1424,27 @@ com parâmetro repetido na querystring (o formato que o `app.js` novo
 manda). `dashboard.html` e `app.js` conferidos renderizando/sem erro de
 sintaxe.
 
+### Aba "Mercado Secundário" substitui o Balcão B3 — 23/10/2026
+
+Allan pediu para refazer a aba Balcão B3 do zero com uma base nova: um
+export de volume negociado (ticker, data, volume, spread, taxa...) que ele
+gera e sobe. Rota `/mercado-secundario` (`/balcao` redireciona), tabela
+`mercado_secundario`, consultas em `app/spreads/mercado_secundario.py`.
+- **Ticker é a chave**: classe/emissor/setor/subsetor/grupo vêm de
+  `debentures` (ou `debenture_caracteristicas`), resolvidos na consulta.
+- Tela: (1) média diária de volume das duas classes em 4 janelas (5
+  pregões, último mês, ano corrente, ano anterior; denominador = pregões da
+  base na janela; janela que começa antes da base é marcada com *);
+  (2) por classe: volume diário com drill-down mês/ano, mais negociados
+  (volume ou giro = volume ÷ estoque do fim da janela), spread × data
+  (pontos papel×dia, barras de volume, linha = mediana ponderada por
+  volume do dia — a média era levada por papel estressado).
+- Importação: Administração (lotes de 4 mil linhas do navegador) ou
+  `Importar Mercado Secundario.bat`. A tabela nasce na 1ª importação
+  (`checkfirst`), porque a Vercel não roda DDL.
+- Removidos: `balcao_routes.py`, `spreads/balcao.py`, `balcao.html/js`,
+  `test_balcao.py`. A COLETA da B3 (`b3_trades`, `fechar_b3`) continua.
+
 ## Regras a manter
 
 1. **Nunca** trocar `store.upsert_article` para sobrescrever corpo/título

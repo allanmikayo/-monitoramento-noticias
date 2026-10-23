@@ -130,4 +130,23 @@
          placeholder="AAAA11;BBBB22;CCCC33" style="flex:1;min-width:320px;">
   <button type="submit" class="btn-primary">Salvar</button>
 </form>
+
+{# MERCADO SECUNDÁRIO (23/10/2026): a base da aba vem de um export que o
+   Allan gera; o navegador lê o arquivo e manda em lotes (ver
+   static/admin-mercado.js e app/mercado_secundario_routes.py). #}
+<h2 style="margin-top:24px;" id="mercado-secundario">Mercado Secundário — importar export de volume</h2>
+<p class="muted small">
+  Suba o export de volume negociado (.xlsx ou .csv). Reimportar um dia que já está na base
+  substitui aquele dia, não duplica. Se o Excel avisar que não exportou tudo (corte de 50 mil linhas),
+  o dia mais antigo do arquivo vem pela metade e é descartado automaticamente — prefira o CSV para
+  cargas grandes.
+</p>
+<p class="small" id="ms-status">Base atual: carregando…</p>
+<div class="form-row">
+  <input type="file" id="ms-arquivo" accept=".xlsx,.xls,.csv">
+  <button type="button" class="btn-primary" id="ms-importar">Importar</button>
+</div>
+<p class="small" id="ms-progresso"></p>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script src="/static/admin-mercado.js?v={{ v }}"></script>
 {% endblock %}

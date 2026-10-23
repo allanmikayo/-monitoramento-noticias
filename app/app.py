@@ -78,9 +78,9 @@ templates.env.globals["v"] = VERSAO_ESTATICA
 # idêntica a cada deploy, e com o `immutable` de 1 ano do vercel.json o
 # navegador nunca buscava o spreads.js/style.css novos. Todos recebem o
 # mesmo valor; o teste `test_paginas_renderizam_versao_estatica` guarda.
-from . import balcao_routes as _br, cobertura_routes as _cr, spreads_routes as _sr  # noqa: E402
+from . import cobertura_routes as _cr, mercado_secundario_routes as _msr, spreads_routes as _sr  # noqa: E402
 
-for _t in (_br.templates, _cr.templates, _sr.templates):
+for _t in (_msr.templates, _cr.templates, _sr.templates):
     _t.env.globals["v"] = VERSAO_ESTATICA
 
 _BRT = ZoneInfo("America/Sao_Paulo")
@@ -211,14 +211,13 @@ def require_admin(user: User = Depends(require_user)) -> User:
 # desde 27/07; agora a única aba aberta é o Repositório de Relatórios.
 app.include_router(register_spreads_routes(require_user))
 
-# Aba "Balcão B3" (20/08/2026) -- volumetria de negociação de DEB/CRI/CRA a
-# partir do Boletim Diário do Mercado da B3. Lê `negocios_b3_diario` (o
-# agregado, guardado para sempre) nos blocos históricos e `negocios_b3` (o
-# bruto, retenção de 5 dias) só na seção "ao vivo". Atrás de login, como
-# Notícias e Spreads.
-from .balcao_routes import register_balcao_routes  # noqa: E402
+# Aba "Mercado Secundário" (23/10/2026) -- substitui a aba "Balcão B3".
+# Volume negociado de debêntures a partir do export que o Allan sobe pela
+# Administração (ver app/spreads/mercado_secundario.py). Atrás de login; a
+# importação é só para admin. `/balcao` redireciona para cá.
+from .mercado_secundario_routes import register_mercado_secundario_routes  # noqa: E402
 
-app.include_router(register_balcao_routes(require_user))
+app.include_router(register_mercado_secundario_routes(require_user, require_admin))
 
 # Módulo "Repositório de Relatórios" (13/08/2026) -- catálogo dos relatórios
 # do Smart tagueados por empresa/setor. É a ÚNICA aba pública do Hub: recebe

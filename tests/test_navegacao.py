@@ -61,7 +61,7 @@ def test_os_arquivos_da_aba_foram_removidos():
 
 def test_o_menu_mantem_as_abas_que_ficaram():
     base = (RAIZ / "templates" / "base.html").read_text(encoding="utf-8")
-    for rotulo in ("Repositório", "Notícias", "Spreads", "Balcão B3",
+    for rotulo in ("Repositório", "Notícias", "Spreads", "Mercado Secundário",
                    "Administração"):
         assert rotulo in base, f"sumiu do menu: {rotulo}"
 

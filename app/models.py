@@ -926,6 +926,48 @@ class NegocioB3Diario(Base):
     )
 
 
+class MercadoSecundario(Base):
+    """Volume negociado por papel e por dia -- base da aba "Mercado
+    Secundário" (23/10/2026, pedido do Allan; substitui a aba Balcão B3).
+
+    Vem de um EXPORT que o Allan gera e sobe pela Administração (não é
+    coletado por robô). Uma linha por ticker+data, com o que o export traz:
+    volume do dia (R$), taxa negociada, indicativa Anbima, taxa da NTN-B/DI
+    de referência e o spread já calculado pela fonte.
+
+    O que NÃO é usado daqui para classificar o papel: devedor, setor,
+    subsetor e indexador do export ficam guardados só como reserva para
+    ticker sem cadastro. O pedido foi usar o TICKER como chave -- emissor,
+    setor, subsetor, grupo, indexador e Lei 12.431 vêm do cadastro de
+    debêntures do Hub (`debentures`, e `debenture_caracteristicas` para quem
+    a Anbima não precifica), resolvidos na hora da consulta. Assim uma
+    correção de taxonomia vale para todo o histórico sem reimportar nada.
+    """
+    __tablename__ = "mercado_secundario"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    codigo: Mapped[str] = mapped_column(String(40), nullable=False)
+    data: Mapped[date] = mapped_column(Date, nullable=False)
+    volume: Mapped[float | None] = mapped_column(Float)          # R$
+    spread: Mapped[float | None] = mapped_column(Float)          # bps, como veio do export
+    taxa: Mapped[float | None] = mapped_column(Float)            # taxa negociada (% a.a.)
+    taxa_anbima: Mapped[float | None] = mapped_column(Float)     # indicativa Anbima do dia
+    taxa_referencia: Mapped[float | None] = mapped_column(Float) # NTN-B / DI de referência
+    duration: Mapped[float | None] = mapped_column(Float)        # anos
+    vencimento: Mapped[date | None] = mapped_column(Date)
+    # Reserva para ticker fora do cadastro (ver docstring).
+    indexador_fonte: Mapped[str | None] = mapped_column(String(30))
+    devedor_fonte: Mapped[str | None] = mapped_column(String(300))
+    setor_fonte: Mapped[str | None] = mapped_column(String(120))
+    subsetor_fonte: Mapped[str | None] = mapped_column(String(120))
+    importado_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+
+    __table_args__ = (
+        UniqueConstraint("codigo", "data", name="uq_mercado_secundario"),
+        Index("ix_mercado_secundario_data", "data"),
+    )
+
+
 class NtnbReferencia(Base):
     """Cache da curva de NTN-B (taxa por vencimento) do dia -- pedido do
     Allan (27/07/2026): "a taxa de referência não vai mudar ao longo do

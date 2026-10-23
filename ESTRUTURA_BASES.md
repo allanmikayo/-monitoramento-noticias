@@ -13,7 +13,8 @@ três pontos os comentários diziam o oposto do que o código fazia.
 | Spreads debêntures | `debentures`, `debenture_spreads` | API ANBIMA + debentures.com.br | 1×/dia, 21h BRT | Sim |
 | Curva de juro real | `ntnb_referencia` | API ANBIMA (títulos públicos) | 1×/dia, 21h BRT | Sim |
 | Securitizados | `securitizados`, `securitizado_spreads` | API ANBIMA (CRI/CRA) | 1×/dia, após debêntures | Sim |
-| Balcão B3 | `negocios_b3`, `negocios_b3_diario` | API pública do BDI da B3 | 15 min no pregão | Sim |
+| Balcão B3 (coleta; a aba saiu em 23/10) | `negocios_b3`, `negocios_b3_diario` | API pública do BDI da B3 | 15 min no pregão | Sim |
+| Mercado Secundário | `mercado_secundario` | Export de volume negociado subido pelo Allan | Manual (Administração) | Não |
 | ~~Ratings~~ | ~~`issuer_ratings`, `issuers`~~ | — | — | **Removido em 20/08** |
 | Repositório | `reports` | Catálogo do Smart | Manual | Não |
 | Infra | `users`, `sessions`, `app_settings`, `run_logs` | — | — | — |
@@ -110,6 +111,18 @@ Houve um pivô aqui: o boletim `.xls` público da ANBIMA só guarda os últimos 
 | `negocios_b3_diario` | **para sempre** | ~34 MB/ano. Responde "como evolui no tempo" |
 
 Sem a poda, o bruto cresce ~740 MB/ano. **Foi exatamente o que aconteceu:** a rodada noturna nunca rodava na nuvem, e o Supabase começou a alertar estouro de Disk IO em 13/08.
+
+---
+
+## 5b. Mercado Secundário (23/10/2026)
+
+**Tabela:** `mercado_secundario` — uma linha por ticker+data: volume (R$), spread (bps, como veio do export), taxa, indicativa Anbima, taxa de referência, duration, vencimento. Devedor/setor/indexador do export ficam só como reserva.
+
+**Fonte.** Export de volume negociado que o Allan gera e sobe em Administração (o navegador lê o .xlsx/.csv e manda em lotes de 4 mil linhas); para cargas grandes, `Importar Mercado Secundario.bat`. Reimportar um dia substitui o dia. Se o Excel avisou que cortou o export (50 mil linhas), o dia mais antigo do arquivo é descartado.
+
+**Classificação pelo ticker, na consulta:** `debentures` (classe, emissor, setor, subsetor, grupo) → `debenture_caracteristicas` (classe pela remuneração da emissão) → sem cadastro fica fora das duas classes. A aba Balcão B3 foi substituída por esta; a coleta da B3 continua (alimenta outras telas).
+
+**Tamanho.** ~500 linhas/pregão, ~125 mil linhas/ano.
 
 ---
 
