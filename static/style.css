@@ -964,3 +964,9 @@ button.perfil-tag:hover { outline: 1px solid currentColor; }
 @keyframes girar { to { transform: rotate(360deg); } }
 .titulo-sub { font-size: 0.78rem; font-weight: 600; color: var(--muted); }
 @media (max-width: 1000px) { .barra-noticias { flex-wrap: wrap; } }
+
+/* Mercado Secundário — cabeçalho da média diária (23/10/2026): tudo
+   centralizado; título da coluna em laranja, período em branco. */
+.tabela-resumo-ms thead th { text-align: center; vertical-align: middle; }
+.tabela-resumo-ms .cab-titulo { display: block; color: var(--accent); font-weight: 700; }
+.tabela-resumo-ms .cab-periodo { display: block; color: #fff; font-weight: 400; font-size: 0.74rem; margin-top: 2px; }

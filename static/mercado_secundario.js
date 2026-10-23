@@ -77,10 +77,10 @@
       }
       document.getElementById("dados-ate").textContent = "Dados até: " + dataBR(d.referencia);
       const tab = document.getElementById("tabela-resumo");
-      let head = '<tr><th class="col-texto">Classe</th>';
+      let head = '<tr><th><span class="cab-titulo">Classe</span></th>';
       d.janelas.forEach((j) => {
         const periodo = j.dias_uteis ? diaMes(j.inicio) + "–" + diaMes(j.fim) + " · " + j.dias_uteis + " dias úteis" : "sem dados";
-        head += `<th>${esc(j.rotulo)}${j.parcial ? "*" : ""}<br><span class="muted small" style="font-weight:400;">${periodo}</span></th>`;
+        head += `<th><span class="cab-titulo">${esc(j.rotulo)}${j.parcial ? "*" : ""}</span><span class="cab-periodo">${periodo}</span></th>`;
       });
       tab.querySelector("thead").innerHTML = head + "</tr>";
       tab.querySelector("tbody").innerHTML = d.linhas.map((l) => {

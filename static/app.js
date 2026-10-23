@@ -267,7 +267,11 @@
   const agenciaCurta = (fonte) => (/fitch/i.test(fonte) ? "Fitch" : /s&p|standard/i.test(fonte) ? "S&P"
     : /moody/i.test(fonte) ? "Moody's" : fonte);
 
-  const JANELA_DESTAQUE_H = 48;
+  // Destaque das ações de rating: últimos 5 dias (23/10/2026, era 48h). Vem
+  // de uma consulta própria, para não depender da janela escolhida na barra
+  // (com "24h" marcado, o destaque continuaria vendo 5 dias).
+  const JANELA_DESTAQUE_H = 5 * 24;
+  let ratingsDados = [];
   let filtroRating = null;          // tipo escolhido nos contadores do destaque
   let destaqueAberto = false;
   const destaqueEl = document.getElementById("ratings-destaque");
@@ -280,11 +284,12 @@
   function renderRatingsDestaque() {
     const limite = Date.now() - JANELA_DESTAQUE_H * 3600 * 1000;
     const todas = imprensaDados.filter((a) => a.article_type === "rating_action" && casaBusca(a));
-    const recentes = todas.filter((a) => new Date(a.published_at || a.found_at).getTime() >= limite);
+    const recentes = ratingsDados.filter((a) => casaBusca(a)
+      && new Date(a.published_at || a.found_at).getTime() >= limite);
     if (!recentes.length) {
       const ultima = todas[0];
       destaqueEl.className = "ratings-destaque vazio";
-      destaqueEl.innerHTML = `<span class="rd-texto">Nenhuma ação de rating nos últimos 2 dias</span>`
+      destaqueEl.innerHTML = `<span class="rd-texto">Nenhuma ação de rating nos últimos 5 dias</span>`
         + (ultima ? `<span class="rd-ultima">última: ${esc(agenciaCurta(ultima.source_name))} · `
           + `<a href="${esc(ultima.url)}" target="_blank" rel="noopener">${esc((ultima.companies || [])[0]?.name || ultima.title.slice(0, 60))}</a>`
           + ` · ${esc(rotuloDia(diaChave(ultima.published_at || ultima.found_at)))}</span>` : "");
@@ -304,7 +309,7 @@
     destaqueEl.innerHTML = `
       <div class="rd-topo">
         <div class="rd-titulo"><span class="rd-numero">${recentes.length}</span>
-          <span class="rd-texto">${recentes.length === 1 ? "ação de rating" : "ações de rating"} nos últimos 2 dias</span></div>
+          <span class="rd-texto">${recentes.length === 1 ? "ação de rating" : "ações de rating"} nos últimos 5 dias</span></div>
         <div class="rd-contadores">${contadores}</div>
       </div>
       <ul class="rd-lista">
@@ -446,14 +451,19 @@
   async function loadArticles() {
     const pImprensa = parametrosBase();
     TIPOS_IMPRENSA.forEach((t) => pImprensa.append("article_type", t));
+    const pRatings = parametrosBase();
+    pRatings.set("window", "5d");
+    pRatings.append("article_type", "rating_action");
     const pDocs = parametrosBase();
     TIPOS_DOCS.forEach((t) => pDocs.append("article_type", t));
     statusEl.textContent = "Atualizando…";
     try {
-      const [imp, docs] = await Promise.all([
+      const [imp, docs, rat] = await Promise.all([
         fetch(`/api/articles?${pImprensa.toString()}`).then((r) => r.json()),
         fetch(`/api/articles?${pDocs.toString()}`).then((r) => r.json()),
+        fetch(`/api/articles?${pRatings.toString()}`).then((r) => r.json()),
       ]);
+      ratingsDados = rat.articles || [];
       imprensaDados = imp.articles || [];
       docsDados = docs.articles || [];
       renderImprensa();
