@@ -3,11 +3,15 @@
 {% block content %}
 <script type="application/json" id="companies-data">{{ companies_json | safe }}</script>
 
-<div class="filters-bar">
+{# BARRA EM UMA LINHA (23/10/2026, pedido do Allan): mesmos filtros, mais
+   discretos -- rótulos curtos na janela, controles menores, busca que
+   estica no espaço que sobra e o "Forçar atualização" virou um botão
+   quadrado com o símbolo de recarregar no canto. #}
+<div class="filters-bar barra-noticias">
   <div class="window-tabs" id="window-tabs">
-    <button data-window="24h" class="win-btn">Últimas 24h</button>
-    <button data-window="5d" class="win-btn">Últimos 5 dias</button>
-    <button data-window="30d" class="win-btn active">Último mês</button>
+    <button data-window="24h" class="win-btn" title="Últimas 24 horas">24h</button>
+    <button data-window="5d" class="win-btn" title="Últimos 5 dias">5 dias</button>
+    <button data-window="30d" class="win-btn active" title="Último mês">1 mês</button>
   </div>
 
   <!-- Setor/Empresa/Cobertura viraram multi-select (pedido do Allan,
@@ -61,9 +65,11 @@
 
   {# Busca rápida (22/10/2026): filtra as duas colunas na hora, no
      navegador, por título, resumo e empresa. #}
-  <input type="search" id="busca-noticias" class="busca-noticias" placeholder="Buscar nas manchetes e documentos…" autocomplete="off">
+  <input type="search" id="busca-noticias" class="busca-noticias" placeholder="Buscar…" title="Busca nas manchetes e nos documentos" autocomplete="off">
 
-  {% if user %}<button id="btn-refresh" class="btn-primary">Forçar atualização</button>{% endif %}
+  {% if user %}<button id="btn-refresh" class="btn-recarregar" type="button" title="Forçar atualização" aria-label="Forçar atualização">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a9 9 0 1 1-2.64-6.36"/><path d="M21 4v5h-5"/></svg>
+  </button>{% endif %}
 </div>
 
 <div id="progress-wrap" class="progress-wrap" style="display:none;">
@@ -108,19 +114,10 @@
   <aside class="painel-noticias painel-docs" id="painel-docs" aria-labelledby="titulo-docs">
     <header class="painel-topo">
       <div class="painel-titulo">
-        <h2 id="titulo-docs">Documentos</h2>
+        <h2 id="titulo-docs">Documentos <span class="titulo-sub">(CVM/Agente Fiduciário)</span></h2>
         <span class="painel-contagem" id="docs-contagem">—</span>
       </div>
     </header>
-    <div class="docs-controles">
-      <div class="window-tabs" id="docs-tabs">
-        <button data-tipo="fato_relevante" class="win-btn active">CVM <span class="aba-n" id="n-cvm"></span></button>
-        <button data-tipo="assembleia" class="win-btn">Agentes fiduciários <span class="aba-n" id="n-agd"></span></button>
-      </div>
-      <select id="docs-categoria" aria-label="Categoria do documento">
-        <option value="">Todas as categorias</option>
-      </select>
-    </div>
     <div id="docs-lista" class="docs-lista"></div>
   </aside>
 </div>

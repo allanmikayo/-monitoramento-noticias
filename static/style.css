@@ -943,3 +943,24 @@ button.perfil-tag:hover { outline: 1px solid currentColor; }
   .rd-meta { display: none; }
   .doc-card { grid-template-columns: 1fr; }
 }
+
+/* BARRA DE FILTROS DAS NOTÍCIAS EM UMA LINHA (23/10/2026). */
+.barra-noticias { flex-wrap: nowrap; gap: 8px; padding: 8px 10px; }
+.barra-noticias .window-tabs { flex: none; padding: 2px; }
+.barra-noticias .win-btn { padding: 5px 10px; font-size: 0.78rem; }
+.barra-noticias .ms { min-width: 0; flex: 0 1 auto; }
+.barra-noticias .ms-btn { padding: 6px 9px; font-size: 0.78rem; max-width: 190px; }
+.barra-noticias .busca-noticias {
+  flex: 1 1 140px; min-width: 110px; max-width: none; padding: 6px 9px; font-size: 0.8rem;
+  border: 1px solid var(--border); border-radius: 6px; font-family: inherit;
+}
+.btn-recarregar {
+  flex: none; width: 32px; height: 32px; display: inline-flex; align-items: center; justify-content: center;
+  background: var(--accent); color: #fff; border: 0; border-radius: 7px; cursor: pointer;
+}
+.btn-recarregar:hover { background: var(--accent-dark); }
+.btn-recarregar:disabled { cursor: default; opacity: .85; }
+.btn-recarregar.girando svg { animation: girar 0.9s linear infinite; }
+@keyframes girar { to { transform: rotate(360deg); } }
+.titulo-sub { font-size: 0.78rem; font-weight: 600; color: var(--muted); }
+@media (max-width: 1000px) { .barra-noticias { flex-wrap: wrap; } }

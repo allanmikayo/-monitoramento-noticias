@@ -45,5 +45,7 @@ def test_formulario_fre_abre_no_enet_sem_download():
 def test_pagina_tem_documentos_e_destaque_de_ratings():
     from pathlib import Path
     html = (Path(__file__).resolve().parent.parent / "templates" / "dashboard.html").read_text(encoding="utf-8")
-    assert ">Documentos</h2>" in html and 'id="ratings-destaque"' in html
+    assert "(CVM/Agente Fiduciário)" in html and 'id="ratings-destaque"' in html
+    assert 'id="docs-tabs"' not in html and 'id="docs-categoria"' not in html   # feed único
+    assert 'class="btn-recarregar"' in html
     assert 'id="imprensa-tabs"' not in html          # filtro Notícias/Ratings saiu

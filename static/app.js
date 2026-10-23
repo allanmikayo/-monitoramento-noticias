@@ -37,10 +37,14 @@
   // rodar -- ou seja, quebrava a página toda pro público, não só o
   // botão. Esse helper (e os `if (refreshBtn)` abaixo) tornam todo
   // acesso ao botão seguro quando ele não existe no DOM.
+  // Botão de recarregar (23/10/2026): é um ícone -- o estado vai para a
+  // dica e para a animação, não para o texto do botão.
   function setRefreshBtnState(disabled, text) {
     if (!refreshBtn) return;
     refreshBtn.disabled = disabled;
-    refreshBtn.textContent = text;
+    refreshBtn.title = text;
+    refreshBtn.setAttribute("aria-label", text);
+    refreshBtn.classList.toggle("girando", disabled);
   }
   let pollTimer = null;
 
@@ -174,11 +178,9 @@
   const TIPOS_DOCS = ["fato_relevante", "assembleia"];
   const imprensaLista = document.getElementById("imprensa-lista");
   const docsLista = document.getElementById("docs-lista");
-  const docsCategoria = document.getElementById("docs-categoria");
   const buscaNoticias = document.getElementById("busca-noticias");
   let imprensaDados = [];
   let docsDados = [];
-  let docsTipo = "fato_relevante";
 
   function esc(s) {
     return String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
@@ -380,34 +382,14 @@
              assunto: a.title };
   }
 
-  function atualizarCategorias() {
-    // Categorias presentes na aba atual, da mais frequente para a menos.
-    const contagem = new Map();
-    docsDados.filter((a) => a.article_type === docsTipo).forEach((a) => {
-      const c = partesDocumento(a).categoria;
-      contagem.set(c, (contagem.get(c) || 0) + 1);
-    });
-    const atual = docsCategoria.value;
-    docsCategoria.innerHTML = '<option value="">Todas as categorias</option>'
-      + [...contagem.entries()].sort((x, y) => y[1] - x[1])
-        .map(([c, n]) => `<option value="${esc(c)}">${esc(c)} (${n})</option>`).join("");
-    docsCategoria.value = contagem.has(atual) ? atual : "";
-  }
-
   function renderDocs() {
-    const daAba = docsDados.filter((a) => a.article_type === docsTipo);
-    document.getElementById("n-cvm").textContent = docsDados.filter((a) => a.article_type === "fato_relevante").length || "";
-    document.getElementById("n-agd").textContent = docsDados.filter((a) => a.article_type === "assembleia").length || "";
-    const cat = docsCategoria.value;
-    const lista = daAba.filter((a) => (!cat || partesDocumento(a).categoria === cat) && casaBusca(a));
+    // Feed único (23/10/2026): CVM e agentes fiduciários juntos, por data.
+    const lista = docsDados.filter(casaBusca);
     document.getElementById("docs-contagem").textContent =
       `${lista.length} documento${lista.length === 1 ? "" : "s"}`;
     docsLista.innerHTML = "";
     if (!lista.length) {
-      docsLista.innerHTML = docsTipo === "assembleia" && !daAba.length
-        ? '<p class="vazio-noticias">Nenhum documento de agente fiduciário das empresas cobertas nesta janela.<br>'
-          + '<span class="muted small">Fontes: Oliveira Trust, Vórtx e Pentágono.</span></p>'
-        : '<p class="vazio-noticias">Nenhum documento para estes filtros.</p>';
+      docsLista.innerHTML = '<p class="vazio-noticias">Nenhum documento para estes filtros.</p>';
       return;
     }
     const frag = document.createDocumentFragment();
@@ -475,7 +457,6 @@
       imprensaDados = imp.articles || [];
       docsDados = docs.articles || [];
       renderImprensa();
-      atualizarCategorias();
       renderDocs();
       statusEl.textContent = `${imprensaDados.length} na imprensa · ${docsDados.length} documento(s) — atualizado às ${new Date().toLocaleTimeString("pt-BR")}`;
     } catch (e) {
@@ -492,14 +473,6 @@
       });
     });
   }
-  ligarAbasNoticias("docs-tabs", (t, btn) => {
-    docsTipo = t;
-    if (window.registrarUso) registrarUso("filtro", "Documentos: " + btn.textContent.trim());
-    docsCategoria.value = "";
-    atualizarCategorias();
-    renderDocs();
-  });
-  docsCategoria.addEventListener("change", renderDocs);
   let buscaTimer = null;
   buscaNoticias.addEventListener("input", () => {
     clearTimeout(buscaTimer);
