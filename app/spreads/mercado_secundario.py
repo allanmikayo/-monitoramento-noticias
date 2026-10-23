@@ -282,10 +282,50 @@ def _datas_base(db: Session) -> list[date]:
     return list(db.scalars(select(MercadoSecundario.data).distinct().order_by(MercadoSecundario.data)))
 
 
-def _janelas(datas: list[date]) -> dict[str, dict]:
-    """Início/fim de cada janela, ancoradas na data mais recente da base."""
-    ref = datas[-1]
-    ultimos5 = datas[-5:]
+def _pascoa(ano: int) -> date:
+    """Domingo de Páscoa (algoritmo de Meeus/Jones/Butcher)."""
+    a, b, c = ano % 19, ano // 100, ano % 100
+    d, e = b // 4, b % 4
+    f = (b + 8) // 25
+    g = (b - f + 1) // 3
+    h = (19 * a + b - d - g + 15) % 30
+    i, k = c // 4, c % 4
+    l_ = (32 + 2 * e + 2 * i - h - k) % 7
+    m = (a + 11 * h + 22 * l_) // 451
+    mes = (h + l_ - 7 * m + 114) // 31
+    dia = ((h + l_ - 7 * m + 114) % 31) + 1
+    return date(ano, mes, dia)
+
+
+def feriados(ano: int) -> set[date]:
+    """Feriados nacionais do calendário de dias úteis da ANBIMA (o mesmo do
+    mercado de renda fixa): fixos + Carnaval, Sexta-feira Santa e Corpus
+    Christi. Consciência Negra virou nacional em 2024."""
+    p = _pascoa(ano)
+    fixos = [(1, 1), (4, 21), (5, 1), (9, 7), (10, 12), (11, 2), (11, 15), (12, 25)]
+    if ano >= 2024:
+        fixos.append((11, 20))
+    return ({date(ano, m, d) for m, d in fixos}
+            | {p - timedelta(days=48), p - timedelta(days=47), p - timedelta(days=2), p + timedelta(days=60)})
+
+
+def dias_uteis(inicio: date, fim: date) -> list[date]:
+    out, d, cache = [], inicio, {}
+    while d <= fim:
+        if d.weekday() < 5:
+            if d.year not in cache:
+                cache[d.year] = feriados(d.year)
+            if d not in cache[d.year]:
+                out.append(d)
+        d += timedelta(days=1)
+    return out
+
+
+def _janelas(ref: date) -> dict[str, dict]:
+    """Início/fim de cada janela, ancoradas na data mais recente da base.
+    "Últimos 5 dias" são os 5 últimos DIAS ÚTEIS, não as 5 últimas datas da
+    base (se a base pular um dia útil, esse dia entra como zero)."""
+    ultimos5 = dias_uteis(ref - timedelta(days=15), ref)[-5:]
     return {
         "5d": {"rotulo": "Últimos 5 dias", "inicio": ultimos5[0], "fim": ref},
         "mes": {"rotulo": "Último mês", "inicio": _menos_um_mes(ref) + timedelta(days=1), "fim": ref},
@@ -337,27 +377,33 @@ def _por_dia(db: Session, codigos: list[str] | None, inicio: date | None = None,
 # Bloco 1 — resumo geral
 # ---------------------------------------------------------------------------
 def resumo(db: Session) -> dict:
+    """MÉDIA DIÁRIA = volume da janela ÷ DIAS ÚTEIS da janela (calendário
+    ANBIMA), recortada ao período que a base cobre. Dia útil sem negócio --
+    ou que faltou no export -- entra como zero; os que faltam no export
+    vão listados em `dias_sem_dado` para a tela avisar."""
     datas = _datas_base(db)
     if not datas:
         return {"referencia": None, "linhas": [], "janelas": []}
-    jan = _janelas(datas)
+    ref, inicio_base = datas[-1], datas[0]
+    jan = _janelas(ref)
     mapa = mapa_tickers(db)
     total = _por_dia(db, None)
-    inicio_base = datas[0]
+    na_base = set(datas)
 
-    def pregoes(j):
-        return [d for d in datas if j["inicio"] <= d <= j["fim"]]
+    def uteis(j):
+        ini, fim = max(j["inicio"], inicio_base), min(j["fim"], ref)
+        return dias_uteis(ini, fim) if ini <= fim else []
 
     janelas_out = []
     for chave, j in jan.items():
-        p = pregoes(j)
+        u = uteis(j)
         janelas_out.append({
             "chave": chave, "rotulo": j["rotulo"],
-            "inicio": (p[0] if p else j["inicio"]).isoformat(), "fim": (p[-1] if p else j["fim"]).isoformat(),
-            "pregoes": len(p),
+            "inicio": (u[0] if u else j["inicio"]).isoformat(), "fim": (u[-1] if u else j["fim"]).isoformat(),
+            "dias_uteis": len(u),
             # A base começa depois do início da janela: a média existe, mas
             # é de um pedaço do período. A tela avisa em vez de esconder.
-            "parcial": bool(p) and inicio_base > j["inicio"] and chave != "5d",
+            "parcial": bool(u) and inicio_base > j["inicio"],
         })
 
     linhas = []
@@ -366,22 +412,23 @@ def resumo(db: Session) -> dict:
         dia = _por_dia(db, _codigos(mapa, classe))
         celulas = {}
         for chave, j in jan.items():
-            p = pregoes(j)
-            if not p:
+            u = uteis(j)
+            if not u:
                 celulas[chave] = None
                 continue
-            vol = sum(dia[d]["volume"] for d in p if d in dia)
-            pap = sum(dia[d]["papeis"] for d in p if d in dia)
-            celulas[chave] = {"media": vol / len(p), "papeis_dia": pap / len(p)}
+            vol = sum(dia[d]["volume"] for d in u if d in dia)
+            pap = sum(dia[d]["papeis"] for d in u if d in dia)
+            celulas[chave] = {"media": vol / len(u), "papeis_dia": pap / len(u)}
         volume_classes += sum(v["volume"] for v in dia.values())
         linhas.append({"classe": classe, "janelas": celulas})
 
     volume_total = sum(v["volume"] for v in total.values())
     return {
-        "referencia": datas[-1].isoformat(),
+        "referencia": ref.isoformat(),
         "inicio_base": inicio_base.isoformat(),
         "janelas": janelas_out,
         "linhas": linhas,
+        "dias_sem_dado": [d.isoformat() for d in dias_uteis(inicio_base, ref) if d not in na_base],
         # Quanto do volume da base cai nas duas classes. O resto é prefixado,
         # IPCA não incentivada, CDI incentivada, % do DI e papel sem cadastro.
         "cobertura": (volume_classes / volume_total) if volume_total else None,
@@ -444,8 +491,9 @@ def ranking(db: Session, classe: str, janela: str = "semana", metrica: str = "vo
     if not datas:
         return {"linhas": [], "inicio": None, "fim": None, "pregoes": 0}
     fim = datas[-1]
-    inicio = datas[-5:][0] if janela == "semana" else _menos_um_mes(fim) + timedelta(days=1)
-    pregoes = [d for d in datas if inicio <= d <= fim]
+    jan = _janelas(fim)["5d" if janela == "semana" else "mes"]
+    inicio = max(jan["inicio"], datas[0])
+    pregoes = dias_uteis(inicio, fim)
     mapa = mapa_tickers(db)
     codigos = _codigos(mapa, classe)
     ms = MercadoSecundario
@@ -468,7 +516,7 @@ def ranking(db: Session, classe: str, janela: str = "semana", metrica: str = "vo
         m = mapa[codigo]
         linhas.append({
             "codigo": codigo, "emissor": m["emissor"], "setor": m["setor"], "grupo": m["grupo"],
-            "volume": a["volume"], "participacao": a["volume"] / volume_classe if volume_classe else None,
+            "volume": a["volume"],
             "dias": a["dias"], "spread": a["spread"],
             "estoque": est[0] if est else None,
             "data_estoque": est[1].isoformat() if est and est[1] else None,
@@ -482,46 +530,76 @@ def ranking(db: Session, classe: str, janela: str = "semana", metrica: str = "vo
     return {
         "classe": classe, "janela": janela, "metrica": metrica,
         "inicio": pregoes[0].isoformat() if pregoes else inicio.isoformat(),
-        "fim": fim.isoformat(), "pregoes": len(pregoes),
+        "fim": fim.isoformat(), "dias_uteis": len(pregoes),
         "papeis_negociados": len(agreg), "volume_classe": volume_classe,
         "linhas": linhas[:limite],
     }
 
 
-def pontos_spread(db: Session, classe: str, meses: int | None = 3) -> dict:
-    """Um ponto por papel por dia (spread negociado e volume), para o
-    gráfico spread × data. Compacto de propósito: listas paralelas e
-    índices, porque são milhares de pontos."""
+def _inicio_periodo(datas: list[date], meses: int | None) -> date:
+    if not meses:
+        return datas[0]
+    inicio = datas[-1]
+    for _ in range(meses):
+        inicio = _menos_um_mes(inicio)
+    return max(inicio + timedelta(days=1), datas[0])
+
+
+def emissores_negociados(db: Session, classe: str, meses: int | None = 3) -> dict:
+    """Lista da lateral do gráfico spread × data: emissores da classe que
+    negociaram no período, cada um com os seus tickers e o volume deles.
+    `padrao` = o ticker mais negociado do emissor de maior volume -- é o que
+    a tela abre marcado."""
     datas = _datas_base(db)
     if not datas:
-        return {"datas": [], "pontos": [], "tickers": []}
-    inicio = datas[0]
-    if meses:
-        inicio = datas[-1]
-        for _ in range(meses):
-            inicio = _menos_um_mes(inicio)
-        inicio += timedelta(days=1)
+        return {"emissores": [], "padrao": None}
+    inicio = _inicio_periodo(datas, meses)
     mapa = mapa_tickers(db)
     codigos = _codigos(mapa, classe)
     ms = MercadoSecundario
-    brutos = []
+    por_emissor: dict[str, dict] = {}
     for k in range(0, len(codigos), _LOTE_IN):
-        brutos += db.execute(
-            select(ms.data, ms.codigo, ms.spread, ms.volume)
+        for codigo, vol, dias in db.execute(
+            select(ms.codigo, func.sum(ms.volume), func.count(ms.data))
             .where(ms.codigo.in_(codigos[k:k + _LOTE_IN]), ms.data >= inicio, ms.spread.isnot(None))
-        ).all()
-    janela = [d for d in datas if d >= inicio]
-    idx_data = {d: i for i, d in enumerate(janela)}
-    tickers = sorted({b.codigo for b in brutos})
-    idx_tk = {t: i for i, t in enumerate(tickers)}
+            .group_by(ms.codigo)):
+            m = mapa[codigo]
+            e = por_emissor.setdefault(m["emissor"], {"emissor": m["emissor"], "setor": m["setor"],
+                                                       "grupo": m["grupo"], "volume": 0.0, "tickers": []})
+            e["volume"] += vol or 0
+            e["tickers"].append({"codigo": codigo, "volume": vol or 0.0, "dias": dias})
+    emissores = sorted(por_emissor.values(), key=lambda e: e["emissor"].lower())
+    for e in emissores:
+        e["tickers"].sort(key=lambda t: -t["volume"])
+    maior = max(emissores, key=lambda e: e["volume"], default=None)
     return {
-        "classe": classe,
-        "datas": [d.isoformat() for d in janela],
-        "tickers": [{"codigo": t, "emissor": mapa[t]["emissor"], "setor": mapa[t]["setor"]} for t in tickers],
-        # [índice da data, spread (bps), volume (R$ mi), índice do ticker]
-        "pontos": [[idx_data[b.data], round(b.spread, 1), round((b.volume or 0) / 1e6, 3), idx_tk[b.codigo]]
-                   for b in brutos if b.data in idx_data],
+        "classe": classe, "inicio": inicio.isoformat(), "fim": datas[-1].isoformat(),
+        "emissores": emissores,
+        "padrao": {"emissor": maior["emissor"], "codigo": maior["tickers"][0]["codigo"]} if maior else None,
     }
+
+
+def pontos_spread(db: Session, classe: str, meses: int | None, codigos: list[str]) -> dict:
+    """Série de cada ticker escolhido: um ponto por dia em que negociou
+    (spread e volume). O eixo de datas é o de toda a base no período, para
+    as barras de volume caírem no dia certo mesmo sem negócio."""
+    datas = _datas_base(db)
+    if not datas:
+        return {"datas": [], "series": {}}
+    inicio = _inicio_periodo(datas, meses)
+    mapa = mapa_tickers(db)
+    validos = [c for c in dict.fromkeys(codigos) if mapa.get(c, {}).get("classe") == classe][:60]
+    janela = [d for d in datas if d >= inicio]
+    idx = {d: i for i, d in enumerate(janela)}
+    ms = MercadoSecundario
+    series = {c: {"codigo": c, "emissor": mapa[c]["emissor"], "pontos": []} for c in validos}
+    if validos:
+        for data, codigo, spread, volume in db.execute(
+            select(ms.data, ms.codigo, ms.spread, ms.volume)
+            .where(ms.codigo.in_(validos), ms.data >= inicio).order_by(ms.data)):
+            series[codigo]["pontos"].append(
+                [idx[data], round(spread, 1) if spread is not None else None, round((volume or 0) / 1e6, 3)])
+    return {"classe": classe, "datas": [d.isoformat() for d in janela], "series": list(series.values())}
 
 
 def status_importacao(db: Session) -> dict:

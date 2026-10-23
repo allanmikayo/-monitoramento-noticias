@@ -127,20 +127,40 @@ def test_ticker_e_a_chave_da_classificacao(banco):
 
 
 # ---- resumo ----------------------------------------------------------------
-def test_resumo_media_diaria_e_janela_parcial(banco):
-    dias = [date(2026, 10, 1) + timedelta(days=k) for k in range(21)]
+def test_dias_uteis_seguem_o_calendario_anbima():
+    assert date(2026, 10, 12) in ms.feriados(2026)          # Nossa Senhora Aparecida
+    assert date(2026, 6, 4) in ms.feriados(2026)            # Corpus Christi
+    assert date(2026, 2, 16) in ms.feriados(2026)           # Carnaval
+    assert date(2026, 11, 20) in ms.feriados(2026)
+    assert len(ms.dias_uteis(date(2026, 10, 5), date(2026, 10, 16))) == 9
+
+
+def test_resumo_media_por_dia_util_e_janela_parcial(banco):
+    dias = ms.dias_uteis(date(2026, 10, 1), date(2026, 10, 21))
     _carregar(banco, dias)
     r = ms.resumo(banco)
     assert r["referencia"] == "2026-10-21"
     jan = {j["chave"]: j for j in r["janelas"]}
-    assert jan["5d"]["pregoes"] == 5 and not jan["5d"]["parcial"]
+    assert jan["5d"]["dias_uteis"] == 5 and not jan["5d"]["parcial"]
     assert jan["ano"]["parcial"] is True                    # base começa em 01/10
-    assert jan["ano_anterior"]["pregoes"] == 0
+    assert jan["ano_anterior"]["dias_uteis"] == 0
     linha = {l["classe"]: l["janelas"] for l in r["linhas"]}
     assert linha[IPCA]["5d"]["media"] == pytest.approx(10e6)
     assert linha[CDI]["mes"]["media"] == pytest.approx(4e6)
     assert linha[IPCA]["ano_anterior"] is None
+    assert r["dias_sem_dado"] == []
     assert r["cobertura"] == pytest.approx(14 / 20)
+
+
+def test_dia_util_que_falta_no_export_entra_como_zero(banco):
+    """Média por DIA ÚTIL, não por dia com negócio: um papel (ou classe)
+    que negociou R$ 1 bi num dia só tem média de R$ 200 mi em 5 dias."""
+    dias = [d for d in ms.dias_uteis(date(2026, 10, 15), date(2026, 10, 21)) if d != date(2026, 10, 19)]
+    _carregar(banco, dias)
+    r = ms.resumo(banco)
+    assert r["dias_sem_dado"] == ["2026-10-19"]
+    linha = {l["classe"]: l["janelas"] for l in r["linhas"]}
+    assert linha[IPCA]["5d"]["media"] == pytest.approx(10e6 * 4 / 5)
 
 
 def test_dia_sem_negocio_da_classe_conta_como_zero(banco):
@@ -164,15 +184,19 @@ def test_serie_e_ranking_com_giro_pelo_estoque_do_fim_da_janela(banco):
     assert top["codigo"] == "TRAN11"
     assert top["estoque"] == 100.0                        # 20/10, não o de 30/10 (depois da janela)
     assert top["giro"] == pytest.approx(20e6 / 100e6)
-    assert rk["pregoes"] == 2
+    assert top["dias"] == 2 and rk["dias_uteis"] == 2   # base começa em 20/10
 
 
-def test_pontos_do_grafico_spread_por_data(banco):
-    _carregar(banco, [date(2026, 10, 20), date(2026, 10, 21)])
-    p = ms.pontos_spread(banco, IPCA, meses=None)
+def test_grafico_por_emissor_abre_com_o_ticker_mais_negociado(banco):
+    _carregar(banco, [date(2026, 10, 20), date(2026, 10, 21)],
+              [_linha("NOVA11", date(2026, 10, 21), 2e6, 70.0)])
+    e = ms.emissores_negociados(banco, IPCA, meses=None)
+    assert [x["emissor"] for x in e["emissores"]] == ["Nova Energia", "Transmissora A"]
+    assert e["padrao"] == {"emissor": "Transmissora A", "codigo": "TRAN11"}
+    p = ms.pontos_spread(banco, IPCA, None, ["TRAN11", "BANC11"])    # BANC11 é CDI: fica de fora
     assert p["datas"] == ["2026-10-20", "2026-10-21"]
-    assert [t["codigo"] for t in p["tickers"]] == ["TRAN11"]
-    assert p["pontos"][0][1:3] == [100.0, 10.0]
+    assert [s["codigo"] for s in p["series"]] == ["TRAN11"]
+    assert p["series"][0]["pontos"][0] == [0, 100.0, 10.0]
 
 
 # ---- rotas -----------------------------------------------------------------
@@ -215,4 +239,6 @@ def test_rotas_atras_de_login_e_importacao_so_para_admin(clientes):
     assert c["user"].get("/api/mercado-secundario/serie?classe=Outros").status_code == 400
     assert c["user"].get("/api/mercado-secundario/ranking",
                          params={"classe": IPCA, "metrica": "giro", "janela": "mes"}).status_code == 200
-    assert c["user"].get("/api/mercado-secundario/pontos", params={"classe": IPCA, "meses": 3}).status_code == 200
+    assert c["user"].get("/api/mercado-secundario/emissores", params={"classe": IPCA, "meses": 3}).status_code == 200
+    r = c["user"].get("/api/mercado-secundario/pontos", params={"classe": IPCA, "meses": 3, "codigo": ["TRAN11"]})
+    assert r.status_code == 200 and r.json()["series"][0]["codigo"] == "TRAN11"

@@ -4,10 +4,9 @@
 {#
   Aba Mercado Secundário (23/10/2026) -- substitui o Balcão B3.
 
-  Dois níveis, do geral para o específico:
-    1. VISÃO GERAL  média diária de volume das duas classes em 4 janelas.
-    2. POR CLASSE   volume dia a dia (drill-down mês/ano), mais negociados
-                    (volume ou giro) e spread negociado × data.
+  Do geral para o específico: média diária de volume das duas classes em 4
+  janelas; depois, filtrado por classe, volume dia a dia (drill-down
+  mês/ano), mais negociados (volume ou giro) e spread × data por emissor.
 
   Base: export de volume negociado que o Allan sobe pela Administração. O
   ticker é a chave para emissor/setor/grupo/classe (cadastro do Hub). Ver
@@ -27,10 +26,12 @@
 </div>
 
 <div id="ms-conteudo">
-{# ---- 1. Visão geral ----------------------------------------------- #}
-<h2 class="bloco-titulo"><span class="bloco-num">1</span>Visão geral
-  <small>média diária de volume negociado</small></h2>
-<div class="chart-card" style="padding-top:10px;">
+{# Sem divisão em "seções numeradas" (23/10/2026, pedido do Allan): mesma
+   gramática visual de Spreads e Notícias -- cartões em sequência e uma
+   barra de filtro de classe acima do que depende dela. #}
+<div class="chart-card">
+  <h2 style="margin:0;">Média diária de volume negociado</h2>
+  <p class="muted small" style="margin:2px 0 10px;">R$ por dia útil</p>
   <table class="table tabela-casa" id="tabela-resumo" style="margin:0;">
     <thead><tr><th class="col-texto">Classe</th></tr></thead>
     <tbody><tr><td class="muted">Carregando…</td></tr></tbody>
@@ -38,14 +39,13 @@
   <p class="fonte-visual" id="resumo-nota"></p>
 </div>
 
-{# ---- 2. Por classe ------------------------------------------------ #}
-<h2 class="bloco-titulo"><span class="bloco-num">2</span>Por classe
-  <div class="window-tabs" id="classe-tabs" style="margin-left:auto;">
+<div class="filters-bar">
+  <div class="window-tabs" id="classe-tabs">
     {% for c in classes %}
     <button data-classe="{{ c }}" class="win-btn{% if loop.first %} active{% endif %}">{{ c }}</button>
     {% endfor %}
   </div>
-</h2>
+</div>
 
 <div class="chart-card">
   <div class="titulo-com-acao">
@@ -58,7 +58,7 @@
   </div>
   <div class="muted small" id="volume-trilha" style="min-height:18px;"></div>
   <div style="position:relative;height:300px;"><canvas id="grafico-volume"></canvas></div>
-  <p class="fonte-visual">Mensal e anual somam o volume do período; clique numa barra para abrir os dias (ou os meses) dela. A dica mostra também a média diária.</p>
+  <p class="fonte-visual" id="volume-nota"></p>
 </div>
 
 <div class="chart-card">
@@ -80,11 +80,11 @@
     <thead>
       <tr>
         <th>#</th><th class="col-texto">Ticker</th><th class="col-texto">Emissor</th><th class="col-texto">Setor</th>
-        <th data-col="volume">Volume (R$ mi)</th><th>% da classe</th><th>Dias</th>
+        <th data-col="volume">Volume (R$ mi)</th><th>Dias com negociação</th>
         <th>Spread médio (bps)</th><th>Estoque (R$ mi)</th><th data-col="giro">Giro</th>
       </tr>
     </thead>
-    <tbody><tr><td colspan="10" class="muted">Carregando…</td></tr></tbody>
+    <tbody><tr><td colspan="9" class="muted">Carregando…</td></tr></tbody>
   </table>
   <p class="fonte-visual">
     <b>Giro</b> = volume da janela ÷ estoque do papel no fim da janela (último estoque publicado até essa data, R$ mi).
@@ -96,18 +96,27 @@
   <div class="titulo-com-acao">
     <h2 style="margin:0;">Spread negociado × data</h2>
     <div class="window-tabs" id="pontos-periodo">
-      <button data-meses="1" class="win-btn active">1M</button>
-      <button data-meses="3" class="win-btn">3M</button>
+      <button data-meses="1" class="win-btn">1M</button>
+      <button data-meses="3" class="win-btn active">3M</button>
       <button data-meses="6" class="win-btn">6M</button>
       <button data-meses="0" class="win-btn">Tudo</button>
     </div>
   </div>
-  <div class="muted small" id="pontos-contexto" style="margin-top:4px;"></div>
-  <div style="position:relative;height:380px;"><canvas id="grafico-pontos"></canvas></div>
+  <p class="muted small" style="margin:2px 0 10px;" id="pontos-contexto">—</p>
+  <div class="disp-layout">
+    <div class="disp-grafico" style="height:460px;"><canvas id="grafico-pontos"></canvas></div>
+    <aside class="disp-lateral" style="max-height:460px;" aria-label="Emissores e tickers">
+      <input type="search" id="pontos-busca" placeholder="Buscar emissor ou ticker…" autocomplete="off">
+      <div class="disp-acoes">
+        <button type="button" class="btn-small" id="pontos-limpar">Desmarcar todos</button>
+      </div>
+      <div id="disp-lista"></div>
+    </aside>
+  </div>
   <p class="fonte-visual">
-    Cada ponto é um papel num dia (tamanho proporcional ao volume). A linha é o spread mediano do dia
-    ponderado por volume (a mediana não se deixa levar por um negócio grande de papel estressado); as barras ao fundo, o volume do dia. A escala corta os spreads muito
-    extremos para não achatar o gráfico — o número fora da escala aparece acima.
+    Cada ponto é o spread negociado do papel no dia (tamanho proporcional ao volume); a linha liga os dias
+    em que ele negociou. As barras ao fundo somam o volume dos papéis marcados em cada data. Clique num
+    emissor para marcar ou desmarcar todos os tickers dele; na seta, abra a lista e escolha ticker a ticker.
   </p>
 </div>
 </div>

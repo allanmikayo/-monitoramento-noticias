@@ -3,6 +3,9 @@
   const P = window.PADRAO_GRAFICO;
   const LARANJA = "#ec7000";
   const MESES = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"];
+  // Uma cor por emissor marcado (na ordem em que foi marcado); os tickers do
+  // mesmo emissor saem em tons dela -- mesma ideia da aba Dispersão.
+  const PALETA = ["#ec7000", "#1f4e79", "#2e8b57", "#8e44ad", "#c0392b", "#16a085", "#7f6000", "#2c3e50", "#d4a017", "#6d4c41"];
 
   const estado = {
     classe: document.querySelector("#classe-tabs .win-btn.active").dataset.classe,
@@ -10,7 +13,14 @@
     foco: null,            // drill-down: "2026-10" (dias do mês) ou "2026" (meses do ano)
     janela: "semana",
     metrica: "volume",
-    meses: 1,
+    meses: 3,
+  };
+  const sel = {
+    emissores: [],         // lista da lateral (do servidor)
+    marcados: new Set(),   // tickers marcados
+    abertos: new Set(),    // emissores com a lista de tickers aberta
+    cores: new Map(),      // emissor -> índice na paleta
+    iniciado: false,       // já aplicou o padrão desta classe?
   };
   let serieDados = null;
   let graficoVolume = null;
@@ -28,7 +38,10 @@
 
   function buscar(url, params) {
     const usp = new URLSearchParams();
-    Object.entries(params || {}).forEach(([k, v]) => { if (v != null) usp.append(k, v); });
+    Object.entries(params || {}).forEach(([k, v]) => {
+      if (Array.isArray(v)) v.forEach((x) => usp.append(k, x));
+      else if (v != null) usp.append(k, v);
+    });
     const qs = usp.toString();
     return fetch(url + (qs ? "?" + qs : ""), { credentials: "same-origin" }).then((r) => {
       if (!r.ok) throw new Error("HTTP " + r.status);
@@ -46,7 +59,15 @@
     });
   }
 
-  // ---- 1. resumo --------------------------------------------------------
+  // Tom de uma cor: k=0 é a própria cor, depois clareia.
+  function tom(hex, k, n) {
+    if (n <= 1 || k === 0) return hex;
+    const f = Math.min(0.6, (k / n) * 0.75);
+    const c = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16));
+    return "#" + c.map((x) => Math.round(x + (255 - x) * f).toString(16).padStart(2, "0")).join("");
+  }
+
+  // ---- média diária -------------------------------------------------------
   function carregarResumo() {
     return buscar("/api/mercado-secundario/resumo").then((d) => {
       if (!d.referencia) {
@@ -58,7 +79,7 @@
       const tab = document.getElementById("tabela-resumo");
       let head = '<tr><th class="col-texto">Classe</th>';
       d.janelas.forEach((j) => {
-        const periodo = j.pregoes ? diaMes(j.inicio) + "–" + diaMes(j.fim) + " · " + j.pregoes + " pregões" : "sem dados";
+        const periodo = j.dias_uteis ? diaMes(j.inicio) + "–" + diaMes(j.fim) + " · " + j.dias_uteis + " dias úteis" : "sem dados";
         head += `<th>${esc(j.rotulo)}${j.parcial ? "*" : ""}<br><span class="muted small" style="font-weight:400;">${periodo}</span></th>`;
       });
       tab.querySelector("thead").innerHTML = head + "</tr>";
@@ -71,22 +92,24 @@
         return `<tr><td class="col-texto"><b>${esc(l.classe)}</b></td>${tds}</tr>`;
       }).join("");
 
-      const notas = [];
+      const notas = ["Média diária = volume da janela ÷ dias úteis da janela (calendário ANBIMA)."];
       if (d.janelas.some((j) => j.parcial)) {
-        notas.push(`* A base começa em ${dataBR(d.inicio_base)}: a média é só do período disponível.`);
+        notas.push(`* A base começa em ${dataBR(d.inicio_base)}: a média é só dos dias úteis desde então.`);
       }
-      const vazias = d.janelas.filter((j) => !j.pregoes).map((j) => j.rotulo);
+      if (d.dias_sem_dado && d.dias_sem_dado.length) {
+        notas.push(`Dia útil sem dado no export (entra como zero): ${d.dias_sem_dado.map(dataBR).join(", ")}.`);
+      }
+      const vazias = d.janelas.filter((j) => !j.dias_uteis).map((j) => j.rotulo);
       if (vazias.length) notas.push(`Sem dados de ${vazias.join(", ")} na base.`);
       if (d.cobertura != null) {
         notas.push(`As duas classes somam ${pct(d.cobertura, 0)} do volume da base; o restante é prefixado, IPCA não incentivada, CDI incentivada, % do DI e papel sem cadastro.`);
       }
-      notas.push("Média diária = volume da janela ÷ pregões da base na janela (dia sem negócio da classe conta como zero).");
       document.getElementById("resumo-nota").innerHTML = notas.map(esc).join("<br>");
       return true;
     });
   }
 
-  // ---- 2a. volume -------------------------------------------------------
+  // ---- volume negociado ---------------------------------------------------
   function agrupar(pontos, chaveDe) {
     const mapa = new Map();
     pontos.forEach((p) => {
@@ -102,21 +125,27 @@
 
   function barrasDoNivel() {
     const pts = serieDados.pontos;
-    if (estado.nivel === "dia") {
-      return pts.map((p) => ({ chave: p.data, rotulo: p.data, volume: p.volume, pregoes: 1, papeis: p.papeis, spread: p.spread, diario: true }));
-    }
+    const diario = (p, rot) => ({ chave: p.data, rotulo: rot, volume: p.volume, pregoes: 1, papeis: p.papeis, spread: p.spread, diario: true });
+    if (estado.nivel === "dia") return pts.map((p) => diario(p, p.data));
     if (estado.nivel === "mes") {
-      if (estado.foco) {  // dias de um mês
-        return pts.filter((p) => p.data.slice(0, 7) === estado.foco)
-          .map((p) => ({ chave: p.data, rotulo: diaMes(p.data), volume: p.volume, pregoes: 1, papeis: p.papeis, spread: p.spread, diario: true }));
-      }
+      if (estado.foco) return pts.filter((p) => p.data.slice(0, 7) === estado.foco).map((p) => diario(p, diaMes(p.data)));
       return agrupar(pts, (d) => d.slice(0, 7)).map((a) => Object.assign(a, { rotulo: mesRot(a.chave) }));
     }
-    if (estado.foco) {    // meses de um ano
+    if (estado.foco) {
       return agrupar(pts.filter((p) => p.data.slice(0, 4) === estado.foco), (d) => d.slice(0, 7))
         .map((a) => Object.assign(a, { rotulo: mesRot(a.chave) }));
     }
     return agrupar(pts, (d) => d.slice(0, 4)).map((a) => Object.assign(a, { rotulo: a.chave }));
+  }
+
+  // Média móvel dos últimos 5 dias (inclui o próprio dia).
+  function mediaMovel(valores, n) {
+    return valores.map((_, i) => {
+      if (i < n - 1) return null;
+      let s = 0;
+      for (let k = i - n + 1; k <= i; k++) s += valores[k];
+      return s / n;
+    });
   }
 
   function desenharVolume() {
@@ -129,12 +158,18 @@
     } else {
       trilha.textContent = estado.nivel === "dia" ? "" : "Clique numa barra para abrir.";
     }
-    const diario = estado.nivel === "dia" && !estado.foco;
-    const labels = barras.map((b) => (diario ? b.chave : b.rotulo));
+    const linhaDiaria = estado.nivel === "dia";
+    document.getElementById("volume-nota").textContent = linhaDiaria
+      ? "Linha tracejada: volume do dia. Laranja: média dos últimos 5 dias."
+      : "Soma do volume do período; clique numa barra para abrir os dias (ou os meses) dela. A dica mostra também a média diária.";
+    const labels = barras.map((b) => (linhaDiaria ? b.chave : b.rotulo));
+    const volumes = barras.map((b) => b.volume);
+    const mm5 = linhaDiaria ? mediaMovel(volumes, 5) : null;
+
     const opcoes = {
       responsive: true, maintainAspectRatio: false, animation: false,
       plugins: {
-        legend: { display: false },
+        legend: { display: linhaDiaria, position: "bottom" },
         tooltip: {
           callbacks: {
             title: (it) => {
@@ -143,8 +178,9 @@
             },
             label: (it) => {
               const b = barras[it.dataIndex];
+              if (it.dataset.mm) return `Média 5 dias: R$ ${mi(it.raw, 1)} mi`;
               const linhas = [`Volume: R$ ${mi(b.volume, 1)} mi`];
-              if (!b.diario) linhas.push(`Média diária: R$ ${mi(b.volume / b.pregoes, 1)} mi (${b.pregoes} pregões)`);
+              if (!b.diario) linhas.push(`Média diária: R$ ${mi(b.volume / b.pregoes, 1)} mi (${b.pregoes} dias com dado)`);
               else linhas.push(`Papéis negociados: ${fmt(b.papeis)}`);
               if (b.spread != null) linhas.push(`Spread médio pond.: ${fmt(b.spread, 1)} bps`);
               return linhas;
@@ -162,14 +198,20 @@
         desenharVolume();
       },
     };
+    const datasets = linhaDiaria
+      ? [
+          { type: "line", label: "Média 5 dias", mm: true, data: mm5, borderColor: LARANJA, backgroundColor: LARANJA,
+            borderWidth: 2.5, pointRadius: 0, order: 0 },
+          { type: "line", label: "Volume do dia", data: volumes, borderColor: "#333333", backgroundColor: "#333333",
+            borderWidth: 1.3, borderDash: [5, 4], pointRadius: 0, pointHoverRadius: 3, order: 1 },
+        ]
+      : [{ type: "bar", data: volumes, backgroundColor: LARANJA, borderRadius: 2, maxBarThickness: 46 }];
     const config = {
-      type: "bar",
-      data: { labels, datasets: [{ data: barras.map((b) => b.volume), backgroundColor: LARANJA, borderRadius: 2, maxBarThickness: 46 }] },
-      options: diario && P ? P.eixoData(labels, opcoes) : opcoes,
+      type: linhaDiaria ? "line" : "bar",
+      data: { labels, datasets },
+      options: linhaDiaria && P ? P.eixoData(labels, opcoes) : opcoes,
     };
-    if (diario && P) {  // eixoData troca o título da dica; o nosso já trata
-      config.options.plugins.tooltip.callbacks = opcoes.plugins.tooltip.callbacks;
-    }
+    config.options.plugins.tooltip.callbacks = opcoes.plugins.tooltip.callbacks;
     if (graficoVolume) graficoVolume.destroy();
     graficoVolume = new Chart(document.getElementById("grafico-volume"), config);
   }
@@ -181,10 +223,10 @@
     });
   }
 
-  // ---- 2b. ranking ------------------------------------------------------
+  // ---- mais negociados ----------------------------------------------------
   function carregarRanking() {
     const tb = document.querySelector("#tabela-ranking tbody");
-    tb.innerHTML = '<tr><td colspan="10" class="muted">Carregando…</td></tr>';
+    tb.innerHTML = '<tr><td colspan="9" class="muted">Carregando…</td></tr>';
     document.querySelectorAll("#tabela-ranking th[data-col]").forEach((th) => {
       th.style.color = th.dataset.col === estado.metrica ? LARANJA : "";
     });
@@ -192,9 +234,9 @@
       classe: estado.classe, janela: estado.janela, metrica: estado.metrica, limite: 15,
     }).then((d) => {
       document.getElementById("ranking-contexto").textContent =
-        `${dataBR(d.inicio)} a ${dataBR(d.fim)} · ${d.pregoes} pregões · ${fmt(d.papeis_negociados)} papéis negociados · R$ ${mi(d.volume_classe)} mi na classe`;
+        `${dataBR(d.inicio)} a ${dataBR(d.fim)} · ${d.dias_uteis} dias úteis · ${fmt(d.papeis_negociados)} papéis negociados · R$ ${mi(d.volume_classe)} mi na classe`;
       if (!d.linhas.length) {
-        tb.innerHTML = '<tr><td colspan="10" class="muted">Nenhum papel nesta janela.</td></tr>';
+        tb.innerHTML = '<tr><td colspan="9" class="muted">Nenhum papel nesta janela.</td></tr>';
         return;
       }
       tb.innerHTML = d.linhas.map((r, i) => `
@@ -204,53 +246,153 @@
           <td class="col-texto">${esc(r.emissor)}</td>
           <td class="col-texto muted">${esc(r.setor || "—")}</td>
           <td>${mi(r.volume, 1)}</td>
-          <td>${pct(r.participacao)}</td>
-          <td>${r.dias}</td>
+          <td>${r.dias} de ${d.dias_uteis}</td>
           <td>${fmt(r.spread, 0)}</td>
           <td title="${r.data_estoque ? "estoque de " + dataBR(r.data_estoque) : ""}">${fmt(r.estoque, 0)}</td>
           <td>${pct(r.giro)}</td>
         </tr>`).join("");
-    }).catch(() => { tb.innerHTML = '<tr><td colspan="10" class="muted">Erro ao carregar.</td></tr>'; });
+    }).catch(() => { tb.innerHTML = '<tr><td colspan="9" class="muted">Erro ao carregar.</td></tr>'; });
   }
 
-  // ---- 2c. spread x data -----------------------------------------------
-  function quantil(ordenado, q) {
-    if (!ordenado.length) return null;
-    return ordenado[Math.min(ordenado.length - 1, Math.max(0, Math.floor(q * (ordenado.length - 1))))];
+  // ---- spread negociado x data, por emissor -------------------------------
+  function corEmissor(nome) {
+    if (!sel.cores.has(nome)) {
+      const usadas = new Set(sel.cores.values());
+      let i = 0;
+      while (usadas.has(i) && i < PALETA.length) i++;
+      sel.cores.set(nome, i % PALETA.length);
+    }
+    return PALETA[sel.cores.get(nome)];
   }
 
-  function carregarPontos() {
-    const ctx = document.getElementById("pontos-contexto");
-    ctx.textContent = "Carregando…";
-    buscar("/api/mercado-secundario/pontos", { classe: estado.classe, meses: estado.meses }).then((d) => {
-      const labels = d.datas;
-      const porData = new Map((serieDados ? serieDados.pontos : []).map((p) => [p.data, p]));
-      const spreads = d.pontos.map((p) => p[1]).sort((a, b) => a - b);
-      // Escala robusta: spreads de papel estressado (milhares de bps) achatariam
-      // o resto. Corta no menor entre o percentil 2,5/97,5 e 3 intervalos
-      // interquartis além dos quartis.
-      const q1 = quantil(spreads, 0.25), q3 = quantil(spreads, 0.75), iqr = (q3 - q1) || 50;
-      const lo = Math.max(quantil(spreads, 0.025), q1 - 3 * iqr);
-      const hi = Math.min(quantil(spreads, 0.975), q3 + 3 * iqr);
-      const fora = spreads.filter((s) => s < lo || s > hi).length;
-      const volMax = d.pontos.reduce((m, p) => Math.max(m, p[2]), 0) || 1;
-      ctx.textContent = `${fmt(d.pontos.length)} negociações (papel × dia) de ${fmt(d.tickers.length)} papéis` +
-        (fora ? ` · ${fmt(fora)} fora da escala` : "");
+  function corTicker(e, codigo) {
+    const marcados = e.tickers.filter((t) => sel.marcados.has(t.codigo));
+    const k = marcados.findIndex((t) => t.codigo === codigo);
+    return tom(corEmissor(e.emissor), Math.max(0, k), marcados.length);
+  }
 
-      const pontos = d.pontos.map((p) => ({ x: labels[p[0]], y: p[1], v: p[2], t: p[3] }));
-      // Linha: MEDIANA ponderada por volume, não média. Um único negócio
-      // grande de papel estressado levava a média do dia a milhares de bps.
-      const porDia = labels.map(() => []);
-      d.pontos.forEach((p) => porDia[p[0]].push(p));
-      const medianas = porDia.map((lista) => {
-        if (!lista.length) return null;
-        lista.sort((a, b) => a[1] - b[1]);
-        const total = lista.reduce((t, p) => t + p[2], 0);
-        if (!total) return lista[Math.floor(lista.length / 2)][1];
-        let acc = 0;
-        for (const p of lista) { acc += p[2]; if (acc >= total / 2) return p[1]; }
-        return lista[lista.length - 1][1];
+  // Emissor sem ticker marcado devolve a cor para a paleta.
+  function liberarCores() {
+    sel.emissores.forEach((e) => {
+      if (!e.tickers.some((t) => sel.marcados.has(t.codigo))) sel.cores.delete(e.emissor);
+    });
+  }
+
+  function desenharLista() {
+    const lista = document.getElementById("disp-lista");
+    const termo = (document.getElementById("pontos-busca").value || "").trim().toLowerCase();
+    lista.innerHTML = "";
+    // Marcados primeiro, depois ordem alfabética.
+    const ordem = [...sel.emissores].sort((a, b) => {
+      const ma = a.tickers.some((t) => sel.marcados.has(t.codigo)), mb = b.tickers.some((t) => sel.marcados.has(t.codigo));
+      return (mb - ma) || a.emissor.localeCompare(b.emissor, "pt-BR", { sensitivity: "base" });
+    });
+    ordem.forEach((e) => {
+      const casaEmissor = e.emissor.toLowerCase().includes(termo);
+      const tickersBusca = termo ? e.tickers.filter((t) => t.codigo.toLowerCase().includes(termo)) : e.tickers;
+      if (termo && !casaEmissor && !tickersBusca.length) return;
+      const nMarc = e.tickers.filter((t) => sel.marcados.has(t.codigo)).length;
+      const aberto = sel.abertos.has(e.emissor) || (termo && !casaEmissor && tickersBusca.length);
+      const bloco = document.createElement("div");
+      bloco.className = "disp-setor";
+      const linha = document.createElement("div");
+      linha.className = "disp-linha" + (nMarc ? "" : " oculto");
+      linha.title = nMarc ? "Desmarcar todos os tickers do emissor" : "Marcar todos os tickers do emissor";
+      linha.innerHTML = `<button type="button" class="disp-abrir" aria-expanded="${aberto ? "true" : "false"}" aria-label="Ver tickers">▸</button>`
+        + `<span class="disp-cor" style="background:${nMarc ? corEmissor(e.emissor) : "#cccccc"}"></span>`
+        + `<span class="disp-nome">${esc(e.emissor)}</span>`
+        + `<span class="disp-n">${nMarc ? nMarc + "/" : ""}${e.tickers.length}</span>`;
+      linha.addEventListener("click", (ev) => {
+        if (ev.target.closest(".disp-abrir")) {
+          if (sel.abertos.has(e.emissor)) sel.abertos.delete(e.emissor); else sel.abertos.add(e.emissor);
+          desenharLista();
+          return;
+        }
+        if (nMarc) e.tickers.forEach((t) => sel.marcados.delete(t.codigo));
+        else e.tickers.forEach((t) => sel.marcados.add(t.codigo));
+        liberarCores();
+        atualizarPontos();
       });
+      bloco.appendChild(linha);
+      if (aberto) {
+        const itens = document.createElement("div");
+        itens.className = "disp-itens";
+        (termo && !casaEmissor ? tickersBusca : e.tickers).forEach((t) => {
+          const marcado = sel.marcados.has(t.codigo);
+          const l = document.createElement("div");
+          l.className = "disp-linha" + (marcado ? "" : " oculto");
+          l.title = `R$ ${mi(t.volume, 1)} mi em ${t.dias} dia(s)`;
+          l.innerHTML = `<span class="disp-cor" style="background:${marcado ? corTicker(e, t.codigo) : "#cccccc"}"></span>`
+            + `<span class="disp-nome">${esc(t.codigo)}</span>`
+            + `<span class="disp-n">R$ ${mi(t.volume)} mi</span>`;
+          l.addEventListener("click", () => {
+            if (marcado) sel.marcados.delete(t.codigo); else sel.marcados.add(t.codigo);
+            liberarCores();
+            atualizarPontos();
+          });
+          itens.appendChild(l);
+        });
+        bloco.appendChild(itens);
+      }
+      lista.appendChild(bloco);
+    });
+    if (!lista.children.length) lista.innerHTML = '<div class="muted small" style="padding:8px 4px;">Nada encontrado.</div>';
+  }
+
+  function carregarEmissores() {
+    return buscar("/api/mercado-secundario/emissores", { classe: estado.classe, meses: estado.meses }).then((d) => {
+      sel.emissores = d.emissores;
+      const existentes = new Set(d.emissores.flatMap((e) => e.tickers.map((t) => t.codigo)));
+      [...sel.marcados].forEach((c) => { if (!existentes.has(c)) sel.marcados.delete(c); });
+      if (!sel.iniciado && d.padrao) {
+        sel.marcados.add(d.padrao.codigo);
+        sel.abertos.add(d.padrao.emissor);
+        sel.iniciado = true;
+      }
+      liberarCores();
+      atualizarPontos();
+    });
+  }
+
+  function atualizarPontos() {
+    desenharLista();
+    const ctx = document.getElementById("pontos-contexto");
+    const codigos = [...sel.marcados];
+    if (!codigos.length) {
+      ctx.textContent = "Marque um emissor ou ticker na lista ao lado.";
+      if (graficoPontos) { graficoPontos.destroy(); graficoPontos = null; }
+      return;
+    }
+    buscar("/api/mercado-secundario/pontos", { classe: estado.classe, meses: estado.meses, codigo: codigos }).then((d) => {
+      const labels = d.datas;
+      const emissorDe = new Map(sel.emissores.map((e) => e.tickers.map((t) => [t.codigo, e])).flat());
+      const volMax = Math.max(1, ...d.series.flatMap((s) => s.pontos.map((p) => p[2])));
+      const volDia = labels.map(() => 0);
+      let nPontos = 0;
+      const datasets = d.series.map((s) => {
+        const e = emissorDe.get(s.codigo);
+        const cor = e ? corTicker(e, s.codigo) : "#555555";
+        const dados = labels.map(() => null);
+        s.pontos.forEach(([i, spread, vol]) => {
+          volDia[i] += vol;
+          if (spread != null) { dados[i] = { y: spread, v: vol }; nPontos += 1; }
+        });
+        return {
+          type: "line", label: s.codigo, yAxisID: "y", order: 0,
+          data: dados.map((p, i) => (p ? { x: labels[i], y: p.y, v: p.v } : { x: labels[i], y: null })),
+          parsing: { xAxisKey: "x", yAxisKey: "y" },
+          borderColor: cor, backgroundColor: cor, borderWidth: 1.2, spanGaps: true,
+          pointRadius: (c) => (c.raw && c.raw.y != null ? 2.5 + 5.5 * Math.sqrt(c.raw.v / volMax) : 0),
+          pointHoverRadius: 7, emissor: s.emissor,
+        };
+      });
+      datasets.push({
+        type: "bar", label: "Volume dos marcados", yAxisID: "y2", order: 2, volume: true,
+        data: volDia.map((v) => v * 1e6), backgroundColor: "rgba(236,112,0,0.16)",
+        barPercentage: 1, categoryPercentage: 0.92,
+      });
+      ctx.textContent = `${fmt(codigos.length)} ticker(s) marcado(s) · ${fmt(nPontos)} dias com negociação no período · ${dataBR(labels[0])} a ${dataBR(labels[labels.length - 1])}`;
+
       const opcoes = {
         responsive: true, maintainAspectRatio: false, animation: false,
         interaction: { mode: "nearest", intersect: true },
@@ -259,45 +401,22 @@
           tooltip: {
             mode: "nearest", intersect: true,
             callbacks: {
-              title: (it) => dataBR(it[0].raw && it[0].raw.x ? it[0].raw.x : labels[it[0].dataIndex]),
+              title: (it) => dataBR(labels[it[0].dataIndex]),
               label: (it) => {
-                if (it.dataset.tipo === "pontos") {
-                  const tk = d.tickers[it.raw.t];
-                  return [`${tk.codigo} · ${tk.emissor}`, `Spread: ${fmt(it.raw.y, 0)} bps`, `Volume: R$ ${fmt(it.raw.v, 1)} mi`];
-                }
-                if (it.dataset.tipo === "volume") return `Volume do dia: R$ ${mi(it.raw, 0)} mi`;
-                return `Spread mediano pond.: ${fmt(it.raw, 1)} bps`;
+                if (it.dataset.volume) return `Volume dos marcados: R$ ${mi(it.raw, 1)} mi`;
+                return [`${it.dataset.label} · ${it.dataset.emissor}`, `Spread: ${fmt(it.raw.y, 0)} bps`, `Volume: R$ ${fmt(it.raw.v, 1)} mi`];
               },
             },
           },
         },
         scales: {
           x: { grid: { display: false } },
-          y: { position: "left", min: lo != null ? Math.floor(lo / 50) * 50 : undefined,
-               max: hi != null ? Math.ceil(hi / 50) * 50 : undefined, title: { display: true, text: "Spread (bps)" },
-               ticks: { callback: (v) => fmt(v) } },
+          y: { position: "left", title: { display: true, text: "Spread (bps)" }, ticks: { callback: (v) => fmt(v) } },
           y2: { position: "right", beginAtZero: true, grid: { display: false },
                 title: { display: true, text: "Volume (R$ mi)" }, ticks: { callback: (v) => fmt(v / 1e6) } },
         },
       };
-      const config = {
-        type: "bar",
-        data: {
-          labels,
-          datasets: [
-            { type: "line", tipo: "media", label: "Spread mediano do dia (pond. volume)", yAxisID: "y", order: 0,
-              data: medianas,
-              borderColor: LARANJA, backgroundColor: LARANJA, borderWidth: 2.5, pointRadius: 0, spanGaps: true },
-            { type: "line", tipo: "pontos", label: "Papel no dia", yAxisID: "y", order: 1, showLine: false,
-              data: pontos, backgroundColor: "rgba(17,17,17,0.22)", borderColor: "rgba(17,17,17,0.35)", borderWidth: 0.5,
-              pointRadius: (c) => (c.raw ? 1.5 + 6 * Math.sqrt(c.raw.v / volMax) : 2), pointHoverRadius: 6 },
-            { type: "bar", tipo: "volume", label: "Volume do dia", yAxisID: "y2", order: 2,
-              data: labels.map((l) => (porData.get(l) || {}).volume || 0),
-              backgroundColor: "rgba(236,112,0,0.16)", barPercentage: 1, categoryPercentage: 0.92 },
-          ],
-        },
-        options: P ? P.eixoData(labels, opcoes) : opcoes,
-      };
+      const config = { type: "bar", data: { labels, datasets }, options: P ? P.eixoData(labels, opcoes) : opcoes };
       config.options.plugins.tooltip.callbacks = opcoes.plugins.tooltip.callbacks;
       if (graficoPontos) graficoPontos.destroy();
       graficoPontos = new Chart(document.getElementById("grafico-pontos"), config);
@@ -306,8 +425,13 @@
 
   // ---- controles --------------------------------------------------------
   function carregarClasse() {
-    carregarSerie().then(carregarPontos);
+    carregarSerie();
     carregarRanking();
+    sel.marcados.clear();
+    sel.abertos.clear();
+    sel.cores.clear();
+    sel.iniciado = false;
+    carregarEmissores();
   }
 
   ligarAbas("classe-tabs", (ds) => {
@@ -319,7 +443,17 @@
   ligarAbas("volume-nivel", (ds) => { estado.nivel = ds.nivel; estado.foco = null; if (serieDados) desenharVolume(); });
   ligarAbas("ranking-janela", (ds) => { estado.janela = ds.janela; carregarRanking(); });
   ligarAbas("ranking-metrica", (ds) => { estado.metrica = ds.metrica; carregarRanking(); });
-  ligarAbas("pontos-periodo", (ds) => { estado.meses = Number(ds.meses); carregarPontos(); });
+  ligarAbas("pontos-periodo", (ds) => { estado.meses = Number(ds.meses); carregarEmissores(); });
+  let temporizador = null;
+  document.getElementById("pontos-busca").addEventListener("input", () => {
+    clearTimeout(temporizador);
+    temporizador = setTimeout(desenharLista, 150);
+  });
+  document.getElementById("pontos-limpar").addEventListener("click", () => {
+    sel.marcados.clear();
+    sel.cores.clear();
+    atualizarPontos();
+  });
 
   carregarResumo().then((temDados) => { if (temDados) carregarClasse(); })
     .catch(() => { document.querySelector("#tabela-resumo tbody").innerHTML = '<tr><td class="muted">Erro ao carregar.</td></tr>'; });

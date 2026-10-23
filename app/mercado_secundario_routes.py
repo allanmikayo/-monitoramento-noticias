@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import os
 
-from fastapi import APIRouter, Body, Depends, HTTPException, Request
+from fastapi import APIRouter, Body, Depends, HTTPException, Query, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
@@ -62,14 +62,24 @@ def register_mercado_secundario_routes(require_user_dep, require_admin_dep) -> A
             raise HTTPException(status_code=400, detail="metrica deve ser volume ou giro")
         return ms.ranking(db, _classe(classe), janela, metrica, max(1, min(limite, 100)))
 
-    @router.get("/api/mercado-secundario/pontos")
-    def api_pontos(
-        classe: str, meses: int = 1,
-        user: User = Depends(require_user_dep), db: Session = Depends(get_db),
-    ):
+    def _meses(meses: int) -> int | None:
         if meses not in (0, 1, 3, 6, 12):
             raise HTTPException(status_code=400, detail="meses deve ser 0 (tudo), 1, 3, 6 ou 12")
-        return ms.pontos_spread(db, _classe(classe), meses or None)
+        return meses or None
+
+    @router.get("/api/mercado-secundario/emissores")
+    def api_emissores(
+        classe: str, meses: int = 3,
+        user: User = Depends(require_user_dep), db: Session = Depends(get_db),
+    ):
+        return ms.emissores_negociados(db, _classe(classe), _meses(meses))
+
+    @router.get("/api/mercado-secundario/pontos")
+    def api_pontos(
+        classe: str, meses: int = 3, codigo: list[str] = Query(default=[]),
+        user: User = Depends(require_user_dep), db: Session = Depends(get_db),
+    ):
+        return ms.pontos_spread(db, _classe(classe), _meses(meses), codigo)
 
     # ---- importação (Administração) ------------------------------------
     @router.get("/api/admin/mercado-secundario/status")

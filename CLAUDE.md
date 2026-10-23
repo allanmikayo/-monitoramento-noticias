@@ -1439,6 +1439,12 @@ gera e sobe. Rota `/mercado-secundario` (`/balcao` redireciona), tabela
   (volume ou giro = volume ÷ estoque do fim da janela), spread × data
   (pontos papel×dia, barras de volume, linha = mediana ponderada por
   volume do dia — a média era levada por papel estressado).
+- Ajustes do mesmo dia: média diária por DIA ÚTIL (calendário ANBIMA em
+  `feriados()`/`dias_uteis()`, dia útil faltando no export entra como zero e
+  é listado na nota); sem blocos numerados (mesmo visual de Spreads); volume
+  diário em linha tracejada + média de 5 dias; spread × data por EMISSOR,
+  com lista lateral para marcar emissores/tickers (abre com o ticker mais
+  negociado do maior emissor), barras = volume dos marcados.
 - Importação: Administração (lotes de 4 mil linhas do navegador) ou
   `Importar Mercado Secundario.bat`. A tabela nasce na 1ª importação
   (`checkfirst`), porque a Vercel não roda DDL.
