@@ -101,9 +101,6 @@
       }
       const vazias = d.janelas.filter((j) => !j.dias_uteis).map((j) => j.rotulo);
       if (vazias.length) notas.push(`Sem dados de ${vazias.join(", ")} na base.`);
-      if (d.cobertura != null) {
-        notas.push(`As duas classes somam ${pct(d.cobertura, 0)} do volume da base; o restante é prefixado, IPCA não incentivada, CDI incentivada, % do DI e papel sem cadastro.`);
-      }
       document.getElementById("resumo-nota").innerHTML = notas.map(esc).join("<br>");
       return true;
     });
@@ -182,7 +179,6 @@
               const linhas = [`Volume: R$ ${mi(b.volume, 1)} mi`];
               if (!b.diario) linhas.push(`Média diária: R$ ${mi(b.volume / b.pregoes, 1)} mi (${b.pregoes} dias com dado)`);
               else linhas.push(`Papéis negociados: ${fmt(b.papeis)}`);
-              if (b.spread != null) linhas.push(`Spread médio pond.: ${fmt(b.spread, 1)} bps`);
               return linhas;
             },
           },
@@ -381,7 +377,7 @@
           type: "line", label: s.codigo, yAxisID: "y", order: 0,
           data: dados.map((p, i) => (p ? { x: labels[i], y: p.y, v: p.v } : { x: labels[i], y: null })),
           parsing: { xAxisKey: "x", yAxisKey: "y" },
-          borderColor: cor, backgroundColor: cor, borderWidth: 1.2, spanGaps: true,
+          borderColor: cor, backgroundColor: cor, showLine: false,
           pointRadius: (c) => (c.raw && c.raw.y != null ? 2.5 + 5.5 * Math.sqrt(c.raw.v / volMax) : 0),
           pointHoverRadius: 7, emissor: s.emissor,
         };
