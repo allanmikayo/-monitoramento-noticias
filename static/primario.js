@@ -1,4 +1,5 @@
-/* Aba "Mercado Primário" (23/09/2026) -- ver templates/primario.html,
+/* Aba "Mercado Primário" (23/09/2026; reorganizada para crédito em
+ * 26/10/2026) -- ver templates/primario.html,
  * app/primario/queries.py e o padrão de gráficos em chart-padrao.js.
  *
  * Uma chamada só (/api/primario/dados) traz todos os blocos: a base tem
@@ -59,14 +60,23 @@
       type: "bar",
       data: {
         labels: datas,
-        datasets: estado.instrumentos.map((i) => ({
-          label: ROTULO[i], data: serie.map((s) => s[i]),
-          backgroundColor: CORES[i], borderRadius: 2, maxBarThickness: 26,
-        })),
+        datasets: [
+          ...estado.instrumentos.map((i) => ({
+            label: ROTULO[i], data: serie.map((s) => s[i]),
+            backgroundColor: CORES[i], borderRadius: 2, maxBarThickness: 26, order: 2,
+          })),
+          // Média mensal da janela: diz de relance se o mês está acima ou
+          // abaixo do ritmo do período.
+          {
+            type: "line", label: "Média mensal", order: 1, stack: "media",
+            data: serie.map(() => serie.reduce((a, s) => a + s.total, 0) / (serie.length || 1)),
+            borderColor: "#6b6b6b", borderDash: [5, 4], borderWidth: 1.5, pointRadius: 0, fill: false,
+          },
+        ],
       },
       options: PADRAO_GRAFICO.eixoData(datas, {
         responsive: true,
-        plugins: { legend: { display: estado.instrumentos.length > 1, position: "bottom" } },
+        plugins: { legend: { display: true, position: "bottom" } },
         scales: {
           x: { stacked: true },
           y: { stacked: true, beginAtZero: true, title: { display: true, text: "R$ bi" } },
@@ -108,53 +118,54 @@
     });
   }
 
-  function grafIncentivadas(tri) {
-    destruir("inc");
-    // Trimestre não é data: o rótulo é o próprio "2026-T1", sem o eixo de
-    // datas do padrão (que formata mês a mês).
-    graficos.inc = new Chart($("chart-primario-inc").getContext("2d"), {
+  // Setor: barra cheia é a janela, contorno é o mesmo período um ano antes.
+  // "Não classificado" fica por último e em cinza -- é o tamanho do que a
+  // taxonomia não cobre, não um setor.
+  function grafSetores(lista, temAnterior) {
+    destruir("setor");
+    const top = lista.filter((s) => s.setor !== "Não classificado").slice(0, 12);
+    const nc = lista.find((s) => s.setor === "Não classificado");
+    if (nc) top.push(nc);
+    $("setores-wrap").style.height = `${Math.max(160, top.length * 26 + 40)}px`;
+    const datasets = [{
+      label: "Janela", data: top.map((s) => s.volume),
+      backgroundColor: top.map((s) => (s.setor === "Não classificado" ? "#c9c9c9" : "#FF6200")),
+      borderRadius: 2, barPercentage: 0.9, categoryPercentage: 0.8,
+    }];
+    if (temAnterior) datasets.push({
+      label: "Mesmo período, ano anterior", data: top.map((s) => s.volume_anterior),
+      backgroundColor: "transparent", borderColor: "#111111", borderWidth: 1, borderRadius: 2,
+      barPercentage: 0.9, categoryPercentage: 0.8,
+    });
+    graficos.setor = new Chart($("chart-primario-setor").getContext("2d"), {
       type: "bar",
-      data: {
-        labels: tri.map((t) => t.trimestre.replace("-", " ")),
-        datasets: [
-          { label: "Incentivada", data: tri.map((t) => t.incentivada), backgroundColor: "#FF6200", borderRadius: 2 },
-          { label: "Não incentivada", data: tri.map((t) => t.nao), backgroundColor: "#111111", borderRadius: 2 },
-          { label: "Não informado", data: tri.map((t) => t.sem_info), backgroundColor: "#d0d0d0", borderRadius: 2 },
-        ],
-      },
+      data: { labels: top.map((s) => s.setor), datasets },
       options: {
-        responsive: true,
+        indexAxis: "y", responsive: true, maintainAspectRatio: false,
         plugins: {
-          legend: { display: true, position: "bottom" },
-          tooltip: {
-            callbacks: {
-              afterBody: (itens) => {
-                const t = tri[itens[0].dataIndex];
-                return `Incentivadas: ${n1(t.share_incentivada)}% do volume do trimestre`;
-              },
-            },
-          },
+          legend: { display: temAnterior, position: "bottom" },
+          tooltip: { callbacks: {
+            label: (i) => `${i.dataset.label}: ${bi(i.parsed.x)}`,
+            afterBody: (it) => `${n1(top[it[0].dataIndex].share)}% do volume da janela`,
+          } },
         },
         scales: {
-          x: { stacked: true, grid: { display: false } },
-          y: { stacked: true, beginAtZero: true, title: { display: true, text: "R$ bi" } },
+          x: { beginAtZero: true, title: { display: true, text: "R$ bi" } },
+          y: { grid: { display: false }, ticks: { autoSkip: false } },
         },
       },
     });
   }
 
-  function lideres(lista) {
-    const t = $("tabela-lideres");
-    const max = Math.max(1, ...lista.map((l) => l.volume));
-    const cab = '<thead><tr><th class="col-texto">Coordenador</th><th class="col-barra"></th>' +
-      "<th>R$ bi</th><th>Ofertas</th><th>Share</th></tr></thead>";
-    if (!lista.length) { t.innerHTML = cab + '<tbody><tr><td colspan="5" class="muted">Sem ofertas na janela.</td></tr></tbody>'; return; }
-    t.innerHTML = cab + "<tbody>" + lista.map((l) => `
-      <tr><td class="col-texto">${esc(l.lider)}</td>
-        <td class="col-barra"><span class="uso-barra" style="width:${(l.volume / max) * 100}%"></span></td>
-        <td><b>${n1(l.volume)}</b></td><td>${l.ofertas}</td><td>${n1(l.share)}%</td></tr>`).join("") + "</tbody>";
-  }
-
+  const bps = (v) => (v == null ? "—" : Math.round(v).toLocaleString("pt-BR"));
+  const pct = (v) => (v == null ? "—" : `${Math.round(v)}%`);
+  const prazo = (v) => (v == null ? "—" : `${n1(v)}a`);
+  const variacao = (v) => {
+    if (v == null) return "";
+    const p = v * 100;
+    return `${p >= 0 ? "+" : ""}${n1(p)}%`;
+  };
+  const etiqueta = (t) => `<span class="kpi-tag" style="margin-left:6px;font-size:10px;">${t}</span>`;
   // Em CRI e CRA o emissor é a securitizadora; quem interessa é o devedor.
   // Quando a CVM identifica o devedor, ele vira a linha de cima e o veículo
   // fica embaixo, pequeno.
@@ -174,77 +185,104 @@
     if (!r.ok) return;
     const d = await r.json();
     const porRegistro = d.base === "registro";
+    const k = d.kpis;
+    const temAnterior = k.volume_anterior != null;
     $("primario-csv").href = `/api/primario/ofertas.csv?${query()}`;
     $("primario-ate").textContent = `Dados até: ${dm(d.disponivel_ate)}`;
 
-    $("pk-volume").textContent = bi(d.kpis.volume);
-    $("pk-volume-sub").textContent = porRegistro ? "registrado na janela" : "encerrado na janela";
-    $("pk-ofertas").textContent = d.kpis.ofertas.toLocaleString("pt-BR");
-    $("pk-ticket-sub").textContent = `ticket mediano R$ ${mn(d.kpis.ticket_mediano)} mn`;
-    $("pk-encarteirado").textContent = `${n1(d.kpis.encarteirado_pct)}%`;
-    $("pk-pf").textContent = `${n1(d.kpis.pessoa_fisica_pct)}%`;
-    $("pk-firme").textContent = `${n1(d.kpis.garantia_firme_pct)}%`;
-    $("pk-book-sub").textContent = `com bookbuilding ${n1(d.kpis.bookbuilding_pct)}%`;
+    $("pk-volume").textContent = bi(k.volume);
+    const vs = temAnterior
+      ? `${variacao(k.variacao)} vs ${bi(k.volume_anterior)} em ${dma(d.inicio_anterior)}–${dma(d.fim_anterior)}`
+      : (porRegistro ? "registrado na janela" : "encerrado na janela");
+    $("pk-volume-sub").textContent = vs;
+    $("pk-volume-sub").className = "kpi-delta " + (k.variacao == null ? "muted" : k.variacao >= 0 ? "cell-fechamento" : "cell-abertura");
+    $("pk-emissores").textContent = k.emissores.toLocaleString("pt-BR");
+    $("pk-emissores-sub").textContent = k.estreantes == null ? "desde jan/2023"
+      : `${k.estreantes} estreantes (1ª oferta desde jan/23)`;
+    $("pk-ofertas").textContent = k.ofertas.toLocaleString("pt-BR");
+    $("pk-ticket-sub").textContent = `ticket mediano R$ ${mn(k.ticket_mediano)} mn`;
+    $("pk-encarteirado").textContent = `${n1(k.encarteirado_pct)}%`;
+    $("pk-fundos-pf").textContent = `${n1(k.fundos_pf_pct)}%`;
+    $("pk-pf-sub").textContent = `pessoa física sozinha ${n1(k.pessoa_fisica_pct)}%`;
     $("primario-nota").textContent =
-      `Volume é o valor registrado na oferta, não o efetivamente distribuído. `
+      `Volume é o valor registrado na oferta primária (secundária fica fora), não o efetivamente distribuído. `
       + `Data de ${porRegistro ? "registro na CVM" : "encerramento da oferta"}. `
-      + `Quem ficou com o papel só existe em oferta encerrada e cobre ${bi(d.kpis.volume_com_quebra)} da janela. `
+      + `Quem ficou com o papel só existe em oferta encerrada e cobre ${bi(k.volume_com_quebra)} da janela. `
       + `Fonte: CVM (Dados Abertos) e Itaú BBA`;
 
     $("titulo-serie").textContent = porRegistro ? "Volume registrado por mês" : "Volume encerrado por mês";
-    $("sub-serie").textContent = `R$ bilhões, pela data de ${porRegistro ? "registro na CVM" : "encerramento da oferta"}`;
+    $("sub-serie").textContent = `R$ bilhões, pela data de ${porRegistro ? "registro na CVM" : "encerramento da oferta"} · linha tracejada = média mensal da janela`;
 
     grafMensal(d.serie);
+    grafSetores(d.setores, temAnterior);
     grafDistribuicao(d.distribuicao);
-    grafIncentivadas(d.incentivadas);
-    lideres(d.lideres);
-    escreverFonte("fonte-primario-mes", d.disponivel_ate);
-    escreverFonte("fonte-primario-dist", d.disponivel_ate);
-    escreverFonte("fonte-primario-inc", d.disponivel_ate);
-    escreverFonte("fonte-pipeline", d.disponivel_ate);
+    const nc = d.setores.find((s) => s.setor === "Não classificado");
+    $("sub-setores").textContent = "R$ bilhões · setor de quem deve (em CRI/CRA, o devedor)"
+      + (temAnterior ? " · contorno = mesmo período do ano anterior" : "")
+      + (nc ? ` · ${n1(nc.share)}% do volume sem setor na taxonomia` : "");
+    ["fonte-primario-mes", "fonte-primario-setor", "fonte-primario-dist", "fonte-emissores",
+      "fonte-balanco", "fonte-pipeline"].forEach((id) => escreverFonte(id, d.disponivel_ate));
+    $("fonte-emissoes").textContent =
+      `Fonte: CVM (Dados Abertos), debentures.com.br, ANBIMA e Itaú BBA (dado disponível até ${dm(d.disponivel_ate)})`;
 
-    // O subtítulo carrega o tamanho da fila: a tabela rola, então o total
-    // precisa aparecer sem rolar. Separar o que está parado importa: oferta
-    // com registro velho quase sempre não vira emissão.
+    corpo("tabela-emissores", d.emissores, (e) => `
+      <tr><td class="col-texto">${esc(e.nome)}${e.estreante ? etiqueta("estreante") : ""}</td>
+        <td class="col-texto muted small">${esc(e.grupo || "—")}</td>
+        <td class="col-texto">${esc(e.setor)}</td>
+        <td class="muted small">${esc(e.instrumentos.join(", "))}</td>
+        <td class="${e.ofertas > 2 ? "cell-abertura" : ""}">${e.ofertas}</td>
+        <td><b>${mn(e.volume)}</b></td>
+        <td class="${(e.pct_banco ?? 0) >= 50 ? "cell-abertura" : ""}">${pct(e.pct_banco)}</td>
+        <td>${dma(e.ultima)}</td></tr>`,
+      "Sem emissores na janela.");
+
+    // Emissões: uma linha por SÉRIE; a primeira série da oferta carrega
+    // data, emissor e setor, as demais ficam recuadas.
+    const linhasEm = [];
+    d.emissoes.forEach((o) => {
+      const series = o.series.length ? o.series : [null];
+      series.forEach((s, i) => {
+        const prim = i === 0;
+        const delta = s && s.spread_emissao != null && s.spread_atual != null ? s.spread_atual - s.spread_emissao : null;
+        const dica = s ? `${esc(s.indexador || "")} · emitida ${dma(s.data_emissao)}`
+          + (s.data_spread_atual ? ` · ANBIMA de ${dma(s.data_spread_atual)}` : "")
+          + (o.confianca && o.confianca !== "alta" ? ` · casamento de confiança ${o.confianca}` : "")
+          : "a CVM não traz o ticker e esta oferta não casou com nenhuma série do cadastro";
+        linhasEm.push(`<tr title="${dica}" ${prim ? 'class="linha-oferta"' : ""}>
+          <td>${prim ? dma(o.data) : ""}</td>
+          <td class="col-texto">${prim ? esc(o.devedor) : ""}</td>
+          <td class="col-texto muted small">${prim ? esc(o.setor) : ""}</td>
+          <td>${s ? esc(s.codigo) : '<span class="muted">sem ticker</span>'}${o.confianca && o.confianca !== "alta" && s ? ' <span class="muted">?</span>' : ""}</td>
+          <td class="col-texto">${s ? esc(s.remuneracao || "—") : ""}</td>
+          <td>${s ? prazo(s.prazo_anos) : ""}</td>
+          <td>${s ? mn(s.volume ? s.volume / 1e6 : null) : mn(o.valor)}</td>
+          <td><b>${s ? bps(s.spread_emissao) : ""}</b></td>
+          <td>${s ? bps(s.spread_atual) : ""}</td>
+          <td class="${delta == null ? "" : delta > 0 ? "cell-abertura" : "cell-fechamento"}">${delta == null ? "" : (delta > 0 ? "+" : "") + bps(delta)}</td>
+          <td>${prim ? pct(o.pct_banco) : ""}</td></tr>`);
+      });
+    });
+    document.querySelector("#tabela-emissoes tbody").innerHTML = linhasEm.length ? linhasEm.join("")
+      : '<tr><td colspan="11" class="muted">Sem debêntures na janela (ou o filtro de instrumento tirou DEB).</td></tr>';
+
+    corpo("tabela-balanco", d.balanco, (o) => `
+      <tr title="${esc(o.setor)}"><td>${dma(o.data)}</td><td class="col-texto">${quemDeve(o)}</td>
+        <td>${o.instrumento}</td><td><b>${mn(o.valor)}</b></td>
+        <td class="cell-abertura">${pct(o.pct_banco)}</td><td class="col-texto">${esc(o.lider)}</td></tr>`,
+      "Nenhuma oferta encerrada com banco majoritário na janela.");
+
     const rp = d.resumo_pipeline;
     const porInstr = rp.por_instrumento.map((x) => `${ROTULO[x.instrumento]} ${bi(x.volume)}`).join(" · ");
     $("sub-pipeline").textContent =
       `${rp.vivas} ofertas de até 90 dias somando ${bi(rp.volume_vivas)}`
       + (porInstr ? ` (${porInstr})` : "")
-      + (rp.paradas ? ` · mais ${rp.paradas} paradas há mais de 90 dias, provável registro que não virou emissão` : "");
-
-    corpo("tabela-pipeline", d.pipeline, (o) => `
-      <tr title="${esc(o.status)} · público ${esc(o.publico)}">
-        <td>${dma(o.data_registro)}</td>
-        <td class="${o.parada ? "cell-abertura" : ""}">${o.dias ?? "—"}</td>
-        <td class="col-texto">${quemDeve(o)}</td><td>${o.instrumento}</td>
-        <td>${mn(o.valor)}</td><td class="col-texto">${esc(o.lider)}</td></tr>`,
-      "Nenhuma oferta aberta com estes filtros.");
-
-    corpo("tabela-movimentos", d.movimentos, (n) => `
-      <tr><td>${dma(n.visto_em.slice(0, 10))}</td><td class="col-texto">${quemDeve(n)}</td>
-        <td>${n.instrumento}</td><td>${mn(n.valor)}</td>
-        <td class="col-texto ${n.nova ? "cell-abertura" : ""}">${n.nova ? "entrou na base" : esc(n.de) + " → " + esc(n.para)}</td></tr>`,
-      d.trilha_vazia
-        ? "O histórico de mudanças começa na próxima coleta — a carga inicial não conta como novidade."
-        : "Nada novo nos últimos 30 dias.");
-
-    corpo("tabela-maiores", d.maiores, (o) => `
-      <tr title="${esc(o.lider)} · ${esc(o.status)}">
-        <td>${dma(porRegistro ? o.data : (o.encerramento || o.data))}</td>
-        <td class="col-texto">${quemDeve(o)}</td><td>${o.instrumento}</td>
-        <td><b>${mn(o.valor)}</b></td>
-        <td>${o.incentivada === "S" ? "sim" : o.incentivada === "N" ? "não" : "—"}</td>
-        <td>${mn(o.investidores)}</td></tr>`,
-      "Sem ofertas na janela.");
-
-    corpo("tabela-captadores", d.captadores, (e) => `
-      <tr><td class="col-texto">${esc(e.nome)}</td>
-        <td class="${e.ofertas > 2 ? "cell-abertura" : ""}">${e.ofertas}</td>
-        <td><b>${mn(e.volume)}</b></td>
-        <td class="col-texto muted small">${esc(e.instrumentos.join(", "))}</td>
-        <td>${dma(e.ultima)}</td></tr>`,
-      "Sem emissores na janela.");
+      + (rp.paradas ? ` · ${rp.paradas} paradas há mais de 90 dias ficam ocultas` : "");
+    corpo("tabela-pipeline", d.pipeline.filter((o) => !o.parada), (o) => `
+      <tr title="${esc(o.status)} · líder ${esc(o.lider)} · público ${esc(o.publico)}">
+        <td>${dma(o.data_registro)}</td><td>${o.dias ?? "—"}</td>
+        <td class="col-texto">${quemDeve(o)}</td><td class="col-texto muted small">${esc(o.setor)}</td>
+        <td>${o.instrumento}</td><td>${mn(o.valor)}</td></tr>`,
+      "Nenhuma oferta na fila com estes filtros.");
   }
 
   function abas(id, campo, rotuloUso) {

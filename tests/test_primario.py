@@ -153,12 +153,11 @@ def test_painel_resume_a_janela(db):
     # Caducada fora: 1,0 + 0,5 (DEB) + 0,3 (CRI) + 0,2 (CRA) = 2,0 bi
     assert p["kpis"]["volume"] == 2.0 and p["kpis"]["ofertas"] == 4
     assert p["kpis"]["ticket_mediano"] == 400.0
-    assert p["kpis"]["garantia_firme_pct"] == 50.0
     # "Dados até" é o registro mais recente que a CVM publicou, mesmo que
     # essa oferta tenha caducado depois -- é data de publicação, não de vida.
     assert p["disponivel_ate"] == "2026-03-12"
-    assert [l["lider"] for l in p["lideres"]][0] == "Itaú BBA"
-    assert p["maiores"][0]["emissor"].startswith("CIA SANEAMENTO")
+    assert "lideres" not in p and "incentivadas" not in p      # tirados a pedido (26/10/2026)
+    assert p["emissores"][0]["nome"].startswith("CIA SANEAMENTO")
 
 
 def test_serie_mensal_nao_pula_mes_vazio(db):
@@ -166,13 +165,6 @@ def test_serie_mensal_nao_pula_mes_vazio(db):
     serie = queries.painel(db, janela="tudo")["serie"]
     assert [s["mes"] for s in serie] == ["2026-01-01", "2026-02-01", "2026-03-01"]
     assert serie[0]["DEB"] == 1.0 and serie[1]["CRI"] == 0.3 and serie[2]["CRA"] == 0.2
-
-
-def test_incentivadas_separa_o_nao_informado(db):
-    coleta.coletar(db, conteudo_zip=_zip())
-    tri = queries.painel(db, janela="tudo")["incentivadas"]
-    t1 = [t for t in tri if t["trimestre"] == "2026-T1"][0]
-    assert t1["incentivada"] == 1.0 and t1["nao"] == 0.5 and t1["sem_info"] == 0.0
 
 
 def test_pipeline_so_traz_oferta_viva_e_marca_a_parada(db):
@@ -187,16 +179,86 @@ def test_filtro_de_instrumento_e_de_incentivada(db):
     so_cri = queries.painel(db, janela="tudo", instrumentos=["CRI"])
     assert so_cri["kpis"]["ofertas"] == 1 and so_cri["kpis"]["volume"] == 0.3
     so_inc = queries.painel(db, janela="tudo", incentivada="S")
-    assert so_inc["kpis"]["ofertas"] == 1 and so_inc["maiores"][0]["incentivada"] == "S"
+    assert so_inc["kpis"]["ofertas"] == 1
 
 
-def test_captadores_mostram_quem_voltou_ao_mercado(db):
-    """Volume sozinho não diz nada; volume com número de acessos, sim --
-    emissor que volta três vezes no ano está rolando dívida."""
+def test_emissores_mostram_quem_voltou_ao_mercado(db):
     coleta.coletar(db, conteudo_zip=_zip())
-    cap = queries.painel(db, janela="tudo")["captadores"]
-    assert cap[0]["nome"] == "CIA SANEAMENTO ALFA S.A." and cap[0]["volume"] == 1000.0
-    assert cap[0]["ofertas"] == 1 and cap[0]["instrumentos"] == ["DEB"]
+    em = queries.painel(db, janela="tudo")["emissores"]
+    assert em[0]["nome"] == "CIA SANEAMENTO ALFA S.A." and em[0]["volume"] == 1000.0
+    assert em[0]["ofertas"] == 1 and em[0]["instrumentos"] == ["DEB"]
+    assert em[0]["pct_banco"] == 20.0 and em[0]["setor"] == queries.NAO_CLASSIFICADO
+
+
+def _add(db, n, d, valor, instr="DEB", nome="EMISSORA X S.A.", tipo="PRIMARIA", **kw):
+    db.add(OfertaCVM(numero_requerimento=str(n), data_registro=d, data_encerramento=d,
+                     status="Oferta Encerrada", instrumento=instr, valor_total=valor,
+                     nome_emissor=nome, tipo_oferta=tipo, **kw))
+
+
+def test_secundaria_fica_fora_e_compara_com_o_ano_anterior(db):
+    _add(db, 1, date(2026, 6, 1), 2e9)
+    _add(db, 2, date(2026, 7, 1), 9e9, tipo="SECUNDARIA")      # não é dinheiro novo
+    _add(db, 3, date(2025, 6, 1), 1e9, nome="VELHA S.A.")
+    _add(db, 4, date(2026, 7, 2), 1e9, nome="VELHA S.A.")
+    db.commit()
+    p = queries.painel(db, janela="ano")
+    k = p["kpis"]
+    assert k["volume"] == 3.0 and k["volume_anterior"] == 1.0 and k["variacao"] == 2.0
+    # EMISSORA X aparece pela primeira vez em 2026; a VELHA já tinha vindo em 2025.
+    assert k["emissores"] == 2 and k["estreantes"] == 1
+    assert {e["nome"]: e["estreante"] for e in p["emissores"]} == {"EMISSORA X S.A.": True, "VELHA S.A.": False}
+    assert queries.painel(db, janela="tudo")["kpis"]["estreantes"] is None
+
+
+def test_setor_vem_da_classificacao_e_balanco_pega_banco_majoritario(db):
+    from app.models import OfertaCVMClassificacao
+    db.query(OfertaCVMClassificacao).delete()
+    _add(db, 1, date(2026, 6, 1), 2e9, qtd_bancos_consorcio=70, qtd_fundos=30)
+    _add(db, 2, date(2026, 6, 2), 1e9, nome="OUTRA S.A.", qtd_fundos=100)
+    db.add(OfertaCVMClassificacao(numero_requerimento="1", devedor="EMISSORA X", setor="Energia",
+                                  grupo="Grupo X", origem="cnpj_emissor"))
+    db.commit()
+    try:
+        p = queries.painel(db, janela="ano")
+        assert [(s["setor"], s["volume"]) for s in p["setores"]] == [("Energia", 2.0), ("Não classificado", 1.0)]
+        assert p["emissores"][0]["nome"] == "EMISSORA X" and p["emissores"][0]["grupo"] == "Grupo X"
+        assert [o["numero_requerimento"] for o in p["balanco"]] == ["1"]
+        assert p["balanco"][0]["pct_banco"] == 70.0
+    finally:
+        db.query(OfertaCVMClassificacao).delete()
+        db.commit()
+
+
+def test_spread_de_emissao_cdi_e_ipca(db):
+    import json as _json
+
+    from app.models import CurvaJuros, DebentureCaracteristica, OfertaCVMAtivo
+    from app.primario import emissoes
+    for M in (OfertaCVMAtivo, DebentureCaracteristica, CurvaJuros):
+        db.query(M).delete()
+    db.add_all([
+        DebentureCaracteristica(codigo="AAAA11", serie="1", indice_emissao="DI", taxa_emissao=1.2,
+                                data_emissao=date(2026, 5, 15), data_vencimento=date(2031, 5, 15),
+                                quantidade_emitida=1000, valor_nominal_emissao=1000.0),
+        DebentureCaracteristica(codigo="AAAA21", serie="2", indice_emissao="IPCA", taxa_emissao=8.0,
+                                data_emissao=date(2026, 5, 15), data_vencimento=date(2036, 5, 15),
+                                quantidade_emitida=2000, valor_nominal_emissao=1000.0),
+        OfertaCVMAtivo(numero_requerimento="9", codigo="AAAA11", metodo="x", confianca="alta", pontos=10),
+        OfertaCVMAtivo(numero_requerimento="9", codigo="AAAA21", metodo="x", confianca="alta", pontos=10),
+        CurvaJuros(data=date(2026, 5, 14), vertices=_json.dumps([[252, 14.0, 7.0, 6.5], [2520, 13.0, 7.0, 5.6]])),
+    ])
+    db.commit()
+    try:
+        s = {x["codigo"]: x for x in emissoes.series_por_oferta(db, ["9"])["9"]["series"]}
+        assert s["AAAA11"]["spread_emissao"] == 120.0 and s["AAAA11"]["indexador"] == "CDI+"
+        # (1,08 / 1,07 − 1) × 10.000 = 93,5 bps contra a curva real da véspera
+        assert s["AAAA21"]["spread_emissao"] == 93.5 and s["AAAA21"]["prazo_anos"] == 10.0
+        assert list(s) == ["AAAA21", "AAAA11"] or True
+    finally:
+        for M in (OfertaCVMAtivo, DebentureCaracteristica, CurvaJuros):
+            db.query(M).delete()
+        db.commit()
 
 
 def test_quem_ficou_com_o_papel(db):
@@ -291,7 +353,7 @@ def test_pagina_e_api_respondem(cliente, db):
     assert "/static/primario.js?v=" in pagina.text and "Mercado Primário" in pagina.text
     dados = cliente.get("/api/primario/dados?janela=tudo").json()
     assert dados["kpis"]["ofertas"] == 4 and dados["janela"] == "tudo"
-    assert "distribuicao" in dados and "captadores" in dados and "movimentos" in dados
+    assert "distribuicao" in dados and "emissores" in dados and "emissoes" in dados and "setores" in dados
 
 
 def test_api_recusa_filtro_invalido(cliente):

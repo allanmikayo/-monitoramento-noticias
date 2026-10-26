@@ -1476,6 +1476,41 @@ bloco em `/api/inicio/*`), `templates/inicio.html`, `static/inicio.js`, CSS
   d-21 (posições em dias com curva), eixo até 10 anos.
 - Time (nome/e-mail) fixo em `inicio_routes.EQUIPE`.
 
+### Mercado Primário reorganizado para crédito — 26/10/2026
+
+Pedido do Allan: a aba tem que responder quem está emitindo, quanto, de que
+setor, a que taxa e quem ficou com o papel. Saíram o gráfico de
+incentivadas, o ranking de coordenadores, "maiores ofertas", "quem mais
+captou" e "movimentos" (o filtro de incentivadas ficou).
+- **Casamento oferta → ticker** (`app/primario/casamento.py`): a CVM não
+  traz ticker. A oferta de DEB casa com as séries do arquivo de
+  características pelo mesmo CNPJ e por pontos: emissão (+4), registro CVM
+  em até 3 dias (+4; até 30 dias, +2), data de emissão perto (+1), volume
+  em até 10% (+2; até 35%, +1). Corte de 5 pontos; confiança alta ≥8,
+  média ≥6. Na base real: 1.904 de 1.964 ofertas de DEB casadas, 97,4% do
+  volume. Tabelas `ofertas_cvm_ativos` e `ofertas_cvm_classificacao`,
+  refeitas do zero a cada rodada.
+- **Setor de quem deve**: DEB pelo CNPJ do emissor, depois pelo nome; CRI e
+  CRA pelo CNPJ citado no texto de devedores, depois pela série no cadastro
+  de CRI/CRA, depois pelo nome. Se nada casar: "Não classificado". Cobertura
+  por volume encerrado: DEB 71,7%, CRA 21,2%, CRI 11,7%. A taxonomia só
+  cobre o universo precificado pela ANBIMA; quase todo devedor de CRI e CRA
+  está fora dele.
+- **Taxa na emissão** (`app/primario/emissoes.py`): CDI+ = taxa × 100;
+  IPCA+ contra a ETTJ IPCA de `curva_juros` do dia da emissão (até 10 dias
+  antes), no vértice do PRAZO do papel (o arquivo não traz duration). Spread
+  hoje = última marcação ANBIMA; o Δ mostra se abriu ou fechou desde a
+  emissão. % do CDI e prefixado ficam sem spread.
+- O painel exclui oferta SECUNDÁRIA de todo volume (não é dinheiro novo).
+  KPIs comparam com o mesmo intervalo do ano anterior. "Estreante" é a
+  primeira oferta desde jan/2023, onde a base da CVM começa (não existe na
+  janela "Desde 2023").
+- **Coleta**: `ofertas_cvm.yml` roda sozinho pelo `schedule:` do GitHub, às
+  07h BRT de segunda a sábado, e faz coleta + casamento. Não usa o
+  cron-job.org, que só existe para os jobs de 5 e 15 minutos. O
+  `spreads_daily` também refaz o casamento depois de gravar as
+  características.
+
 ## Regras a manter
 
 1. **Nunca** trocar `store.upsert_article` para sobrescrever corpo/título
