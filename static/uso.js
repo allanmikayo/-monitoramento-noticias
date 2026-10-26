@@ -11,7 +11,7 @@
  */
 (function () {
   var ABAS = {
-    "/cobertura": "Repositório", "/": "Notícias", "/spreads": "Spreads",
+    "/": "Início", "/cobertura": "Repositório", "/noticias": "Notícias", "/spreads": "Spreads",
     "/mercado-secundario": "Mercado Secundário", "/primario": "Mercado Primário", "/fontes": "Fontes & Empresas",
     "/admin": "Administração", "/minha-conta": "Minha conta",
   };

@@ -1,0 +1,114 @@
+{% extends "base.html" %}
+{% block title %}Início{% endblock %}
+{% block content %}
+{#
+  Página inicial do Hub (26/10/2026). Resumo de tudo numa tela, sem rolar
+  (1080p). Três faixas, da leitura mais rápida para a mais lenta:
+    1. PLACAR      spreads, secundário, primário (com fila), ratings 5 dias
+    2. MERCADO     curva real, inflação implícita, quem mexeu na semana
+    3. CONTEXTO    últimas notícias, últimos relatórios, o time
+  Cada cartão leva para a aba de origem e carrega sozinho (app/inicio.py).
+#}
+<div class="inicio">
+  <div class="inicio-topo">
+    <h1>Bom dia{% if user and user.name %}, {{ user.name.split(' ')[0] }}{% endif %}</h1>
+    <span class="muted small" id="inicio-datas">Carregando…</span>
+  </div>
+
+  {# ---- 1. Placar ---------------------------------------------------- #}
+  <section class="inicio-placar">
+    <a class="ic-card ic-link" href="/spreads" id="card-spread-0">
+      <span class="ic-rot">Spread · IPCA+ Incent. <span class="ic-ver" title="Abrir Spreads">→</span></span>
+      <span class="ic-valor"><b data-campo="valor">—</b><small>bps</small></span>
+      <span class="ic-linha"><span class="ic-chip" data-campo="delta">—</span><span class="muted small" data-campo="extra"></span></span>
+      <span class="ic-spark"><canvas aria-label="Spread médio nos últimos 3 meses" role="img"></canvas></span>
+    </a>
+    <a class="ic-card ic-link" href="/spreads" id="card-spread-1">
+      <span class="ic-rot">Spread · CDI+ Trad. <span class="ic-ver" title="Abrir Spreads">→</span></span>
+      <span class="ic-valor"><b data-campo="valor">—</b><small>bps</small></span>
+      <span class="ic-linha"><span class="ic-chip" data-campo="delta">—</span><span class="muted small" data-campo="extra"></span></span>
+      <span class="ic-spark"><canvas aria-label="Spread médio nos últimos 3 meses" role="img"></canvas></span>
+    </a>
+    <a class="ic-card ic-link" href="/mercado-secundario" id="card-secundario">
+      <span class="ic-rot">Secundário · média 5d <span class="ic-ver" title="Abrir Mercado Secundário">→</span></span>
+      <span class="ic-valor"><b data-campo="valor">—</b><small>/dia</small></span>
+      <span class="ic-linha"><span class="ic-chip" data-campo="delta">—</span><span class="muted small" data-campo="extra"></span></span>
+      <span class="ic-barras" data-campo="barras"></span>
+    </a>
+    <a class="ic-card ic-link ic-largo" href="/primario" id="card-primario">
+      <span class="ic-rot">Mercado primário · volume encerrado <span class="ic-ver">Primário →</span></span>
+      <span class="ic-duas">
+        <span>
+          <span class="muted small" data-campo="mes-rot">Último mês</span>
+          <span class="ic-valor"><b data-campo="mes">—</b></span>
+          <span class="ic-linha"><span class="ic-chip" data-campo="mes-delta">—</span><span class="muted small" data-campo="mes-base"></span></span>
+        </span>
+        <span class="ic-sep">
+          <span class="muted small" data-campo="ytd-rot">Acumulado no ano</span>
+          <span class="ic-valor"><b data-campo="ytd">—</b></span>
+          <span class="ic-linha"><span class="ic-chip" data-campo="ytd-delta">—</span><span class="muted small" data-campo="ytd-base"></span></span>
+        </span>
+      </span>
+      <span class="ic-fila" data-campo="fila">—</span>
+    </a>
+    <a class="ic-card ic-link" href="/noticias" id="card-ratings">
+      <span class="ic-rot">Ratings · 5 dias <span class="ic-ver" title="Abrir Notícias">→</span></span>
+      <span class="ic-valor"><b data-campo="valor">—</b><small>ações</small></span>
+      <span class="ic-pills" data-campo="pills"></span>
+      <span class="muted small ic-ultima" data-campo="ultima"></span>
+    </a>
+  </section>
+
+  {# ---- 2. Mercado --------------------------------------------------- #}
+  <section class="inicio-mercado">
+    <div class="ic-card">
+      <span class="ic-rot">Curva de juros real · ETTJ IPCA <span class="ic-fonte">% a.a. · ANBIMA</span></span>
+      <div class="ic-grafico"><canvas id="graf-real" aria-label="Curva de juros real hoje, 5 e 21 dias úteis atrás" role="img"></canvas></div>
+      <span class="muted small" id="nota-real"></span>
+    </div>
+    <div class="ic-card">
+      <span class="ic-rot">Inflação implícita <span class="ic-fonte">% a.a. · ANBIMA</span></span>
+      <div class="ic-grafico"><canvas id="graf-implicita" aria-label="Inflação implícita hoje, 5 e 21 dias úteis atrás" role="img"></canvas></div>
+      <span class="muted small" id="nota-implicita"></span>
+    </div>
+    <div class="ic-card">
+      <span class="ic-rot">Quem mexeu na semana · WoW
+        <span class="window-tabs ic-tabs" id="movers-tabs">
+          <button type="button" class="win-btn active" data-i="0">IPCA+</button>
+          <button type="button" class="win-btn" data-i="1">CDI+</button>
+        </span>
+      </span>
+      <span class="ic-sub ic-sub-abre">Maiores aberturas</span>
+      <div id="lista-aberturas" class="ic-lista"></div>
+      <span class="ic-sub">Maiores fechamentos</span>
+      <div id="lista-fechamentos" class="ic-lista"></div>
+      <a href="/spreads" class="ic-rodape">Ver todos em Spreads →</a>
+    </div>
+  </section>
+
+  {# ---- 3. Contexto -------------------------------------------------- #}
+  <section class="inicio-contexto">
+    <div class="ic-card">
+      <span class="ic-rot">Últimas notícias <a href="/noticias" class="ic-ver">Ver todas →</a></span>
+      <div id="lista-noticias" class="ic-feed"><span class="muted small">Carregando…</span></div>
+    </div>
+    <div class="ic-card">
+      <span class="ic-rot">Últimos relatórios <a href="/cobertura" class="ic-ver">Repositório →</a></span>
+      <div id="lista-relatorios" class="ic-feed"><span class="muted small">Carregando…</span></div>
+    </div>
+    <div class="ic-card ic-time">
+      <span class="ic-rot">Fixed Income Team</span>
+      <ul>
+        {% for p in equipe %}
+        <li><b>{{ p.nome }}</b><a href="mailto:{{ p.email }}">{{ p.email }}</a></li>
+        {% endfor %}
+      </ul>
+      <a href="mailto:{{ email_equipe }}" class="ic-email-time">{{ email_equipe }}</a>
+    </div>
+  </section>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+<script src="/static/chart-padrao.js?v={{ v }}"></script>
+<script src="/static/inicio.js?v={{ v }}"></script>
+{% endblock %}

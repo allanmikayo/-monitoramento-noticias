@@ -14,6 +14,7 @@ três pontos os comentários diziam o oposto do que o código fazia.
 | Curva de juro real | `ntnb_referencia` | API ANBIMA (títulos públicos) | 1×/dia, 21h BRT | Sim |
 | Securitizados | `securitizados`, `securitizado_spreads` | API ANBIMA (CRI/CRA) | 1×/dia, após debêntures | Sim |
 | Balcão B3 (coleta; a aba saiu em 23/10) | `negocios_b3`, `negocios_b3_diario` | API pública do BDI da B3 | 15 min no pregão | Sim |
+| Curva de juros (página inicial) | `curva_juros` | API ANBIMA (curvas-juros) | 1×/dia, 21h20 BRT | Sim |
 | Mercado Secundário | `mercado_secundario` | Export de volume negociado subido pelo Allan | Manual (Administração) | Não |
 | ~~Ratings~~ | ~~`issuer_ratings`, `issuers`~~ | — | — | **Removido em 20/08** |
 | Repositório | `reports` | Catálogo do Smart | Manual | Não |

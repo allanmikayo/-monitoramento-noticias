@@ -1451,6 +1451,31 @@ gera e sobe. Rota `/mercado-secundario` (`/balcao` redireciona), tabela
 - Removidos: `balcao_routes.py`, `spreads/balcao.py`, `balcao.html/js`,
   `test_balcao.py`. A COLETA da B3 (`b3_trades`, `fechar_b3`) continua.
 
+### Página inicial do Hub ("/") — 26/10/2026
+
+Resumo do dashboard numa tela, sem rolar (1080p). `/` virou esta página
+(atrás de login); **Notícias foi para `/noticias`**. Arquivos:
+`app/inicio.py` (consultas), `app/inicio_routes.py` (página + uma rota por
+bloco em `/api/inicio/*`), `templates/inicio.html`, `static/inicio.js`, CSS
+"PÁGINA INICIAL" no fim do `style.css`.
+- Uma rota POR BLOCO de propósito: cada cartão carrega sozinho e um bloco
+  lento ou sem dado não derruba a página (limite de 10 s da Vercel).
+- Nada é recalculado: cada bloco chama a função da aba de origem
+  (`kpi_summary`/`time_series`/`movers` dos spreads, `resumo` do
+  secundário, `pipeline` do primário, `list_articles`, `Report`).
+- Primário: volume ENCERRADO (data de encerramento), último mês fechado vs
+  mesmo mês do ano anterior, e YTD até a data mais recente da base vs o
+  mesmo intervalo do ano anterior. Fila = pipeline sem as paradas >90 dias.
+- Curvas: tabela `curva_juros` (uma linha por dia, vértices em JSON),
+  coletada da API da ANBIMA (`/titulos-publicos/curvas-juros`, que já traz
+  ETTJ IPCA, PRE e implícita por vértice e tem histórico — a página
+  CZ.asp só mostra o dia). `app/spreads/curva_juros.py`,
+  `scripts/fetch_curva_juros.py`, workflow próprio `curva_juros.yml`
+  (21h20 BRT; `workflow_dispatch` com `start`/`end` para backfill e `probe`
+  para ver a resposta crua como anotação do Actions). Gráficos: hoje, d-5 e
+  d-21 (posições em dias com curva), eixo até 10 anos.
+- Time (nome/e-mail) fixo em `inicio_routes.EQUIPE`.
+
 ## Regras a manter
 
 1. **Nunca** trocar `store.upsert_article` para sobrescrever corpo/título

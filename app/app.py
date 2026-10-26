@@ -78,9 +78,9 @@ templates.env.globals["v"] = VERSAO_ESTATICA
 # idêntica a cada deploy, e com o `immutable` de 1 ano do vercel.json o
 # navegador nunca buscava o spreads.js/style.css novos. Todos recebem o
 # mesmo valor; o teste `test_paginas_renderizam_versao_estatica` guarda.
-from . import cobertura_routes as _cr, mercado_secundario_routes as _msr, spreads_routes as _sr  # noqa: E402
+from . import cobertura_routes as _cr, inicio_routes as _ir, mercado_secundario_routes as _msr, spreads_routes as _sr  # noqa: E402
 
-for _t in (_msr.templates, _cr.templates, _sr.templates):
+for _t in (_msr.templates, _cr.templates, _sr.templates, _ir.templates):
     _t.env.globals["v"] = VERSAO_ESTATICA
 
 _BRT = ZoneInfo("America/Sao_Paulo")
@@ -215,9 +215,13 @@ app.include_router(register_spreads_routes(require_user))
 # Volume negociado de debêntures a partir do export que o Allan sobe pela
 # Administração (ver app/spreads/mercado_secundario.py). Atrás de login; a
 # importação é só para admin. `/balcao` redireciona para cá.
+from .inicio_routes import register_inicio_routes  # noqa: E402
 from .mercado_secundario_routes import register_mercado_secundario_routes  # noqa: E402
 
 app.include_router(register_mercado_secundario_routes(require_user, require_admin))
+
+# Página inicial (26/10/2026): resumo do Hub numa tela só. Ver app/inicio.py.
+app.include_router(register_inicio_routes(require_user))
 
 # Módulo "Repositório de Relatórios" (13/08/2026) -- catálogo dos relatórios
 # do Smart tagueados por empresa/setor. É a ÚNICA aba pública do Hub: recebe
@@ -442,7 +446,9 @@ def signup_antigo():
 # o resto (notícias captadas, spreads, cadastro) é interno e só entra quem
 # o Allan aprovar. Ver também `require_user` no /spreads e o menu em
 # base.html, que esconde os links de quem não está logado.
-@app.get("/", response_class=HTMLResponse)
+# Notícias saiu de "/" em 26/10/2026: "/" virou a página inicial do Hub
+# (app/inicio_routes.py).
+@app.get("/noticias", response_class=HTMLResponse)
 def dashboard(request: Request, user: User = Depends(require_user), db: Session = Depends(get_db)):
     import json as _json
     sectors = db.query(Sector).order_by(Sector.name).all()

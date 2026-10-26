@@ -970,3 +970,84 @@ button.perfil-tag:hover { outline: 1px solid currentColor; }
 .tabela-resumo-ms thead th { text-align: center; vertical-align: middle; }
 .tabela-resumo-ms .cab-titulo { display: block; color: var(--accent); font-weight: 700; }
 .tabela-resumo-ms .cab-periodo { display: block; color: #fff; font-weight: 400; font-size: 0.74rem; margin-top: 2px; }
+
+/* ===================================================================== */
+/* PÁGINA INICIAL (26/10/2026) — resumo do Hub numa tela, sem rolar.     */
+/* Três faixas; cada cartão leva para a aba de origem.                   */
+/* ===================================================================== */
+.inicio { display: flex; flex-direction: column; gap: 12px; }
+.inicio-topo { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+.inicio-topo h1 { margin: 0; font-size: 1.2rem; }
+.inicio-placar { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)) minmax(0, 1.9fr) minmax(0, 1.1fr); gap: 12px; }
+.inicio-mercado { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.inicio-contexto { display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(0, 1.3fr) minmax(0, 0.8fr); gap: 12px; }
+@media (max-width: 1100px) {
+  .inicio-placar { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .inicio-placar .ic-largo { grid-column: span 2; }
+  .inicio-mercado, .inicio-contexto { grid-template-columns: 1fr; }
+}
+
+.ic-card {
+  background: var(--card-bg); border: 1px solid var(--border); border-radius: 10px;
+  padding: 12px 14px; display: flex; flex-direction: column; gap: 5px; min-width: 0; box-sizing: border-box;
+}
+a.ic-link { color: inherit; text-decoration: none; transition: border-color .15s, box-shadow .15s; }
+a.ic-link:hover { border-color: var(--accent); box-shadow: 0 2px 10px rgba(0,0,0,.06); }
+a.ic-link:hover .ic-ver { text-decoration: underline; }
+.ic-erro { opacity: .6; }
+.ic-rot {
+  display: flex; justify-content: space-between; align-items: center; gap: 8px;
+  font-size: 0.68rem; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: var(--muted);
+}
+.ic-ver { font-size: 0.74rem; font-weight: 600; letter-spacing: 0; text-transform: none; color: var(--accent-dark); white-space: nowrap; }
+.ic-fonte { font-weight: 400; letter-spacing: 0; text-transform: none; font-size: 0.72rem; }
+.ic-valor b { font-size: 1.75rem; font-weight: 700; color: var(--header); line-height: 1.1; }
+.ic-valor small { font-size: 0.85rem; font-weight: 600; color: var(--muted); margin-left: 4px; }
+.ic-linha { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.ic-chip { display: inline-block; border-radius: 999px; padding: 1px 8px; font-size: 0.74rem; font-weight: 700; background: #f0f0f0; color: var(--muted); white-space: nowrap; }
+.ic-chip.up { background: #fff0e6; color: #b84500; }
+.ic-chip.down { background: #e9e9e9; color: #111; }
+.ic-spark { position: relative; height: 38px; margin-top: auto; }
+.ic-barras { display: flex; flex-direction: column; gap: 4px; margin-top: auto; }
+.ic-barra { display: flex; align-items: center; gap: 6px; font-size: 0.72rem; }
+.ic-barra-rot { width: 38px; color: var(--muted); }
+.ic-barra-trilho { flex: 1; height: 7px; background: #f2f2f2; border-radius: 4px; overflow: hidden; }
+.ic-barra-trilho span { display: block; height: 100%; border-radius: 4px; }
+.ic-barra-num { font-weight: 700; font-variant-numeric: tabular-nums; min-width: 52px; text-align: right; }
+.ic-duas { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.ic-duas > span { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.ic-sep { border-left: 1px solid var(--border); padding-left: 12px; }
+.ic-fila { margin-top: auto; padding-top: 7px; border-top: 1px dashed var(--border); font-size: 0.76rem; }
+.ic-pills { display: flex; flex-wrap: wrap; gap: 4px; }
+.ic-ultima { margin-top: auto; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 0.74rem; }
+.ic-grafico { position: relative; height: clamp(150px, 22vh, 220px); }
+.ic-tabs .win-btn { padding: 2px 9px; font-size: 0.7rem; text-transform: none; letter-spacing: 0; }
+.ic-sub { font-size: 0.72rem; font-weight: 700; color: #111; margin-top: 4px; }
+.ic-sub-abre { color: #b84500; }
+.ic-lista { display: flex; flex-direction: column; }
+.ic-mov {
+  display: flex; align-items: baseline; gap: 8px; padding: 4px 0; font-size: 0.8rem;
+  border-bottom: 1px solid #f2f2f2; color: inherit; text-decoration: none;
+}
+.ic-mov:last-child { border-bottom: 0; }
+.ic-mov:hover { background: #faf6f2; }
+.ic-mov b { width: 62px; flex: none; }
+.ic-mov-nome { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: #333; }
+.ic-mov .muted { font-size: 0.72rem; flex: none; }
+.ic-mov-d { font-weight: 700; font-variant-numeric: tabular-nums; flex: none; min-width: 48px; text-align: right; }
+.ic-mov-d.abre { color: #b84500; }
+.ic-rodape { margin-top: auto; padding-top: 4px; font-size: 0.76rem; font-weight: 600; color: var(--accent-dark); }
+.ic-feed { display: flex; flex-direction: column; }
+.ic-item { display: flex; flex-direction: column; gap: 1px; padding: 5px 0; border-bottom: 1px solid #f2f2f2; color: inherit; text-decoration: none; min-width: 0; }
+.ic-item:last-child { border-bottom: 0; }
+.ic-item:hover .ic-tit { color: var(--accent-dark); }
+.ic-meta { font-size: 0.7rem; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ic-meta b { color: #b84500; font-weight: 700; }
+.ic-tit { font-size: 0.82rem; font-weight: 600; color: #111; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ic-time { background: #fafafa; }
+.ic-time ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 7px; }
+.ic-time li { display: flex; flex-direction: column; font-size: 0.78rem; }
+.ic-time li b { color: #111; font-weight: 600; }
+.ic-time li a, .ic-email-time { font-size: 0.72rem; color: var(--muted); text-decoration: none; }
+.ic-time li a:hover, .ic-email-time:hover { color: var(--accent-dark); text-decoration: underline; }
+.ic-email-time { margin-top: auto; padding-top: 6px; border-top: 1px solid var(--border); }

@@ -123,7 +123,7 @@ def _cliente_logado():
 
 def test_botao_de_fonte_aparece_na_tela():
     c = _cliente_logado()
-    r = c.get("/", follow_redirects=False)
+    r = c.get("/noticias", follow_redirects=False)
     assert r.status_code == 200, r.status_code
     assert "ms-source-btn" in r.text, "o botão Fonte não chegou ao template"
     assert 'data-ms="source"' in r.text or "Fonte: Todas" in r.text
