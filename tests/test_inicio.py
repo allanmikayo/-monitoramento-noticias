@@ -124,7 +124,7 @@ def test_inicio_e_noticias_mudaram_de_endereco(cliente):
     r = cliente.get("/")
     assert r.status_code == 200
     assert "Fixed Income Team" in r.text and "paula.toute@itaubba.com" in r.text
-    assert "Bom dia, Allan" in r.text
+    assert "Bom dia, Allan" in r.text and "Movimentos na semana" in r.text
     assert cliente.get("/noticias").status_code == 200
     for bloco in ("spreads", "secundario", "primario", "curvas", "noticias", "relatorios"):
         resp = cliente.get(f"/api/inicio/{bloco}")
