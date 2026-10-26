@@ -1,0 +1,102 @@
+name: Curva de juros ANBIMA (diário)
+
+# ETTJ da ANBIMA (real, prefixada, inflação implícita) para a página inicial
+# do Hub -- ver app/spreads/curva_juros.py. Workflow próprio, separado dos
+# spreads, pelo pedido do Allan de 20/08/2026 ("separe em actions
+# individuais, assim se um der erro não quebra o fluxo inteiro").
+# 21h20 BRT = 00h20 UTC: a ANBIMA publica a curva no fim da tarde.
+on:
+  schedule:
+    - cron: "20 0 * * *"
+  workflow_dispatch:
+    inputs:
+      start:
+        description: "Backfill: data inicial (AAAA-MM-DD). Em branco = só o dia mais recente"
+        required: false
+        default: ""
+      end:
+        description: "Backfill: data final (AAAA-MM-DD). Em branco = hoje"
+        required: false
+        default: ""
+      probe:
+        description: "Só mostrar a resposta crua da API (diagnóstico)"
+        type: boolean
+        required: false
+        default: false
+
+concurrency:
+  group: curva_juros
+  cancel-in-progress: false
+
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    # FAULTHANDLER (08/09/2026). Duas execuções morreram com
+    # `Segmentation fault (core dumped)` -- exit 139, o processo abatido
+    # pelo sistema, sem exceção e sem traceback: a varredura de notícias e
+    # o catch-up do negócio a negócio da B3. Sem stack não há diagnóstico,
+    # só palpite.
+    #
+    # Esta variável liga o `faulthandler` da biblioteca padrão do Python:
+    # ao receber SIGSEGV, ele imprime a pilha de chamadas (inclusive a
+    # linha de código C que estourou) antes de morrer. Custo zero em
+    # execução normal.
+    env:
+      PYTHONFAULTHANDLER: "1"
+      # Implementacao do psycopg: `python` usa a libpq do sistema em vez do
+      # wheel binario -- ver o passo "Instalar dependencias". Explicito de
+      # proposito: se um dia a libpq sumir do runner, o job falha na hora,
+      # com mensagem clara, em vez de voltar em silencio pro binario que
+      # causava o segfault.
+      PSYCOPG_IMPL: python
+    timeout-minutes: 40
+    steps:
+      - name: Baixar o codigo
+        uses: actions/checkout@v4
+
+      - name: Preparar Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Instalar dependencias
+        # SEM O WHEEL BINARIO DO PSYCOPG (08/09/2026).
+        #
+        # CAUSA RAIZ, achada com o faulthandler ligado neste mesmo dia. O
+        # processo morria com `Segmentation fault` (exit 139) e a pilha
+        # apontou para dentro do psycopg_binary, executando `SELECT
+        # version()` -- a consulta que o SQLAlchemy faz UMA vez, ao abrir a
+        # primeira conexao. Ou seja: nao era volume de dado, nao era o
+        # INSERT, nao era o Playwright. Era a conexao em si.
+        #
+        # `psycopg[binary]` traz a propria libpq E o proprio OpenSSL dentro
+        # do wheel. No mesmo processo ja existe outro OpenSSL, o do Python
+        # (usado por requests/urllib3 e, na varredura, pelo curl_cffi). Dois
+        # OpenSSL carregados juntos e uma fonte classica de segfault durante
+        # o handshake TLS -- e a conexao com o Supabase e TLS.
+        #
+        # Tirando o wheel binario, o psycopg passa a usar a libpq do sistema
+        # (que o runner ja tem) e o OpenSSL do sistema. Um so, sem conflito.
+        #
+        # requirements.txt continua pedindo `psycopg[binary]` de proposito:
+        # no Windows do Allan nao ha libpq do sistema, e la o wheel binario e
+        # a unica opcao que funciona. A troca vale so aqui, no runner Linux.
+        run: |
+          pip install -r requirements.txt
+          pip uninstall -y psycopg-binary || true
+          python -c "import psycopg" \
+            || (sudo apt-get update -qq && sudo apt-get install -y -qq libpq5)
+          python -c "import psycopg; print('psycopg impl:', psycopg.pq.__impl__, '| libpq', psycopg.pq.version())"
+
+      - name: Capturar curva de juros
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          ANBIMA_CLIENT_ID: ${{ secrets.ANBIMA_CLIENT_ID }}
+          ANBIMA_CLIENT_SECRET: ${{ secrets.ANBIMA_CLIENT_SECRET }}
+        run: |
+          ARGS=""
+          if [ -n "${{ github.event.inputs.start }}" ]; then ARGS="$ARGS --start ${{ github.event.inputs.start }}"; fi
+          if [ -n "${{ github.event.inputs.end }}" ]; then ARGS="$ARGS --end ${{ github.event.inputs.end }}"; fi
+          if [ "${{ github.event.inputs.probe }}" = "true" ]; then ARGS="$ARGS --probe"; fi
+          python -m scripts.fetch_curva_juros $ARGS

@@ -968,6 +968,17 @@ class MercadoSecundario(Base):
     )
 
 
+class CurvaJuros(Base):
+    """ETTJ da ANBIMA por dia: real (IPCA), prefixada e inflação implícita
+    por vértice (26/10/2026, página inicial). `vertices` é JSON
+    `[[du, pre, ipca, implicita], ...]` -- ver app/spreads/curva_juros.py."""
+    __tablename__ = "curva_juros"
+
+    data: Mapped[date] = mapped_column(Date, primary_key=True)
+    vertices: Mapped[str | None] = mapped_column(Text)
+    atualizado_em: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
 class NtnbReferencia(Base):
     """Cache da curva de NTN-B (taxa por vencimento) do dia -- pedido do
     Allan (27/07/2026): "a taxa de referência não vai mudar ao longo do
