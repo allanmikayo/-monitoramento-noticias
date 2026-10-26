@@ -164,11 +164,56 @@ def _taxonomia_securitizados(db: Session) -> dict[tuple, dict]:
             for k, v in acc.items()}
 
 
-def classificar(oferta, tax_cnpj: dict, tax_sec: dict) -> dict:
+# Nome curto demais casa por acaso dentro de outro ("ALFA" em "ALFAVILLE").
+MIN_NOME = 10
+
+
+def _taxonomia_por_nome(db: Session) -> dict[str, dict]:
+    """Nome normalizado -> setor/subsetor/grupo, de todo lugar onde o Hub já
+    classificou alguém: debêntures (nome do emissor), CRI/CRA (originador)
+    e o cadastro de emissores."""
+    acc: dict[str, list] = collections.defaultdict(list)
+    for d in db.scalars(select(Debenture)):
+        if d.setor and d.nome:
+            acc[nome_normalizado(d.nome)].append((d.setor, d.subsetor, d.grupo_economico, d.nome))
+    for s in db.scalars(select(Securitizado)):
+        if s.setor and s.originador_credito:
+            acc[nome_normalizado(s.originador_credito)].append(
+                (s.setor, s.subsetor, s.grupo_economico, s.originador_credito))
+    try:
+        from ..models import Issuer
+        for i in db.scalars(select(Issuer)):
+            if i.setor:
+                for n in (i.nome, i.nome_anbima):
+                    if n:
+                        acc[nome_normalizado(n)].append((i.setor, i.sub_setor, i.grupo_economico, i.nome))
+    except Exception:  # cadastro de emissores ausente: segue sem ele
+        db.rollback()
+    return {nome: {"setor": _moda([v[0] for v in vs]), "subsetor": _moda([v[1] for v in vs]),
+                   "grupo": _moda([v[2] for v in vs]), "nome": vs[0][3]}
+            for nome, vs in acc.items() if len(nome) >= MIN_NOME}
+
+
+def _por_texto(texto: str, tax_nome: dict, nomes_ordenados: list[str]) -> dict | None:
+    """Primeiro nome classificado que aparece INTEIRO no texto do devedor
+    (mais longos primeiro, para "RAIZEN ENERGIA" ganhar de "RAIZEN")."""
+    alvo = f" {nome_normalizado(texto)} "
+    if len(alvo) < MIN_NOME:
+        return None
+    for nome in nomes_ordenados:
+        if f" {nome} " in alvo:
+            return tax_nome[nome]
+    return None
+
+
+def classificar(oferta, tax_cnpj: dict, tax_sec: dict, tax_nome: dict | None = None,
+                nomes_ordenados: list[str] | None = None) -> dict:
+    tax_nome = tax_nome or {}
+    nomes_ordenados = nomes_ordenados or sorted(tax_nome, key=len, reverse=True)
     base = {"numero_requerimento": oferta.numero_requerimento, "devedor": None,
             "setor": NAO_CLASSIFICADO, "subsetor": None, "grupo": None, "origem": None}
 
-    def preencher(t: dict, origem: str, devedor: str | None):
+    def preencher(t: dict | None, origem: str, devedor: str | None):
         if not t or not t.get("setor"):
             return False
         base.update(setor=t["setor"], subsetor=t["subsetor"], grupo=t["grupo"], origem=origem,
@@ -177,7 +222,8 @@ def classificar(oferta, tax_cnpj: dict, tax_sec: dict) -> dict:
 
     if oferta.instrumento == "DEB":
         base["devedor"] = oferta.nome_emissor
-        preencher(tax_cnpj.get(so_digitos(oferta.cnpj_emissor)), "cnpj_emissor", oferta.nome_emissor)
+        (preencher(tax_cnpj.get(so_digitos(oferta.cnpj_emissor)), "cnpj_emissor", oferta.nome_emissor)
+         or preencher(tax_nome.get(nome_normalizado(oferta.nome_emissor)), "nome_emissor", oferta.nome_emissor))
         return base
 
     base["devedor"] = oferta.devedor_curto
@@ -185,8 +231,11 @@ def classificar(oferta, tax_cnpj: dict, tax_sec: dict) -> dict:
         if preencher(tax_cnpj.get(so_digitos(achado)), "cnpj_devedor", None):
             return base
     em = emissao_num(oferta.emissao)
-    if em is not None:
-        preencher(tax_sec.get((nome_normalizado(oferta.nome_emissor), em)), "cadastro_cri_cra", oferta.devedor_curto)
+    if em is not None and preencher(tax_sec.get((nome_normalizado(oferta.nome_emissor), em)),
+                                    "cadastro_cri_cra", oferta.devedor_curto):
+        return base
+    preencher(_por_texto(oferta.devedor or oferta.devedor_curto or "", tax_nome, nomes_ordenados),
+              "nome_devedor", None)
     return base
 
 
@@ -202,7 +251,9 @@ def recalcular(db: Session) -> dict:
 
     tax_cnpj = _taxonomia_por_cnpj(db)
     tax_sec = _taxonomia_securitizados(db)
-    classes = [classificar(o, tax_cnpj, tax_sec) for o in ofertas]
+    tax_nome = _taxonomia_por_nome(db)
+    nomes = sorted(tax_nome, key=len, reverse=True)
+    classes = [classificar(o, tax_cnpj, tax_sec, tax_nome, nomes) for o in ofertas]
 
     db.execute(delete(OfertaCVMAtivo))
     db.execute(delete(OfertaCVMClassificacao))
@@ -220,6 +271,14 @@ def recalcular(db: Session) -> dict:
     vol_casado = sum(o.valor_total or 0 for o in debs_validas if o.numero_requerimento in casadas)
     classificadas = collections.Counter(
         (o.instrumento, c["setor"] != NAO_CLASSIFICADO) for o, c in zip(ofertas, classes))
+    vol_inst = collections.Counter()
+    vol_cls = collections.Counter()
+    origens = collections.Counter(c["origem"] for c in classes if c["origem"])
+    for o, c in zip(ofertas, classes):
+        if o.status in ("Oferta Encerrada",) and (o.valor_total or 0) > 0:
+            vol_inst[o.instrumento] += o.valor_total
+            if c["setor"] != NAO_CLASSIFICADO:
+                vol_cls[o.instrumento] += o.valor_total
     return {
         "debentures_registradas": len(debs_validas),
         "debentures_casadas": sum(por_conf.values()),
@@ -227,4 +286,6 @@ def recalcular(db: Session) -> dict:
         "volume_casado_pct": round(100 * vol_casado / vol_total, 1) if vol_total else None,
         "tickers_ligados": len(ligacoes),
         "classificadas": {f"{i}:{'sim' if ok else 'nao'}": n for (i, ok), n in sorted(classificadas.items())},
+        "volume_classificado_pct": {i: round(100 * vol_cls[i] / v, 1) for i, v in vol_inst.items() if v},
+        "origens": dict(origens),
     }
