@@ -46,7 +46,7 @@ def main() -> int:
             # o banco continua com o dado de ontem.
             logging.error("coleta abortada: %s", e)
             return 1
-    print(f"ofertas lidas: {resumo['lidas']} | novas: {resumo['novas']} | "
+    print(f"::notice title=ofertas_cvm::ofertas lidas: {resumo['lidas']} | novas: {resumo['novas']} | "
           f"mudaram de status: {resumo['mudancas']} | total no banco: {resumo['no_banco']}")
     return 0
 
