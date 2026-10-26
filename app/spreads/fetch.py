@@ -357,6 +357,13 @@ class Caracteristicas:
     empresa: str | None = None
     situacao: str | None = None
     data_vencimento: date | None = None
+    # Dados da emissão (26/10/2026): ligam a debênture à oferta da CVM.
+    emissao: int | None = None
+    serie: str | None = None
+    registro_cvm: str | None = None
+    data_registro_cvm: date | None = None
+    quantidade_emitida: float | None = None
+    valor_nominal_emissao: float | None = None
 
 
 def fetch_caracs(session: requests.Session) -> list[Caracteristicas]:
@@ -388,7 +395,21 @@ COL_TAXA = "Juros Criterio Novo - Taxa"
 COL_EMPRESA = "Empresa"
 COL_SITUACAO = "Situacao"
 COL_VENCIMENTO = "Data de Vencimento"
-COLS_OPCIONAIS = (COL_EMPRESA, COL_SITUACAO, COL_VENCIMENTO)
+COL_EMISSAO = "Emissao"
+COL_SERIE = "Serie"
+COL_REGISTRO_CVM = "Registro CVM da Emissao"
+COL_DATA_REGISTRO_CVM = "Data de Registro CVM da Emissao"
+COL_QTD_EMITIDA = "Quantidade Emitida"
+COL_VNE = "Valor Nominal na Emissao"
+COLS_OPCIONAIS = (COL_EMPRESA, COL_SITUACAO, COL_VENCIMENTO, COL_EMISSAO, COL_SERIE,
+                  COL_REGISTRO_CVM, COL_DATA_REGISTRO_CVM, COL_QTD_EMITIDA, COL_VNE)
+
+
+def _inteiro(valor: str | None) -> int | None:
+    """ "002" -> 2. Emissão vem com zeros à esquerda no arquivo e sem eles
+    na CVM; comparar como número evita o descasamento."""
+    digitos = re.sub(r"\D", "", valor or "")
+    return int(digitos) if digitos else None
 
 
 def parse_caracs(texto: str) -> list[Caracteristicas]:
@@ -436,6 +457,12 @@ def parse_caracs(texto: str) -> list[Caracteristicas]:
             empresa=(r[COL_EMPRESA] or None),
             situacao=(r[COL_SITUACAO] or None),
             data_vencimento=parse_data_br(r[COL_VENCIMENTO]),
+            emissao=_inteiro(r[COL_EMISSAO]),
+            serie=(r[COL_SERIE] or None),
+            registro_cvm=(r[COL_REGISTRO_CVM] or None),
+            data_registro_cvm=parse_data_br(r[COL_DATA_REGISTRO_CVM]),
+            quantidade_emitida=parse_num(r[COL_QTD_EMITIDA]),
+            valor_nominal_emissao=parse_num(r[COL_VNE]),
         )
         for r in df.to_dict("records")
         if r[COL_CODIGO]

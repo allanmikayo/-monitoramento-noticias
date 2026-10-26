@@ -668,3 +668,24 @@ def run_migrations(tentativas: int = 3, eng: Engine | None = None) -> list[tuple
         if erro:
             falhas.append((stmt, erro))
     return falhas
+
+
+def garantir_colunas(tabela, eng: Engine | None = None) -> list[str]:
+    """Cria, numa tabela que JÁ existe, as colunas do modelo que faltam
+    (26/10/2026). Pergunta ao catálogo antes e só manda ALTER para o que
+    falta -- então, depois da primeira vez, custa uma consulta e não trava
+    ninguém. Para jobs que ganharam coluna nova sem depender do init_db.
+    Devolve as colunas criadas."""
+    from sqlalchemy import inspect, text
+
+    alvo = eng if eng is not None else engine
+    existentes = {c["name"] for c in inspect(alvo).get_columns(tabela.name)}
+    criadas = []
+    with alvo.begin() as con:
+        for col in tabela.columns:
+            if col.name in existentes:
+                continue
+            tipo = col.type.compile(dialect=alvo.dialect)
+            con.execute(text(f'ALTER TABLE {tabela.name} ADD COLUMN {col.name} {tipo}'))
+            criadas.append(col.name)
+    return criadas

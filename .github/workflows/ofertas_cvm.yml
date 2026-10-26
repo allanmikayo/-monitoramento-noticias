@@ -9,6 +9,12 @@ on:
   schedule:
     - cron: "0 10 * * 1-6"
   workflow_dispatch:
+    inputs:
+      baixar:
+        description: "Atualizar o arquivo de características antes de casar"
+        type: boolean
+        required: false
+        default: false
 
 concurrency:
   group: ofertas_cvm
@@ -79,3 +85,14 @@ jobs:
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
         run: python -m scripts.coletar_ofertas_cvm --sem-backup
+
+      # Liga ofertas -> debêntures e classifica o setor de quem deve
+      # (app/primario/casamento.py). `baixar` = atualiza as características
+      # do debentures.com.br antes (dispatch manual de diagnóstico).
+      - name: Casar ofertas com debêntures e setor
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: |
+          ARGS=""
+          if [ "${{ github.event.inputs.baixar }}" = "true" ]; then ARGS="--baixar-caracteristicas"; fi
+          python -m scripts.casar_ofertas $ARGS

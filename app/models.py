@@ -692,6 +692,49 @@ class DebentureCaracteristica(Base):
     estoque: Mapped[float | None] = mapped_column(Float)
     data_estoque: Mapped[date | None] = mapped_column(Date)
     atualizado_em: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # DADOS DA EMISSÃO (26/10/2026) -- é por eles que uma oferta da CVM
+    # (que não traz ticker) é ligada às suas debêntures: CNPJ + número da
+    # emissão + data do registro CVM. Ver app/primario/casamento.py.
+    # Colunas novas numa tabela existente: criadas por
+    # `db.garantir_colunas` no job diário, não pelo boot.
+    emissao: Mapped[int | None] = mapped_column(Integer)
+    serie: Mapped[str | None] = mapped_column(String(20))
+    registro_cvm: Mapped[str | None] = mapped_column(String(60))
+    data_registro_cvm: Mapped[date | None] = mapped_column(Date)
+    quantidade_emitida: Mapped[float | None] = mapped_column(Float)
+    valor_nominal_emissao: Mapped[float | None] = mapped_column(Float)
+
+
+class OfertaCVMAtivo(Base):
+    """Oferta da CVM (debênture) -> debêntures que ela emitiu (26/10/2026).
+
+    O arquivo de ofertas da CVM não traz ticker; a ligação é inferida por
+    `app/primario/casamento.py` (CNPJ + número da emissão + data do
+    registro + volume) e regravada inteira a cada rodada. `metodo` diz
+    quais chaves bateram e `confianca` resume em alta/média/baixa.
+    """
+    __tablename__ = "ofertas_cvm_ativos"
+
+    numero_requerimento: Mapped[str] = mapped_column(String(40), primary_key=True)
+    codigo: Mapped[str] = mapped_column(String(40), primary_key=True)
+    metodo: Mapped[str | None] = mapped_column(String(60))
+    confianca: Mapped[str | None] = mapped_column(String(10))
+    pontos: Mapped[int | None] = mapped_column(Integer)
+
+
+class OfertaCVMClassificacao(Base):
+    """Setor/subsetor/grupo de quem carrega o risco de cada oferta
+    (26/10/2026). Debênture: pelo CNPJ do emissor. CRI/CRA: pelo devedor
+    (CNPJ citado no campo de devedores, ou a série no cadastro de CRI/CRA).
+    Sem casamento: "Não classificado". Regravada a cada rodada."""
+    __tablename__ = "ofertas_cvm_classificacao"
+
+    numero_requerimento: Mapped[str] = mapped_column(String(40), primary_key=True)
+    devedor: Mapped[str | None] = mapped_column(String(300))
+    setor: Mapped[str | None] = mapped_column(String(120))
+    subsetor: Mapped[str | None] = mapped_column(String(120))
+    grupo: Mapped[str | None] = mapped_column(String(200))
+    origem: Mapped[str | None] = mapped_column(String(40))
 
 
 class NegocioB3(Base):

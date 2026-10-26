@@ -37,7 +37,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from app.db import Base, SessionLocal, engine, ensure_schema
+from app.db import Base, SessionLocal, engine, ensure_schema, garantir_colunas
 from app.models import DebentureCaracteristica
 from app.spreads.fetch import (
     build_session,
@@ -128,6 +128,8 @@ def main() -> None:
             # nova, sem ALTER em tabela existente, não trava ninguém -- e
             # assim ela aparece sem depender de rodar init_db à mão.
             DebentureCaracteristica.__table__.create(bind=engine, checkfirst=True)
+            # Colunas dos dados da emissão (26/10/2026): só manda ALTER se faltar.
+            garantir_colunas(DebentureCaracteristica.__table__)
             caracs = caracs if "caracs" in locals() else fetch_caracs(session)
             n = persist_caracteristicas_completas(db, caracs)
             logger.info("Características completas gravadas: %d debênture(s)", n)
@@ -137,6 +139,17 @@ def main() -> None:
                 logger.info("Estoque por ativo de %s: %d debênture(s)", ultimo_dia_com_dado, n)
         except Exception:
             logger.exception("Falha ao gravar características completas/estoque — não impede o resto")
+
+        # Características novas mudam o casamento oferta CVM -> debêntures
+        # (aba Mercado Primário). Barato: refaz tudo em memória.
+        try:
+            from app.models import OfertaCVMAtivo, OfertaCVMClassificacao
+            from app.primario import casamento
+            OfertaCVMAtivo.__table__.create(bind=engine, checkfirst=True)
+            OfertaCVMClassificacao.__table__.create(bind=engine, checkfirst=True)
+            logger.info("Casamento de ofertas CVM: %s", casamento.recalcular(db))
+        except Exception:
+            logger.exception("Falha ao casar ofertas da CVM — não impede o resto")
 
     logger.info(
         "Concluído: %d dia(s) com dado, %d linha(s) de spread no total.",

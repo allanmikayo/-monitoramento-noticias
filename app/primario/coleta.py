@@ -231,9 +231,15 @@ GRUPOS_INVESTIDOR = {
     "qtd_institucionais": ("Qtde_VM_Entidade_Previdencia_Privada",
                            "Qtde_VM_Companhia_Seguradora"),
     "qtd_estrangeiro": ("Qtde_VM_Investidor_Estrangeiro",),
+    # Os dois últimos nomes vêm em duas grafias: o CSV atual traz o nome
+    # inteiro; a versão anterior (e o dicionário de dados) cortava em 50
+    # caracteres. Até 26/10/2026 só a grafia cortada era lida, e esses dois
+    # grupos entravam como zero.
     "qtd_outros": ("Qtde_VM_Clube_Investimento", "Qtde_VM_Demais_Pessoa_Juridica",
                    "Qtde_VM_Demais_Pessoa_Juridica_Emissora_Partic_Con",
-                   "Qdte_VM_Soc_Adm_Emp_Prop_Demais_Pess_Jurid_Emiss_P"),
+                   "Qtde_VM_Demais_Pessoa_Juridica_Emissora_Partic_Consorcio",
+                   "Qdte_VM_Soc_Adm_Emp_Prop_Demais_Pess_Jurid_Emiss_P",
+                   "Qdte_VM_Soc_Adm_Emp_Prop_Demais_Pess_Jurid_Emiss_Partic_Consorcio"),
 }
 
 

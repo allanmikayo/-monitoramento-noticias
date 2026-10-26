@@ -182,6 +182,12 @@ def persist_caracteristicas_completas(db: Session, caracs: list[Caracteristicas]
         linha.indice_emissao = c.indice_emissao
         linha.percentual_emissao = c.percentual_emissao
         linha.taxa_emissao = c.taxa_emissao
+        linha.emissao = c.emissao
+        linha.serie = c.serie
+        linha.registro_cvm = c.registro_cvm
+        linha.data_registro_cvm = c.data_registro_cvm
+        linha.quantidade_emitida = c.quantidade_emitida
+        linha.valor_nominal_emissao = c.valor_nominal_emissao
         linha.atualizado_em = agora
         n += 1
     db.commit()
