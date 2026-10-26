@@ -37,10 +37,11 @@ def main() -> int:
     if a.probe:
         bruto = cj.buscar(_d(a.start) if a.start else None)
         texto = json.dumps(bruto, ensure_ascii=False)
-        print(texto[:3000])
-        print("...", len(texto), "caracteres")
         ref, vert = cj.extrair_vertices(bruto)
-        print("data_referencia:", ref, "| vértices:", len(vert), vert[:3])
+        # `::notice::` vira anotação do GitHub Actions, legível pela API
+        # mesmo quando o log da execução não é.
+        resumo = f"data_referencia={ref} | vertices={len(vert)} | {vert[:3]} || {texto[:2500]}"
+        print("::notice title=curva_juros probe::" + resumo.replace("\n", " "))
         return 0
 
     CurvaJuros.__table__.create(bind=engine, checkfirst=True)
@@ -52,7 +53,7 @@ def main() -> int:
                 return 1
             cj.gravar(db, ref, vert)
             db.commit()
-            print(f"Curva de {ref:%d/%m/%Y} gravada ({len(vert)} vértices).")
+            print(f"::notice title=curva_juros::Curva de {ref:%d/%m/%Y} gravada ({len(vert)} vértices).")
             return 0
 
         existentes = set(db.scalars(select(CurvaJuros.data)))
@@ -75,7 +76,7 @@ def main() -> int:
                 db.commit()
                 print(f"... {gravados} dias gravados (até {dia})")
         db.commit()
-        print(f"Backfill: {gravados} dias gravados, {vazios} sem publicação.")
+        print(f"::notice title=curva_juros::Backfill: {gravados} dias gravados, {vazios} sem publicação.")
         return 0 if gravados or vazios else 1
 
 
