@@ -123,11 +123,13 @@ def test_inicio_e_noticias_mudaram_de_endereco(cliente):
     assert anon.get("/", follow_redirects=False).status_code in (302, 303, 401)
     r = cliente.get("/")
     assert r.status_code == 200
-    assert "Fixed Income Team" in r.text and "paula.toute@itaubba.com" in r.text
     # Saudação (bom dia / boa tarde / boa noite) é escrita no navegador pelo
     # horário de Brasília desde 28/10/2026; o servidor manda o nome.
     assert 'id="hero-saudacao"' in r.text and ", Allan</h1>" in r.text
-    assert "Movimentos na semana" in r.text and "Agenda de resultados" in r.text
+    # Grade em quadrantes (28/10/2026): curvas, agenda e um feed só de
+    # ratings + notícias.
+    for trecho in ('id="graf-pre"', 'id="graf-real"', "Agenda de resultados", 'id="lista-feed"', 'id="cal-semdata"'):
+        assert trecho in r.text, trecho
     assert cliente.get("/noticias").status_code == 200
     for bloco in ("spreads", "secundario", "primario", "curvas", "noticias", "relatorios", "resultados"):
         resp = cliente.get(f"/api/inicio/{bloco}")

@@ -2602,3 +2602,25 @@ da cobertura não tem data.
 - Tela: coluna de números (já divulgaram, esta semana, próxima semana, sem
   data, data passou) + duas colunas (esta semana / próxima) dia a dia.
   Cores pastel: Local #FDE3CF, Offshore #DCE9F7, Offshore + Local #FBDDEB.
+
+### Página inicial em quadrantes — 28/10/2026 (3ª rodada)
+
+Pedido do Allan: manter abertura e cards do topo; o resto em quadrantes
+`1 2 3 / 4 5 6`: curvas em 1 e 2, ratings + notícias numa lista só (por
+data) em 3+6, agenda em 4+5, simplificada.
+- `.inicio-grade` (grid-template-areas "pre real feed" / "cal cal feed"),
+  altura `max(560px, 100vh - 352px)`: a página cabe em 1080p e cada cartão
+  rola por dentro (`.ic-rola`, com `position: relative` — sem isso os
+  `.sr-only` absolutos dos chips vazavam e a página ganhava rolagem).
+- Saíram da página inicial: "Movimentos na semana", "Últimos relatórios" e
+  o cartão do time (`EQUIPE` continua em `inicio_routes.py`, sem uso na tela).
+- Feed: `/api/inicio/noticias` (notícias de 7 dias, até 40; ratings de 5
+  dias) misturado no navegador por data, abas Tudo/Ratings/Notícias. Só o
+  rating leva selo (tipo da ação); notícia é o padrão.
+- Agenda: fita contínua de dias úteis (da semana da primeira data, até 6
+  semanas para trás, até a última data ou o prazo), cabeçalho de semana
+  fixo ao rolar, abre posicionada em hoje. Forma = horário (■ após o
+  fechamento, ● antes da abertura), cor = tipo, ✓ = divulgou. Destaque só
+  para "N sem data" (abre a lista na primeira sem data). "Ver as N" troca a
+  fita pela lista no mesmo cartão. Sem o texto de temporada/prazo no
+  cabeçalho (o contador continua na abertura).

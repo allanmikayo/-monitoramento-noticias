@@ -57,18 +57,18 @@
     if (partes.length) document.getElementById("hero-brief").innerHTML = partes.join("");
   }
 
-  // ---- Agenda de resultados (28/10/2026, formato de relatório semanal) ----
-  // A data vem da lista do time (importada aqui mesmo ou ajustada chip a
-  // chip por admin); a CVM diz quem já divulgou. Duas colunas: esta semana
-  // e a próxima. Cor do chip = tipo de cobertura (Local / Offshore / os dois).
+  // ---- Agenda de resultados (28/10/2026, 3ª rodada) ---------------------
+  // Uma fita contínua de dias úteis, rolável, que abre posicionada em hoje
+  // (para cima, o que já passou; para baixo, as próximas semanas). Cor do
+  // chip = tipo de cobertura; forma = horário (■ após o fechamento,
+  // ● antes da abertura); ✓ = já divulgou. Em destaque, só quem está sem data.
   const ROT_STATUS = {
     divulgada: "Divulgou", agendada: "Agendada", pendente: "Data passou, sem entrega na CVM",
     sem_data: "Sem data",
   };
   const TIPOS = ["Local", "Offshore", "Offshore + Local"];
   const classeTipo = (t) => (t === "Local" ? "tp-local" : t === "Offshore" ? "tp-off" : t === "Offshore + Local" ? "tp-ambos" : "tp-nd");
-  const HORA = { "após o fechamento": ["☾", "após o fechamento"], "antes da abertura": ["☀", "antes da abertura"] };
-  const POR_DIA = 7;
+  const HORA = { "após o fechamento": ["hr-apos", "após o fechamento"], "antes da abertura": ["hr-antes", "antes da abertura"] };
   const deIso = (iso) => { const [y, m, d] = iso.split("-").map(Number); return new Date(y, m - 1, d); };
   const isoDia = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
   const DIA_CURTO = ["dom", "seg", "ter", "qua", "qui", "sex", "sáb"];
@@ -77,30 +77,19 @@
 
   function chip(e) {
     const h = HORA[e.horario];
-    const icone = e.status === "divulgada" ? '<span class="cal-ok" aria-hidden="true">✓</span>'
-      : h ? `<span class="cal-hora" aria-hidden="true">${h[0]}</span>` : "";
-    return `<button type="button" class="cal-chip ${classeTipo(e.tipo)} st-${e.status}" data-id="${e.company_id}">${icone}${esc(e.nome)}<span class="sr-only"> — ${ROT_STATUS[e.status]}${e.tipo ? " · " + esc(e.tipo) : ""}${h ? " · " + h[1] : ""}</span></button>`;
+    const marca = e.status === "divulgada" ? '<span class="cal-ok" aria-hidden="true">✓</span>'
+      : h ? `<i class="cal-hr ${h[0]}" aria-hidden="true"></i>` : "";
+    return `<button type="button" class="cal-chip ${classeTipo(e.tipo)} st-${e.status}" data-id="${e.company_id}">${marca}${esc(e.nome)}<span class="sr-only"> — ${ROT_STATUS[e.status]}${e.tipo ? " · " + esc(e.tipo) : ""}${h ? " · " + h[1] : ""}</span></button>`;
   }
 
   function linhaDia(iso, lista, hoje, prazo) {
     const dt = deIso(iso);
     const ordem = { divulgada: 0, pendente: 1, agendada: 2 };
     lista.sort((a, b) => (ordem[a.status] ?? 3) - (ordem[b.status] ?? 3) || a.nome.localeCompare(b.nome));
-    const vis = lista.slice(0, POR_DIA).map(chip).join("");
-    const resto = lista.length - POR_DIA;
-    const mais = resto > 0 ? `<button type="button" class="cal-mais" data-dia="${iso}" title="${esc(lista.slice(POR_DIA).map((e) => e.nome).join(", "))}">+${resto}</button>` : "";
-    const cls = iso === hoje ? "cal-hoje" : iso < hoje ? "cal-passado" : "";
-    const marca = iso === prazo ? '<span class="cal-prazo" title="Prazo da CVM">prazo</span>' : "";
-    return `<div class="cal-linha ${cls}"><span class="cal-ddia"><span class="cal-dsem">${iso === hoje ? "hoje" : DIA_CURTO[dt.getDay()]}</span><b>${dt.getDate()}</b>${marca}</span>
-      <span class="cal-chips">${vis || '<span class="cal-vazio">—</span>'}${mais}</span></div>`;
-  }
-
-  function semana(titulo, [ini, fim], porDia, hoje, prazo) {
-    const dias = [];
-    for (let d = deIso(ini); isoDia(d) <= fim; d.setDate(d.getDate() + 1)) dias.push(isoDia(d));
-    const n = dias.reduce((s, iso) => s + (porDia[iso] || []).length, 0);
-    return `<div class="cal-bloco"><div class="cal-semana-tit">${titulo} <span class="muted">${dm(ini)}–${dm(fim)} · ${n} ${n === 1 ? "empresa" : "empresas"}</span></div>
-      ${dias.map((iso) => linhaDia(iso, porDia[iso] || [], hoje, prazo)).join("")}</div>`;
+    const cls = (iso === hoje ? "cal-hoje" : iso < hoje ? "cal-passado" : "") + (lista.length ? "" : " cal-vazia");
+    const marca = iso === prazo ? '<span class="cal-prazo" title="Prazo da CVM">prazo CVM</span>' : "";
+    return `<div class="cal-linha ${cls}" data-dia="${iso}"><span class="cal-ddia"><span class="cal-dsem">${iso === hoje ? "hoje" : DIA_CURTO[dt.getDay()]}</span><b>${dt.getDate()}</b><span class="cal-mes">${MESES[dt.getMonth()]}</span></span>
+      <span class="cal-chips">${lista.map(chip).join("")}${marca}</span></div>`;
   }
 
   function desenharCalendario(d) {
@@ -111,25 +100,45 @@
       corpo.innerHTML = '<span class="muted small">Agenda ainda sem dados.</span>';
       return;
     }
-    const r = d.resumo, hoje = d.hoje, sem = d.semanas;
+    const r = d.resumo, hoje = d.hoje;
     const porDia = {};
     d.empresas.forEach((e) => { if (e.data) (porDia[e.data] = porDia[e.data] || []).push(e); });
 
-    // Coluna de números: o "relatório da semana"
-    const depois = d.empresas.filter((e) => e.data && e.data > sem.proxima[1] && e.status !== "divulgada");
-    const ultima = depois.length ? depois.map((e) => e.data).sort().pop() : null;
-    const kpi = (n, rot, sub, extra) => `<${extra ? `button type="button" class="cal-kpi cal-kpi-alerta" data-abrir="1" title="Ver na lista"` : 'div class="cal-kpi"'}><b>${n}</b><span>${rot}</span>${sub ? `<em>${sub}</em>` : ""}</${extra ? "button" : "div"}>`;
-    const kpis = kpi(`${r.divulgada}<small>/${r.total}</small>`, "já divulgaram", "")
-      + kpi(r.semana_total, "esta semana", r.semana_total ? `${r.semana_divulgadas} já divulgaram` : "")
-      + kpi(r.proxima_total, "próxima semana", depois.length ? `+${depois.length} até ${dm(ultima)}` : "")
-      + (r.sem_data ? kpi(r.sem_data, "sem data", "ver lista ›", true) : "")
-      + (r.pendente ? kpi(r.pendente, "data passou", "sem entrega na CVM", true) : "");
+    // Da segunda da semana da primeira data (no máximo 6 semanas para trás)
+    // até a última data ou o prazo, o que vier depois.
+    const datas = Object.keys(porDia).sort();
+    const segDe = (iso) => { const x = deIso(iso); x.setDate(x.getDate() - ((x.getDay() + 6) % 7)); return x; };
+    const limite = deIso(hoje); limite.setDate(limite.getDate() - 42);
+    let ini = segDe(datas.length && datas[0] < hoje ? datas[0] : hoje);
+    if (ini < limite) ini = segDe(isoDia(limite));
+    const fimIso = [datas[datas.length - 1] || hoje, t.prazo, hoje].sort().pop();
+    const fim = deIso(fimIso); fim.setDate(fim.getDate() + ((5 - fim.getDay() + 7) % 7));   // até a sexta
 
-    corpo.innerHTML = `<div class="cal-corpo"><div class="cal-kpis">${kpis}</div>
-      ${semana("Esta semana", sem.atual, porDia, hoje, t.prazo)}${semana("Próxima semana", sem.proxima, porDia, hoje, t.prazo)}</div>`;
+    let html = "";
+    for (const x = new Date(ini); x <= fim; x.setDate(x.getDate() + 1)) {
+      if (x.getDay() === 0 || x.getDay() === 6) continue;
+      const iso = isoDia(x);
+      if (x.getDay() === 1) {
+        const sex = new Date(x); sex.setDate(sex.getDate() + 4);
+        let n = 0;
+        for (const y = new Date(x); y <= sex; y.setDate(y.getDate() + 1)) n += (porDia[isoDia(y)] || []).length;
+        const atual = iso <= hoje && hoje <= isoDia(sex);
+        html += `<div class="cal-sem-cab${atual ? " atual" : ""}">${atual ? "Esta semana" : "Semana de " + dm(iso)}<span>${n ? `${n} ${n === 1 ? "empresa" : "empresas"}` : "—"}</span></div>`;
+      }
+      html += linhaDia(iso, porDia[iso] || [], hoje, t.prazo);
+    }
+    corpo.innerHTML = html;
 
-    const cvm = d.cvm_ate ? ` · CVM até ${dm(d.cvm_ate)}` : "";
-    document.getElementById("cal-sub").textContent = `· ${t.rotulo} · prazo CVM ${dm(t.prazo)}${cvm}`;
+    // Abre em hoje (ou no próximo dia útil)
+    const alvo = [...corpo.querySelectorAll(".cal-linha")].find((l) => l.dataset.dia >= hoje);
+    if (alvo) {
+      const cab = alvo.previousElementSibling && alvo.previousElementSibling.classList.contains("cal-sem-cab") ? alvo.previousElementSibling : null;
+      corpo.scrollTop = (cab || alvo).offsetTop - corpo.offsetTop - (cab ? 0 : 26);
+    }
+
+    const sd = document.getElementById("cal-semdata");
+    sd.hidden = !r.sem_data;
+    sd.innerHTML = `<b>${r.sem_data}</b> sem data`;
 
     desenharLista(d);
 
@@ -161,7 +170,7 @@
     const ver = document.getElementById("cal-ver");
     ver.hidden = false;
     ver.dataset.total = r.total;
-    ver.textContent = document.getElementById("cal-tabela").hidden ? `Ver as ${r.total} ▾` : "Fechar lista ▴";
+    ver.textContent = document.getElementById("cal-tabela").hidden ? `Ver as ${r.total}` : "Voltar à agenda";
     const ordem = { sem_data: 0, pendente: 1, agendada: 2, divulgada: 3 };
     const linhas = [...d.empresas].sort((a, b) => ordem[a.status] - ordem[b.status] || (a.data || "").localeCompare(b.data || "") || a.nome.localeCompare(b.nome));
     const tipo = (e) => (e.tipo ? `<span class="cal-tag ${classeTipo(e.tipo)}">${esc(e.tipo)}</span>` : "");
@@ -237,13 +246,22 @@
   card.addEventListener("mouseout", (ev) => {
     if (!popFixo && ev.target.closest(".cal-chip") && !ev.relatedTarget?.closest?.(".cal-chip")) pop.hidden = true;
   });
+  function mostrarLista(sim) {
+    document.getElementById("cal-tabela").hidden = !sim;
+    document.getElementById("cal-faixa").hidden = sim;
+    const ver = document.getElementById("cal-ver");
+    ver.setAttribute("aria-expanded", String(sim));
+    ver.textContent = sim ? "Voltar à agenda" : `Ver as ${ver.dataset.total || ""}`;
+  }
   card.addEventListener("click", (ev) => {
-    const abrir = ev.target.closest("[data-abrir]");
-    if (abrir) {
-      const tab = document.getElementById("cal-tabela");
-      tab.hidden = false;
-      document.getElementById("cal-ver").textContent = "Fechar lista ▴";
-      tab.scrollIntoView({ behavior: "smooth", block: "start" });
+    if (ev.target.closest("#cal-semdata")) {
+      mostrarLista(true);
+      // Rola só a caixa da lista (scrollIntoView rolaria a página inteira).
+      const caixa = document.getElementById("cal-tabela");
+      const prim = caixa.querySelector(".cal-pill.st-sem_data");
+      const cab = caixa.querySelector("thead");
+      caixa.scrollTop = 0;
+      if (prim) caixa.scrollTop = prim.closest("tr").getBoundingClientRect().top - caixa.getBoundingClientRect().top - (cab ? cab.offsetHeight : 0);
       return;
     }
     const b = ev.target.closest(".cal-chip");
@@ -285,32 +303,15 @@
   });
   document.addEventListener("keydown", (ev) => { if (ev.key === "Escape") { popFixo = false; pop.hidden = true; } });
 
-  document.getElementById("cal-ver").addEventListener("click", (ev) => {
-    const tab = document.getElementById("cal-tabela");
-    tab.hidden = !tab.hidden;
-    ev.currentTarget.setAttribute("aria-expanded", String(!tab.hidden));
-    ev.currentTarget.textContent = tab.hidden ? `Ver as ${ev.currentTarget.dataset.total} ▾` : "Fechar lista ▴";
+  document.getElementById("cal-ver").addEventListener("click", () => {
+    mostrarLista(document.getElementById("cal-tabela").hidden);
   });
 
   buscar("/api/inicio/resultados").then(desenharCalendario).catch(() => {
     document.getElementById("cal-faixa").innerHTML = '<span class="muted small">Erro ao carregar a agenda.</span>';
   });
 
-  // ---- Spreads e movimentos --------------------------------------------
-  let spreadsDados = null;
-
-  function desenharMovers(i) {
-    const c = spreadsDados && spreadsDados.classes[i];
-    const linha = (m, cls) => `<a class="ic-mov" href="/spreads" title="${esc(m.nome || m.codigo)} · spread ${fmt(m.spread, 0)} bps">
-        <b>${esc(m.codigo)}</b><span class="ic-mov-nome">${esc(m.nome || "")}</span>
-        <span class="ic-mov-d ${cls}">${sinal(m.variacao_bps, 1)}</span></a>`;
-    const vazio = '<span class="muted small">Sem variação suficiente.</span>';
-    document.getElementById("lista-aberturas").innerHTML = c && c.aberturas.length
-      ? c.aberturas.map((m) => linha(m, "abre")).join("") : vazio;
-    document.getElementById("lista-fechamentos").innerHTML = c && c.fechamentos.length
-      ? c.fechamentos.map((m) => linha(m, "fecha")).join("") : vazio;
-  }
-
+  // ---- Spreads ------------------------------------------------------------
   buscar("/api/inicio/spreads").then((d) => {
     spreadsDados = d;
     d.classes.forEach((c, i) => {
@@ -328,15 +329,7 @@
     }
     const ref = d.classes[0] && d.classes[0].data_referencia;
     if (ref) atualizarDatas("spreads", "Spreads de " + dm(ref));
-    desenharMovers(0);
   }).catch(() => { [0, 1].forEach((i) => erro(document.getElementById("card-spread-" + i))); });
-
-  document.getElementById("movers-tabs").addEventListener("click", (ev) => {
-    const b = ev.target.closest(".win-btn");
-    if (!b) return;
-    ev.currentTarget.querySelectorAll(".win-btn").forEach((x) => x.classList.toggle("active", x === b));
-    desenharMovers(Number(b.dataset.i));
-  });
 
   // ---- Secundário -------------------------------------------------------
   buscar("/api/inicio/secundario").then((d) => {
@@ -404,32 +397,38 @@
   const item = (url, meta, titulo) => `<a class="ic-item" href="${esc(url)}" target="_blank" rel="noopener">
       <span class="ic-meta">${meta}</span><span class="ic-tit">${esc(titulo)}</span></a>`;
 
-  buscar("/api/inicio/noticias").then((d) => {
-    document.getElementById("ratings-total").textContent = d.ratings.length ? `· ${d.ratings.length} em 5 dias` : "";
-    const rebaix = d.ratings.filter((a) => tipoRating(a.titulo) === "rebaixamento").length;
-    if (d.ratings.length) briefing("ratings", `<b>${d.ratings.length}</b> ações de rating em 5 dias${rebaix ? `, ${rebaix} rebaixamento${rebaix > 1 ? "s" : ""}` : ""}`);
-    document.getElementById("lista-ratings").innerHTML = d.ratings.length ? d.ratings.slice(0, 4).map((a) => {
-      const t = tipoRating(a.titulo);
-      const meta = `<span class="rt-pill rt-${t}">${TIPOS_RATING[t].simbolo} ${TIPOS_RATING[t].rotulo}</span>`
-        + `${a.empresas[0] ? ` <b class="ic-meta-emp">${esc(a.empresas[0])}</b>` : ""} · ${esc(agencia(a.fonte))} · ${quando(a.quando)}`;
-      return item(a.url, meta, a.titulo);
-    }).join("") : '<span class="muted small">Nenhuma ação nos últimos 5 dias.</span>';
-
-    document.getElementById("lista-noticias").innerHTML = d.noticias.length ? d.noticias.slice(0, 4).map((a) => {
+  // Ratings e notícias numa lista só, da mais recente para a mais antiga.
+  let feed = [], feedFiltro = "tudo";
+  function desenharFeed() {
+    const lista = feed.filter((a) => feedFiltro === "tudo" || a.grupo === feedFiltro);
+    document.getElementById("lista-feed").innerHTML = lista.length ? lista.slice(0, 80).map((a) => {
+      let selo;
+      if (a.grupo === "rating") {
+        const t = tipoRating(a.titulo);
+        selo = `<span class="rt-pill rt-${t}">${TIPOS_RATING[t].simbolo} ${TIPOS_RATING[t].rotulo}</span>`;
+      } else selo = "";   // notícia é o padrão; só o rating ganha selo
       const tag = a.empresas[0] || a.setores[0] || "";
-      return item(a.url, `${quando(a.quando)} · ${esc(a.fonte)}${tag ? ` · <b class="ic-meta-emp">${esc(tag)}</b>` : ""}`, a.titulo);
-    }).join("") : '<span class="muted small">Nenhuma notícia na última semana.</span>';
-  }).catch(() => {
-    ["lista-ratings", "lista-noticias"].forEach((id) => { document.getElementById(id).innerHTML = '<span class="muted small">Erro ao carregar.</span>'; });
+      const fonte = a.grupo === "rating" ? agencia(a.fonte) : a.fonte;
+      const partes = [tag ? `<b class="ic-meta-emp">${esc(tag)}</b>` : "", esc(fonte), quando(a.quando)].filter(Boolean).join(" · ");
+      return item(a.url, `${selo ? selo + " " : ""}${partes}`, a.titulo);
+    }).join("") : '<span class="muted small">Nada nos últimos dias.</span>';
+  }
+  document.getElementById("feed-tabs").addEventListener("click", (ev) => {
+    const b = ev.target.closest(".win-btn");
+    if (!b) return;
+    ev.currentTarget.querySelectorAll(".win-btn").forEach((x) => x.classList.toggle("active", x === b));
+    feedFiltro = b.dataset.f;
+    desenharFeed();
+    document.getElementById("lista-feed").scrollTop = 0;
   });
 
-  // ---- Relatórios ---------------------------------------------------------
-  buscar("/api/inicio/relatorios").then((d) => {
-    document.getElementById("lista-relatorios").innerHTML = d.relatorios.length ? d.relatorios.slice(0, 4).map((r) => {
-      const sobre = r.empresas[0] || r.categoria || "";
-      return item(r.url, `${dm(r.data)}${r.analista ? " · " + esc(r.analista) : ""}${sobre ? ` · <b class="ic-meta-emp">${esc(sobre)}</b>` : ""}`, r.titulo);
-    }).join("") : '<span class="muted small">Nenhum relatório no repositório.</span>';
-  }).catch(() => { document.getElementById("lista-relatorios").innerHTML = '<span class="muted small">Erro ao carregar.</span>'; });
+  buscar("/api/inicio/noticias").then((d) => {
+    const rebaix = d.ratings.filter((a) => tipoRating(a.titulo) === "rebaixamento").length;
+    if (d.ratings.length) briefing("ratings", `<b>${d.ratings.length}</b> ações de rating em 5 dias${rebaix ? `, ${rebaix} rebaixamento${rebaix > 1 ? "s" : ""}` : ""}`);
+    feed = d.ratings.map((a) => ({ ...a, grupo: "rating" })).concat(d.noticias.map((a) => ({ ...a, grupo: "noticia" })))
+      .sort((a, b) => String(b.quando || "").localeCompare(String(a.quando || "")));
+    desenharFeed();
+  }).catch(() => { document.getElementById("lista-feed").innerHTML = '<span class="muted small">Erro ao carregar.</span>'; });
 
   // ---- Curvas -------------------------------------------------------------
   const ESTILO = {

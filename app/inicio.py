@@ -172,7 +172,7 @@ def _artigo(a: Article) -> dict:
 
 
 def noticias(db: Session) -> dict:
-    ultimas = store.list_articles(db, window_hours=24 * 7, article_type=["news", "research"], limit=6)
+    ultimas = store.list_articles(db, window_hours=24 * 7, article_type=["news", "research"], limit=40)
     ratings = store.list_articles(db, window_hours=24 * 5, article_type="rating_action", limit=200)
     return {"noticias": [_artigo(a) for a in ultimas], "ratings": [_artigo(a) for a in ratings]}
 

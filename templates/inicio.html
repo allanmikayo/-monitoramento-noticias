@@ -3,10 +3,8 @@
 {% block content %}
 {#
   Página inicial do Hub (26/10/2026). Resumo de tudo numa tela, sem rolar
-  (1080p). Três faixas, da leitura mais rápida para a mais lenta:
-    1. PLACAR      spreads, volume secundário, mercado primário
-    2. MERCADO     curva prefixada, curva real, movimentos na semana
-    3. CONTEXTO    ações de rating, notícias, relatórios, o time
+  (1080p): abertura, placar (spreads, secundário, primário) e uma grade de
+  2x3 com as curvas, a agenda de resultados e ratings + notícias.
   Cada cartão leva para a aba de origem e carrega sozinho (app/inicio.py).
   2ª versão (mesmo dia, pedido do Allan: "está muito poluído"): números em
   destaque, variações como texto colorido em vez de selos, sem gráficos
@@ -68,75 +66,52 @@
     </a>
   </section>
 
-  {# ---- Agenda de resultados (28/10/2026) ---------------------------- #}
-  {# Relatório da semana: quantos já divulgaram, esta semana e a próxima,
-     dia a dia. Cor = tipo de cobertura; ✓ = já divulgou. A data vem da
-     lista do time (importável na lista completa); conta em app/calendario.py. #}
-  <section class="ic-card ic-cal" id="cal-card" data-admin="{{ 'sim' if pode_confirmar else '' }}">
-    <span class="ic-cab">
-      <span class="ic-tit-card">Agenda de resultados <span class="ic-nota" id="cal-sub"></span></span>
-      <span class="ic-cal-legenda">
-        <span class="cal-tag tp-local">Local</span>
-        <span class="cal-tag tp-off">Offshore</span>
-        <span class="cal-tag tp-ambos">Offshore + Local</span>
-        <span>✓ divulgou</span><span>☀ antes da abertura</span><span>☾ após o fechamento</span>
-        <button type="button" class="ic-mais ic-cal-ver" id="cal-ver" aria-expanded="false" hidden>Ver todas ▾</button>
-      </span>
-    </span>
-    <div class="ic-cal-faixa" id="cal-faixa"><span class="muted small">Carregando…</span></div>
-    <div id="cal-tabela" hidden></div>
-    <div class="ic-cal-pop" id="cal-pop" hidden></div>
-  </section>
-
-  {# ---- 2. Mercado --------------------------------------------------- #}
-  <section class="inicio-mercado">
-    <div class="ic-card">
+  {# ---- Grade (28/10/2026, 3ª rodada) -------------------------------- #}
+  {# Pedido do Allan, em quadrantes:   curva pré | curva real | ratings
+                                        agenda de resultados  | e notícias
+     A agenda é uma fita contínua de dias (rola para as próximas semanas) e
+     o feed junta ratings e notícias por data. Cada cartão rola por dentro,
+     para a página caber numa tela de 1080p sem rolar. #}
+  <section class="inicio-grade">
+    <div class="ic-card ic-q-pre">
       <span class="ic-cab"><span class="ic-tit-card">Curva prefixada</span><span class="ic-nota">ETTJ ANBIMA · % a.a.</span></span>
       <div class="ic-grafico"><canvas id="graf-pre" aria-label="Curva prefixada hoje, 5 e 21 dias úteis atrás" role="img"></canvas></div>
       <span class="ic-rodape-nota" id="nota-pre"></span>
     </div>
-    <div class="ic-card">
+    <div class="ic-card ic-q-real">
       <span class="ic-cab"><span class="ic-tit-card">Curva de juros real</span><span class="ic-nota">ETTJ IPCA ANBIMA · % a.a.</span></span>
       <div class="ic-grafico"><canvas id="graf-real" aria-label="Curva de juros real hoje, 5 e 21 dias úteis atrás" role="img"></canvas></div>
       <span class="ic-rodape-nota" id="nota-real"></span>
     </div>
-    <div class="ic-card">
-      <span class="ic-cab"><a class="ic-tit-card ic-tit-link" href="/spreads" title="Ver todos em Spreads">Movimentos na semana →</a>
-        <span class="window-tabs ic-tabs" id="movers-tabs">
-          <button type="button" class="win-btn active" data-i="0">IPCA+</button>
-          <button type="button" class="win-btn" data-i="1">CDI+</button>
+
+    <section class="ic-card ic-q-feed">
+      <span class="ic-cab"><span class="ic-tit-card">Ratings e notícias</span>
+        <span class="window-tabs ic-tabs" id="feed-tabs">
+          <button type="button" class="win-btn active" data-f="tudo">Tudo</button>
+          <button type="button" class="win-btn" data-f="rating">Ratings</button>
+          <button type="button" class="win-btn" data-f="noticia">Notícias</button>
         </span>
       </span>
-      <span class="ic-sub ic-sub-abre">Maiores aberturas</span>
-      <div id="lista-aberturas" class="ic-lista"></div>
-      <span class="ic-sub">Maiores fechamentos</span>
-      <div id="lista-fechamentos" class="ic-lista"></div>
-    </div>
-  </section>
+      <div id="lista-feed" class="ic-feed ic-rola"><span class="muted small">Carregando…</span></div>
+      <a href="/noticias" class="ic-mais ic-feed-pe">Ver tudo em Notícias →</a>
+    </section>
 
-  {# ---- 3. Contexto -------------------------------------------------- #}
-  <section class="inicio-contexto">
-    <div class="ic-card">
-      <span class="ic-cab"><span class="ic-tit-card">Ações de rating <span class="ic-nota" id="ratings-total"></span></span><a href="/noticias" class="ic-mais">Ver todas →</a></span>
-      <div id="lista-ratings" class="ic-feed"><span class="muted small">Carregando…</span></div>
-    </div>
-    <div class="ic-card">
-      <span class="ic-cab"><span class="ic-tit-card">Últimas notícias</span><a href="/noticias" class="ic-mais">Ver todas →</a></span>
-      <div id="lista-noticias" class="ic-feed"><span class="muted small">Carregando…</span></div>
-    </div>
-    <div class="ic-card">
-      <span class="ic-cab"><span class="ic-tit-card">Últimos relatórios</span><a href="/cobertura" class="ic-mais">Repositório →</a></span>
-      <div id="lista-relatorios" class="ic-feed"><span class="muted small">Carregando…</span></div>
-    </div>
-    <div class="ic-card ic-time">
-      <span class="ic-tit-card">Fixed Income Team</span>
-      <ul>
-        {% for p in equipe %}
-        <li><span>{{ p.nome }}</span><a href="mailto:{{ p.email }}">{{ p.email }}</a></li>
-        {% endfor %}
-      </ul>
-      <a href="mailto:{{ email_equipe }}" class="ic-email-time">{{ email_equipe }}</a>
-    </div>
+    <section class="ic-card ic-cal ic-q-cal" id="cal-card" data-admin="{{ 'sim' if pode_confirmar else '' }}">
+      <span class="ic-cab">
+        <span class="ic-tit-card">Agenda de resultados
+          <button type="button" class="cal-semdata" id="cal-semdata" hidden title="Empresas da cobertura sem data na agenda"></button>
+        </span>
+        <span class="ic-cal-legenda">
+          <span><i class="cal-hr hr-apos"></i>após o fechamento</span>
+          <span><i class="cal-hr hr-antes"></i>antes da abertura</span>
+          <span class="cal-leg-cor"><i class="tp-local"></i>Local<i class="tp-off"></i>Offshore<i class="tp-ambos"></i>Ambos</span>
+          <button type="button" class="ic-mais ic-cal-ver" id="cal-ver" aria-expanded="false" hidden>Ver todas</button>
+        </span>
+      </span>
+      <div class="ic-cal-faixa ic-rola" id="cal-faixa"><span class="muted small">Carregando…</span></div>
+      <div id="cal-tabela" class="ic-rola" hidden></div>
+      <div class="ic-cal-pop" id="cal-pop" hidden></div>
+    </section>
   </section>
 </div>
 
