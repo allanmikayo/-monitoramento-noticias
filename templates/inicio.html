@@ -4,7 +4,7 @@
 {#
   Página inicial do Hub (26/10/2026). Resumo de tudo numa tela, sem rolar
   (1080p): abertura, placar (spreads, secundário, primário) e uma grade de
-  2x3 com as curvas, a agenda de resultados e ratings + notícias.
+  2x3 com as curvas, a captação líquida e ratings + notícias.
   Cada cartão leva para a aba de origem e carrega sozinho (app/inicio.py).
   2ª versão (mesmo dia, pedido do Allan: "está muito poluído"): números em
   destaque, variações como texto colorido em vez de selos, sem gráficos
@@ -26,43 +26,28 @@
       <p class="ic-hero-brief" id="hero-brief"><span class="ic-hero-carregando">Montando o resumo do dia…</span></p>
       <span class="ic-datas" id="inicio-datas"></span>
     </div>
-    <a class="ic-hero-temp" href="#cal-card" id="hero-temp" hidden>
+    <a class="ic-hero-temp" href="/calendario" id="hero-temp" hidden>
       <span class="ic-hero-temp-rot">Temporada de resultados</span>
       <span class="ic-hero-temp-num"><b id="hero-temp-rotulo">—</b><span id="hero-temp-placar"></span></span>
       <span class="ic-hero-temp-pe"><span class="ic-hero-barra" id="hero-temp-barra"></span><span class="ic-hero-temp-prazo" id="hero-temp-prazo"></span></span>
     </a>
   </section>
 
-  {# ---- 1. Placar ---------------------------------------------------- #}
+  {# ---- 1. Placar: três cards iguais (28/10/2026, 4ª rodada) --------- #}
+  {# Mesmo desenho do antigo "Volume secundário": duas linhas por card, com
+     rótulo, número e variação à direita. Ordem pedida pelo Allan. #}
   <section class="inicio-placar">
-    <a class="ic-card ic-link ic-kpi" href="/spreads" id="card-spread-0">
-      <span class="ic-tit-card">Spread IPCA+ Incentivadas</span>
-      <span class="ic-num"><b data-campo="valor">—</b> bps</span>
-      <span class="ic-var" data-campo="delta"></span>
-    </a>
-    <a class="ic-card ic-link ic-kpi" href="/spreads" id="card-spread-1">
-      <span class="ic-tit-card">Spread CDI+ Tradicionais</span>
-      <span class="ic-num"><b data-campo="valor">—</b> bps</span>
-      <span class="ic-var" data-campo="delta"></span>
-    </a>
-    <a class="ic-card ic-link ic-kpi" href="/mercado-secundario" id="card-secundario">
-      <span class="ic-tit-card">Volume secundário <span class="ic-nota">média diária, últimos 5 dias</span></span>
-      <span class="ic-par" data-campo="classes"><span class="muted small">Carregando…</span></span>
+    <a class="ic-card ic-link ic-kpi" href="/spreads" id="card-spreads">
+      <span class="ic-tit-card">Spreads debêntures <span class="ic-nota">ANBIMA, pond. por estoque</span></span>
+      <span class="ic-par" data-campo="linhas"><span class="muted small">Carregando…</span></span>
     </a>
     <a class="ic-card ic-link ic-kpi" href="/primario" id="card-primario">
-      <span class="ic-tit-card">Mercado primário</span>
-      <span class="ic-duas">
-        <span>
-          <span class="ic-rot2" data-campo="mes-rot">Último mês</span>
-          <span class="ic-num"><b data-campo="mes">—</b></span>
-          <span class="ic-var" data-campo="mes-delta"></span>
-        </span>
-        <span>
-          <span class="ic-rot2" data-campo="ytd-rot">No ano</span>
-          <span class="ic-num"><b data-campo="ytd">—</b></span>
-          <span class="ic-var" data-campo="ytd-delta"></span>
-        </span>
-      </span>
+      <span class="ic-tit-card">Mercado primário <span class="ic-nota">volume encerrado</span></span>
+      <span class="ic-par" data-campo="linhas"><span class="muted small">Carregando…</span></span>
+    </a>
+    <a class="ic-card ic-link ic-kpi" href="/mercado-secundario" id="card-secundario">
+      <span class="ic-tit-card">Mercado secundário <span class="ic-nota">média diária, últimos 5 dias</span></span>
+      <span class="ic-par" data-campo="linhas"><span class="muted small">Carregando…</span></span>
     </a>
   </section>
 
@@ -96,21 +81,11 @@
       <a href="/noticias" class="ic-mais ic-feed-pe">Ver tudo em Notícias →</a>
     </section>
 
-    <section class="ic-card ic-cal ic-q-cal" id="cal-card" data-admin="{{ 'sim' if pode_confirmar else '' }}">
-      <span class="ic-cab">
-        <span class="ic-tit-card">Agenda de resultados
-          <button type="button" class="cal-semdata" id="cal-semdata" hidden title="Empresas da cobertura sem data na agenda"></button>
-        </span>
-        <span class="ic-cal-legenda">
-          <span><i class="cal-hr hr-apos"></i>após o fechamento</span>
-          <span><i class="cal-hr hr-antes"></i>antes da abertura</span>
-          <span class="cal-leg-cor"><i class="tp-local"></i>Local<i class="tp-off"></i>Offshore<i class="tp-ambos"></i>Ambos</span>
-          <button type="button" class="ic-mais ic-cal-ver" id="cal-ver" aria-expanded="false" hidden>Ver todas</button>
-        </span>
-      </span>
-      <div class="ic-cal-faixa ic-rola" id="cal-faixa"><span class="muted small">Carregando…</span></div>
-      <div id="cal-tabela" class="ic-rola" hidden></div>
-      <div class="ic-cal-pop" id="cal-pop" hidden></div>
+    {# Espaço reservado para o gráfico de captação líquida (pedido do Allan,
+       28/10/2026). A agenda de resultados foi para a aba Calendário. #}
+    <section class="ic-card ic-q-cal ic-captacao" id="card-captacao">
+      <span class="ic-cab"><span class="ic-tit-card">Captação líquida</span></span>
+      <div class="ic-vazio-grande">Gráfico de captação líquida em construção.</div>
     </section>
   </section>
 </div>

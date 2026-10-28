@@ -1187,7 +1187,7 @@ a.ic-link:hover { border-color: #ffb27f; box-shadow: 0 3px 12px rgba(0,0,0,.05);
   display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px;
   grid-template-areas: "pre real feed" "cal cal feed";
   grid-template-rows: 248px minmax(0, 1fr);
-  height: max(560px, calc(100vh - 352px));
+  height: max(560px, calc(100vh - 337px));
 }
 .ic-q-pre { grid-area: pre; } .ic-q-real { grid-area: real; } .ic-q-feed { grid-area: feed; } .ic-q-cal { grid-area: cal; }
 .inicio-grade > .ic-card { display: flex; flex-direction: column; min-height: 0; }
@@ -1217,3 +1217,50 @@ a.ic-link:hover { border-color: #ffb27f; box-shadow: 0 3px 12px rgba(0,0,0,.05);
 .cal-chip { display: inline-flex; align-items: center; }
 .ic-q-cal [hidden] { display: none !important; }
 .ic-q-cal .ic-cal-tab thead th { position: sticky; top: 0; background: #fff; z-index: 1; }
+
+/* Placar da página inicial: três cards iguais, no desenho do antigo
+   "Volume secundário" (28/10/2026, 4ª rodada). */
+.inicio-placar { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.inicio-placar .ic-card { padding-top: 10px; padding-bottom: 10px; gap: 2px; }
+.inicio-placar .ic-par { gap: 4px; margin-top: 2px; }
+.inicio-placar .ic-par-linha + .ic-par-linha { border-top: 1px solid #f2f2f2; padding-top: 4px; }
+.inicio-placar .ic-par-rot { font-size: 0.7rem; line-height: 1.2; }
+.inicio-placar .ic-par-num { font-size: 1.05rem; line-height: 1.2; }
+.ic-par-num small { font-size: 0.72rem; color: #8a8a8a; font-weight: 600; }
+.ic-vazio-grande { flex: 1; display: flex; align-items: center; justify-content: center; color: #b0b0b0; font-size: 0.82rem;
+  border: 1px dashed #e4e4e4; border-radius: 8px; margin-top: 6px; }
+
+/* Aba Calendário: mês tradicional, domingo a sábado (28/10/2026) */
+.cal-pagina { position: relative; display: flex; flex-direction: column; gap: 10px; }
+.cm-topo { display: flex; justify-content: space-between; align-items: flex-end; flex-wrap: wrap; gap: 12px; }
+.cm-titulo { display: flex; flex-direction: column; gap: 2px; }
+.cm-titulo h1 { margin: 0; font-size: 1.3rem; }
+.cm-nav { display: flex; align-items: center; gap: 8px; }
+.cm-seta { all: unset; cursor: pointer; width: 30px; height: 30px; border-radius: 8px; display: inline-flex; align-items: center; justify-content: center;
+  font-size: 1.2rem; color: #2b2b2b; border: 1px solid #e4e4e4; background: #fff; }
+.cm-seta:hover { border-color: var(--accent); color: var(--accent-dark); }
+.cm-mes { font-weight: 700; font-size: 1rem; min-width: 150px; text-align: center; }
+.cm-barra { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px; }
+.cm-acoes { display: flex; align-items: center; gap: 10px; }
+.cm-grade { display: grid; grid-template-columns: 0.6fr repeat(5, minmax(0, 1fr)) 0.6fr; border: 1px solid #e8e8e8; border-radius: 10px; overflow: hidden; background: #fff; }
+.cm-cab { font-size: 0.7rem; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: #6b6b6b; padding: 8px 10px; background: #fafafa; border-bottom: 1px solid #e8e8e8; }
+.cm-dia { min-height: 118px; padding: 6px 8px 8px; border-right: 1px solid #f0f0f0; border-bottom: 1px solid #f0f0f0; display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.cm-dia:nth-child(7n) { border-right: 0; }
+.cm-fds { background: #fbfbfb; }
+.cm-cab.cm-fds { background: #f6f6f6; }
+.cm-fora { background: #f7f7f7; }
+.cm-fora .cm-num b { color: #c4c4c4; }
+.cm-num { display: flex; align-items: center; gap: 6px; }
+.cm-num b { font-size: 0.95rem; color: #2b2b2b; }
+.cm-passado .cm-num b { color: #9a9a9a; }
+.cm-hoje { background: var(--accent-tint); box-shadow: inset 0 0 0 2px var(--accent); }
+.cm-hoje .cm-num b { color: var(--accent-dark); }
+.cm-n { margin-left: auto; font-size: 0.66rem; font-weight: 700; color: #8a8a8a; background: #f0f0f0; border-radius: 8px; padding: 0 6px; }
+.cm-chips { display: flex; flex-direction: column; gap: 3px; align-items: flex-start; }
+.cm-chips .cal-chip { max-width: 100%; }
+.cal-pagina #cal-tabela { background: #fff; border: 1px solid #e8e8e8; border-radius: 10px; padding: 10px 14px; }
+.cal-pagina [hidden] { display: none !important; }
+@media (max-width: 900px) {
+  .inicio-placar { grid-template-columns: 1fr; }
+  .cm-grade { grid-template-columns: repeat(7, minmax(90px, 1fr)); overflow-x: auto; }
+}

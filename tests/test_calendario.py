@@ -405,8 +405,10 @@ def test_rotas_do_calendario(clientes):
     assert "importacao" not in cl["user"].get("/api/inicio/resultados").json()
 
 
-def test_pagina_inicial_tem_a_agenda(clientes):
+def test_aba_calendario(clientes):
     cl, _ = clientes
-    html = cl["admin"].get("/").text
-    assert 'id="cal-card"' in html and 'data-admin="sim"' in html and 'id="hero-brief"' in html
-    assert 'data-admin=""' in cl["user"].get("/").text
+    html = cl["admin"].get("/calendario").text
+    assert 'id="cal-card"' in html and 'data-admin="sim"' in html and "calendario.js" in html
+    assert 'data-admin=""' in cl["user"].get("/calendario").text
+    assert 'href="/calendario"' in html                       # link no menu
+    assert 'id="hero-brief"' in cl["admin"].get("/").text      # contador continua na abertura

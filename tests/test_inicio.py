@@ -126,10 +126,12 @@ def test_inicio_e_noticias_mudaram_de_endereco(cliente):
     # Saudação (bom dia / boa tarde / boa noite) é escrita no navegador pelo
     # horário de Brasília desde 28/10/2026; o servidor manda o nome.
     assert 'id="hero-saudacao"' in r.text and ", Allan</h1>" in r.text
-    # Grade em quadrantes (28/10/2026): curvas, agenda e um feed só de
-    # ratings + notícias.
-    for trecho in ('id="graf-pre"', 'id="graf-real"', "Agenda de resultados", 'id="lista-feed"', 'id="cal-semdata"'):
+    # Grade em quadrantes (28/10/2026): curvas, captação líquida e um feed só
+    # de ratings + notícias; três cards no topo, na ordem pedida.
+    for trecho in ('id="graf-pre"', 'id="graf-real"', 'id="card-captacao"', 'id="lista-feed"'):
         assert trecho in r.text, trecho
+    assert r.text.index('id="card-spreads"') < r.text.index('id="card-primario"') < r.text.index('id="card-secundario"')
+    assert 'id="cal-card"' not in r.text        # a agenda foi para a aba Calendário
     assert cliente.get("/noticias").status_code == 200
     for bloco in ("spreads", "secundario", "primario", "curvas", "noticias", "relatorios", "resultados"):
         resp = cliente.get(f"/api/inicio/{bloco}")

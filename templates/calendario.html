@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% block title %}Calendário{% endblock %}
+{% block content %}
+{#
+  Calendário de resultados (28/10/2026, pedido do Allan: "formato
+  tradicional domingo a sábado e que resultados são divulgados a cada dia").
+  Mesmos dados da antiga agenda da página inicial (/api/inicio/resultados,
+  conta em app/calendario.py). Cor = tipo de cobertura; forma = horário
+  (■ após o fechamento, ● antes da abertura); ✓ = já divulgou. Admin ajusta
+  a data clicando no chip e importa a lista do time na lista completa.
+#}
+<section class="cal-pagina ic-cal" id="cal-card" data-admin="{{ 'sim' if pode_confirmar else '' }}">
+  <div class="cm-topo">
+    <div class="cm-titulo">
+      <h1>Calendário de resultados</h1>
+      <span class="muted small" id="cal-temporada"></span>
+    </div>
+    <div class="cm-nav">
+      <button type="button" class="cm-seta" id="cal-ant" aria-label="Mês anterior">‹</button>
+      <span class="cm-mes" id="cal-mes">—</span>
+      <button type="button" class="cm-seta" id="cal-prox" aria-label="Próximo mês">›</button>
+      <button type="button" class="btn-small" id="cal-hoje-btn">Hoje</button>
+      <span class="muted small" id="cal-mes-n"></span>
+    </div>
+  </div>
+  <div class="cm-barra">
+    <span class="ic-cal-legenda">
+      <span><i class="cal-hr hr-apos"></i>após o fechamento</span>
+      <span><i class="cal-hr hr-antes"></i>antes da abertura</span>
+      <span>✓ já divulgou</span>
+      <span class="cal-leg-cor"><i class="tp-local"></i>Local<i class="tp-off"></i>Offshore<i class="tp-ambos"></i>Offshore + Local</span>
+    </span>
+    <span class="cm-acoes">
+      <button type="button" class="cal-semdata" id="cal-semdata" hidden title="Empresas da cobertura sem data na agenda"></button>
+      <button type="button" class="ic-mais ic-cal-ver" id="cal-ver" aria-expanded="false" hidden>Ver todas</button>
+    </span>
+  </div>
+  <div class="cm-grade" id="cal-faixa"><span class="muted small">Carregando…</span></div>
+  <div id="cal-tabela" hidden></div>
+  <div class="ic-cal-pop" id="cal-pop" hidden></div>
+</section>
+<script src="/static/calendario.js?v={{ v }}"></script>
+{% endblock %}

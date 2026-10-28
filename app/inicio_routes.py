@@ -42,6 +42,14 @@ def register_inicio_routes(require_user_dep, require_admin_dep=None) -> APIRoute
                                      "pode_confirmar": bool(user and user.role == "admin")},
         )
 
+    # Calendário de resultados (28/10/2026): saiu da página inicial e virou
+    # aba própria, em grade de mês. Mesmos dados de /api/inicio/resultados.
+    @router.get("/calendario", response_class=HTMLResponse)
+    def calendario_pagina(request: Request, user: User = Depends(require_user_dep)):
+        return templates.TemplateResponse(
+            request, "calendario.html", {"user": user, "pode_confirmar": bool(user and user.role == "admin")},
+        )
+
     @router.get("/api/inicio/spreads")
     def api_spreads(user: User = Depends(require_user_dep), db: Session = Depends(get_db)):
         return inicio.spreads(db)

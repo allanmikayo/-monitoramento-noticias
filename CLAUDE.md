@@ -2624,3 +2624,20 @@ data) em 3+6, agenda em 4+5, simplificada.
   para "N sem data" (abre a lista na primeira sem data). "Ver as N" troca a
   fita pela lista no mesmo cartão. Sem o texto de temporada/prazo no
   cabeçalho (o contador continua na abertura).
+
+### Aba Calendário + três cards no topo do Início — 28/10/2026 (4ª rodada)
+
+- **Agenda saiu do Início** e virou a aba **Calendário** (`/calendario`,
+  `templates/calendario.html`, `static/calendario.js`, rota em
+  `inicio_routes.py`): mês tradicional domingo a sábado, setas de mês e
+  "Hoje", fim de semana em coluna mais estreita, contagem por dia, marca do
+  prazo CVM. Mesmos dados, ajuste de chip, lista completa e importação de
+  antes (`/api/inicio/resultados*`). O contador da temporada e a frase do dia
+  continuam na abertura do Início (o link leva ao Calendário).
+- No lugar da agenda, no Início: cartão **Captação líquida** vazio,
+  reservado para o gráfico que o Allan vai pedir.
+- **Cards do topo**: três iguais, no desenho do antigo "Volume secundário"
+  (duas linhas: rótulo, número, variação à direita), na ordem Spreads
+  debêntures (IPCA+ e CDI+), Mercado primário (último mês e ano), Mercado
+  secundário. Mais baixos que antes; a grade embaixo usa
+  `100vh - 337px`.
