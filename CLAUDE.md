@@ -2532,3 +2532,44 @@ próxima vez que o Windows do Allan abrir o banco normalmente (recovery
 padrão do SQLite). **Lição**: nunca escrever no `.db` real pelo mount do
 sandbox — pra testar com dado de verdade, copiar primeiro
 (`sqlite3.connect(...).backup(...)`) e testar na cópia.
+
+### Página inicial 3ª versão + agenda de resultados da CVM — 28/10/2026
+
+Pedido do Allan: Início "mais sexy, chamativa sem poluir" + calendário de
+divulgação de resultados das empresas da cobertura, automatizado.
+- **Abertura escura** (`.ic-hero`): saudação pelo horário de Brasília
+  (escrita no navegador), data e UMA frase do dia montada com o que os
+  cartões já carregam (spread IPCA+ na semana, agenda de hoje, ações de
+  rating). À direita, contador da temporada (3T26, x/y divulgaram, prazo).
+- **Agenda de resultados** (`#cal-card`): duas semanas úteis a partir da
+  segunda; preto = divulgou, laranja = data anunciada, tracejado = estimada;
+  colunas "Pendentes" (passou da estimada sem divulgar) e "Depois de".
+  Admin clica num chip e informa a data anunciada (`POST
+  /api/inicio/resultados/confirmar`). "Ver as N" abre a lista completa.
+- Para caber em 1080p sem rolar: feeds com 4 itens (eram 5), gráficos de
+  curva um pouco mais baixos, "Ver todos em Spreads" virou o título do card.
+- **Fontes da data** (`app/calendario.py`, ordem de confiança):
+  1. divulgada = RAD em tempo real (o coletor de 5 min já grava "ITR -
+     Informações Trimestrais", "DFP", "Press-release" das empresas da
+     cobertura; assunto com outro trimestre, ex. "Release 2T26" em outubro,
+     não conta) ou arquivo ITR/DFP da CVM, o que vier antes;
+  2. confirmada = digitada por admin (`resultados_confirmados`);
+  3. estimada = mesmo trimestre do ano anterior + 364 dias (mesmo dia da
+     semana), limitada ao prazo (ITR 45 dias; DFP 31/03); sem isso, o
+     atraso do último trimestre.
+- **Quem é a cobertura na CVM**: CNPJs de `debentures`/`issuers` com
+  `company_id` + companhias da CVM cujo `issuer_key` é igual ao nome ou a
+  um apelido da empresa (chave com 4+ letras). A empresa divulga quando a
+  primeira entidade divulga. Sem nenhum ITR/DFP = fora da agenda (contada).
+- **Coleta**: `scripts/coletar_resultados_cvm.py` (+ `Coletar Calendario de
+  Resultados.bat`), workflow `resultados_cvm.yml` às 07h20 BRT seg-sáb.
+  Baixa `itr_cia_aberta_{ano, ano-1}` e `dfp_cia_aberta_{ano-1, ano-2}`
+  (Dados Abertos, atualização SEMANAL da CVM), guarda só a PRIMEIRA entrega
+  por (CNPJ, documento, trimestre) e só de CNPJs de interesse. Cria as duas
+  tabelas (`resultados_cvm`, `resultados_confirmados`) com checkfirst.
+  Coluna obrigatória sumindo do arquivo = job vermelho, banco intocado.
+- **Não testado contra a CVM real**: o sandbox não alcança
+  dados.cvm.gov.br. O layout das colunas (CNPJ_CIA, DT_REFER, VERSAO,
+  DENOM_CIA, CD_CVM, DT_RECEB, LINK_DOC) é o layout conhecido desses
+  arquivos, NÃO conferido no dicionário (o site não abriu daqui); rodar o
+  workflow manualmente uma vez depois do deploy.

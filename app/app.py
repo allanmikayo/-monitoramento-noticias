@@ -221,7 +221,7 @@ from .mercado_secundario_routes import register_mercado_secundario_routes  # noq
 app.include_router(register_mercado_secundario_routes(require_user, require_admin))
 
 # Página inicial (26/10/2026): resumo do Hub numa tela só. Ver app/inicio.py.
-app.include_router(register_inicio_routes(require_user))
+app.include_router(register_inicio_routes(require_user, require_admin))
 
 # Módulo "Repositório de Relatórios" (13/08/2026) -- catálogo dos relatórios
 # do Smart tagueados por empresa/setor. É a ÚNICA aba pública do Hub: recebe

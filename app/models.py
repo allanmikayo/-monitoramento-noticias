@@ -1352,3 +1352,57 @@ class IssuerRatingPeriodo(Base):
         Index("ix_rating_periodo_codigo_data", "codigo", "data_inicio"),
         Index("ix_rating_periodo_notch", "notch_medio"),
     )
+
+
+# ---------------------------------------------------------------------------
+# Calendário de resultados (28/10/2026, pedido do Allan) -- ver app/calendario.py
+# ---------------------------------------------------------------------------
+class EntregaResultadoCVM(Base):
+    """Uma entrega de ITR ou DFP na CVM (Dados Abertos, arquivos
+    `itr_cia_aberta_AAAA` e `dfp_cia_aberta_AAAA`).
+
+    Uma linha por (CNPJ, documento, data de referência), guardando a
+    PRIMEIRA entrega: a reapresentação (versão 2, 3...) não é a data em que
+    o resultado saiu. É o histórico que estima a data de quem ainda não
+    divulgou ("no 3T25 saiu em 06/11/2025") e confirma quem já divulgou.
+
+    Só CNPJs que importam para o Hub (emissores de debênture da base e
+    companhias cujo nome casa com a cobertura) -- o arquivo da CVM tem o
+    mercado inteiro.
+    """
+    __tablename__ = "resultados_cvm"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    cnpj: Mapped[str] = mapped_column(String(14), nullable=False)      # só dígitos
+    codigo_cvm: Mapped[str | None] = mapped_column(String(10))
+    denominacao: Mapped[str | None] = mapped_column(String(300))
+    documento: Mapped[str] = mapped_column(String(3), nullable=False)  # ITR | DFP
+    data_referencia: Mapped[date] = mapped_column(Date, nullable=False)
+    data_entrega: Mapped[date] = mapped_column(Date, nullable=False)
+    versao: Mapped[int | None] = mapped_column(Integer)
+    link: Mapped[str | None] = mapped_column(String(400))
+    atualizado_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+
+    __table_args__ = (
+        UniqueConstraint("cnpj", "documento", "data_referencia", name="uq_resultado_cvm"),
+        Index("ix_resultado_cvm_ref", "data_referencia"),
+    )
+
+
+class ResultadoConfirmado(Base):
+    """Data de divulgação ANUNCIADA pela empresa, digitada por um admin no
+    próprio calendário (28/10/2026). Vence a estimativa; perde para a
+    entrega de fato (quando a empresa divulga, o que vale é o que saiu)."""
+    __tablename__ = "resultados_confirmados"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    company_id: Mapped[int] = mapped_column(ForeignKey("companies.id"), nullable=False)
+    data_referencia: Mapped[date] = mapped_column(Date, nullable=False)  # fim do trimestre
+    data_prevista: Mapped[date] = mapped_column(Date, nullable=False)
+    horario: Mapped[str | None] = mapped_column(String(20))   # "antes da abertura", "18h"...
+    criado_por: Mapped[str | None] = mapped_column(String(200))
+    criado_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+
+    __table_args__ = (
+        UniqueConstraint("company_id", "data_referencia", name="uq_resultado_confirmado"),
+    )

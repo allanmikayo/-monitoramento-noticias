@@ -188,3 +188,16 @@ def relatorios(db: Session, limite: int = 6) -> dict:
         "analista": r.analyst, "categoria": r.category,
         "empresas": [c.name for c in r.companies][:2],
     } for r in linhas]}
+
+
+# ---------------------------------------------------------------------------
+# Calendário de resultados (28/10/2026) -- conta em app/calendario.py
+# ---------------------------------------------------------------------------
+def resultados(db: Session) -> dict:
+    from . import calendario
+
+    try:
+        return calendario.agenda(db)
+    except Exception:  # tabela ainda não criada (o job da CVM nunca rodou)
+        db.rollback()
+        return {"temporada": None, "empresas": [], "resumo": {}}

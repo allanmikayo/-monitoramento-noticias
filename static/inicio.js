@@ -38,6 +38,224 @@
     document.getElementById("inicio-datas").textContent = ordem.filter((k) => datas[k]).map((k) => datas[k]).join(" · ");
   }
 
+  // ---- Abertura: dia, saudação e o resumo em uma frase (28/10/2026) -------
+  // A frase é montada com o que os outros blocos já trouxeram -- nenhuma
+  // consulta a mais. Cada pedaço entra quando o seu bloco chega.
+  const DIAS_SEMANA = ["domingo", "segunda-feira", "terça-feira", "quarta-feira", "quinta-feira", "sexta-feira", "sábado"];
+  (function () {
+    const agora = new Date();
+    const h = Number(agora.toLocaleString("pt-BR", { hour: "numeric", hour12: false, timeZone: "America/Sao_Paulo" }));
+    document.getElementById("hero-saudacao").textContent = h < 12 ? "Bom dia" : h < 18 ? "Boa tarde" : "Boa noite";
+    document.getElementById("hero-dia").textContent = agora.toLocaleDateString("pt-BR",
+      { weekday: "long", day: "numeric", month: "long", timeZone: "America/Sao_Paulo" });
+  })();
+  const brief = {};
+  function briefing(chave, html) {
+    brief[chave] = html;
+    const ordem = ["spreads", "resultados", "ratings"];
+    const partes = ordem.filter((k) => brief[k]).map((k) => `<span>${brief[k]}</span>`);
+    if (partes.length) document.getElementById("hero-brief").innerHTML = partes.join("");
+  }
+
+  // ---- Agenda de resultados (28/10/2026) ----------------------------------
+  // Duas semanas úteis a partir da segunda desta semana. Quem já divulgou
+  // antes disso entra só na contagem; quem passou da data estimada sem
+  // divulgar vai para "Pendentes"; quem fica para depois vai para "Depois".
+  const ROT_STATUS = {
+    divulgada: "Divulgou", confirmada: "Data anunciada", estimada: "Estimada",
+    atrasada: "Passou da data estimada", sem_estimativa: "Sem histórico",
+  };
+  const POR_COLUNA = 3;
+  const isoDia = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  const deIso = (iso) => { const [y, m, d] = iso.split("-").map(Number); return new Date(y, m - 1, d); };
+  const DIA_CURTO = ["dom", "seg", "ter", "qua", "qui", "sex", "sáb"];
+  let calDados = null;
+  const calAdmin = document.getElementById("cal-card").dataset.admin === "sim";
+
+  function diasUteis(inicio, n) {
+    const out = [];
+    const d = new Date(inicio);
+    while (out.length < n) {
+      if (d.getDay() > 0 && d.getDay() < 6) out.push(isoDia(d));
+      d.setDate(d.getDate() + 1);
+    }
+    return out;
+  }
+
+  function chip(e) {
+    const hora = e.horario ? ` · ${esc(e.horario)}` : "";
+    return `<button type="button" class="cal-chip st-${e.status}" data-id="${e.company_id}">${esc(e.nome)}${
+      e.status === "divulgada" ? ' <span aria-hidden="true">✓</span>' : ""}<span class="sr-only"> — ${ROT_STATUS[e.status]}${hora}</span></button>`;
+  }
+
+  function coluna(classe, cabeca, lista, extraCab) {
+    const vis = lista.slice(0, POR_COLUNA).map(chip).join("");
+    const resto = lista.length - POR_COLUNA;
+    const mais = resto > 0
+      ? `<button type="button" class="cal-mais" title="${esc(lista.slice(POR_COLUNA).map((e) => e.nome).join(", "))}">+${resto}</button>` : "";
+    return `<div class="cal-col ${classe}"><div class="cal-dia">${cabeca}${extraCab || ""}</div>${vis}${mais}</div>`;
+  }
+
+  function desenharCalendario(d) {
+    calDados = d;
+    const faixa = document.getElementById("cal-faixa");
+    const t = d.temporada;
+    if (!t) {
+      faixa.innerHTML = '<span class="muted small">Calendário ainda sem dados: o job da CVM (resultados_cvm.yml) não rodou.</span>';
+      return;
+    }
+    const r = d.resumo;
+    const hoje = d.hoje;
+    const seg = deIso(hoje);
+    seg.setDate(seg.getDate() - ((seg.getDay() + 6) % 7));
+    const dias = diasUteis(seg, 10);
+    const porDia = {};
+    const pendentes = [], depois = [];
+    d.empresas.forEach((e) => {
+      if (!e.data) return;
+      if (e.data > dias[dias.length - 1]) { depois.push(e); return; }
+      if (e.data < dias[0]) { if (e.status === "atrasada") pendentes.push(e); return; }
+      if (e.status === "atrasada") { pendentes.push(e); return; }
+      (porDia[e.data] = porDia[e.data] || []).push(e);
+    });
+    const ordem = { divulgada: 0, confirmada: 1, estimada: 2 };
+    Object.values(porDia).forEach((l) => l.sort((a, b) => ordem[a.status] - ordem[b.status] || a.nome.localeCompare(b.nome)));
+
+    let html = "";
+    if (pendentes.length) html += coluna("cal-pend", "Pendentes", pendentes, ' <span class="cal-dica" title="Passaram da data estimada e ainda não entregaram">?</span>');
+    dias.forEach((iso, i) => {
+      const dt = deIso(iso);
+      const cls = (iso === hoje ? "cal-hoje " : iso < hoje ? "cal-passado " : "") + (i === 5 ? "cal-semana2" : "");
+      const cab = `<span class="cal-dsem">${iso === hoje ? "hoje" : DIA_CURTO[dt.getDay()]}</span><b>${dt.getDate()}</b>`
+        + (iso === t.prazo ? '<span class="cal-prazo" title="Prazo da CVM">prazo</span>' : "");
+      html += coluna(cls, cab, porDia[iso] || []);
+    });
+    html += coluna("cal-depois", `Depois de ${dm(dias[dias.length - 1])}`, depois.sort((a, b) => a.data.localeCompare(b.data)));
+    faixa.innerHTML = html;
+    faixa.style.setProperty("--cal-cols", dias.length + 1 + (pendentes.length ? 1 : 0));
+
+    const semEst = r.sem_estimativa ? ` · ${r.sem_estimativa} sem histórico` : "";
+    document.getElementById("cal-sub").textContent =
+      `· ${t.rotulo} · ${r.total} empresas da cobertura com registro na CVM${semEst}`;
+
+    // Lista completa, por data
+    const ver = document.getElementById("cal-ver");
+    ver.hidden = false;
+    ver.dataset.total = r.total;
+    ver.textContent = document.getElementById("cal-tabela").hidden ? `Ver as ${r.total} ▾` : "Fechar lista ▴";
+    document.getElementById("cal-tabela").innerHTML = `<table class="ic-cal-tab"><thead><tr><th>Empresa</th><th>Setor</th><th>Data</th><th>Situação</th><th>De onde vem a data</th></tr></thead><tbody>${
+      d.empresas.map((e) => `<tr><td><b>${esc(e.nome)}</b></td><td>${esc(e.setor || "")}</td><td>${e.data ? dm(e.data) : "—"}${e.horario ? " · " + esc(e.horario) : ""}</td>
+        <td><span class="cal-pill st-${e.status}">${ROT_STATUS[e.status]}</span></td>
+        <td class="muted">${e.link ? `<a href="${esc(e.link)}" target="_blank" rel="noopener">${esc(e.origem)}</a>` : esc(e.origem || "")}</td></tr>`).join("")
+    }</tbody></table>`;
+
+    // Abertura: contador da temporada
+    const dentro = d.empresas.length;
+    const pct = (n) => (dentro ? (100 * n / dentro) : 0).toFixed(1) + "%";
+    document.getElementById("hero-temp-rotulo").textContent = t.rotulo;
+    document.getElementById("hero-temp-placar").innerHTML = ` <b>${r.divulgada}</b>/${dentro} divulgaram`;
+    document.getElementById("hero-temp-barra").innerHTML =
+      `<i class="b-div" style="width:${pct(r.divulgada)}"></i><i class="b-conf" style="width:${pct(r.confirmada)}"></i>`;
+    document.getElementById("hero-temp-prazo").textContent = t.encerrada
+      ? "encerrada"
+      : t.dias_para_prazo >= 0 ? `prazo ${dm(t.prazo)} · ${t.dias_para_prazo === 0 ? "hoje" : `${t.dias_para_prazo}d`}`
+        : `prazo venceu ${dm(t.prazo)}`;
+    document.getElementById("hero-temp-prazo").title = `Prazo da CVM para o ${t.documento} do ${t.rotulo}: ${dm(t.prazo)}`;
+    document.getElementById("hero-temp").hidden = false;
+
+    // Frase do dia: quem divulga hoje e no resto da semana
+    const semanaFim = dias[4];
+    const hojeL = d.empresas.filter((e) => e.data === hoje && e.status !== "divulgada");
+    const semana = d.empresas.filter((e) => e.data > hoje && e.data <= semanaFim && e.status !== "divulgada");
+    const nomes = (l) => l.slice(0, 3).map((e) => `<b>${esc(e.nome)}</b>`).join(", ") + (l.length > 3 ? ` e mais ${l.length - 3}` : "");
+    // "Na agenda" e não "divulgam": quase sempre é estimativa, e a frase
+    // não pode afirmar o que o calendário só supõe.
+    const todasConf = hojeL.length && hojeL.every((e) => e.status === "confirmada");
+    if (hojeL.length) briefing("resultados", `${todasConf ? "Divulgam hoje" : "Na agenda de hoje"}: ${nomes(hojeL)}`);
+    else if (semana.length) briefing("resultados", `<b>${semana.length}</b> ${semana.length > 1 ? "empresas previstas" : "empresa prevista"} para divulgar o ${t.rotulo} até sexta`);
+    else if (!t.encerrada) briefing("resultados", `<b>${r.divulgada}</b> de ${dentro} já divulgaram o ${t.rotulo}`);
+  }
+
+  // Dica (hover) e confirmação de data (clique, só admin)
+  const pop = document.getElementById("cal-pop");
+  const card = document.getElementById("cal-card");
+  let popFixo = false;
+  function posicionar(alvo) {
+    const r = card.getBoundingClientRect(), a = alvo.getBoundingClientRect();
+    pop.hidden = false;
+    let x = a.left - r.left, y = a.bottom - r.top + 6;
+    if (x + pop.offsetWidth > r.width - 8) x = r.width - pop.offsetWidth - 8;
+    if (y + pop.offsetHeight > r.height && a.top - r.top - pop.offsetHeight - 6 > 0) y = a.top - r.top - pop.offsetHeight - 6;
+    pop.style.left = Math.max(8, x) + "px"; pop.style.top = y + "px";
+  }
+  function htmlDica(e) {
+    const ent = e.entidades && e.entidades.length > 1 ? `<div class="muted">${e.entidades.map(esc).join(" · ")}</div>` : "";
+    return `<div class="pop-tit">${esc(e.nome)}</div><div><span class="cal-pill st-${e.status}">${ROT_STATUS[e.status]}</span>
+      ${e.data ? `<b>${dm(e.data)}</b>` : ""}${e.horario ? " · " + esc(e.horario) : ""}</div>
+      <div class="muted">${esc(e.origem || "")}</div>${ent}`;
+  }
+  const achar = (id) => calDados && calDados.empresas.find((e) => String(e.company_id) === String(id));
+
+  card.addEventListener("mouseover", (ev) => {
+    const b = ev.target.closest(".cal-chip");
+    if (!b || popFixo) return;
+    const e = achar(b.dataset.id);
+    if (!e) return;
+    pop.innerHTML = htmlDica(e) + (calAdmin && e.status !== "divulgada" ? '<div class="pop-acao">Clique para informar a data anunciada</div>' : "")
+      + (e.status === "divulgada" && e.link ? '<div class="pop-acao">Clique para abrir o documento</div>' : "");
+    posicionar(b);
+  });
+  card.addEventListener("mouseout", (ev) => {
+    if (!popFixo && ev.target.closest(".cal-chip") && !ev.relatedTarget?.closest?.(".cal-chip")) pop.hidden = true;
+  });
+  card.addEventListener("click", (ev) => {
+    const b = ev.target.closest(".cal-chip");
+    if (!b) return;
+    const e = achar(b.dataset.id);
+    if (!e) return;
+    if (e.status === "divulgada") { if (e.link) window.open(e.link, "_blank", "noopener"); return; }
+    if (!calAdmin) return;
+    popFixo = true;
+    pop.innerHTML = htmlDica(e) + `<form class="pop-form">
+        <label>Data anunciada <input type="date" name="data" value="${e.status === "confirmada" ? e.data : ""}" required></label>
+        <label>Horário <input type="text" name="horario" maxlength="20" placeholder="ex.: após o fechamento" value="${esc(e.horario || "")}"></label>
+        <span class="pop-erro" hidden></span>
+        <span class="pop-botoes"><button type="submit" class="btn-primary btn-small">Salvar</button>
+        ${e.status === "confirmada" ? '<button type="button" class="btn-small" data-acao="remover">Remover</button>' : ""}
+        <button type="button" class="btn-small" data-acao="fechar">Cancelar</button></span></form>`;
+    posicionar(b);
+    const form = pop.querySelector("form");
+    const enviar = (data, horario) => fetch("/api/inicio/resultados/confirmar", {
+      method: "POST", credentials: "same-origin", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ company_id: e.company_id, data, horario }),
+    }).then((r) => { if (!r.ok) throw new Error("HTTP " + r.status); return buscar("/api/inicio/resultados"); })
+      .then((d) => { popFixo = false; pop.hidden = true; desenharCalendario(d); })
+      .catch(() => { const er = pop.querySelector(".pop-erro"); er.hidden = false; er.textContent = "Não foi possível salvar."; });
+    form.addEventListener("submit", (s) => {
+      s.preventDefault();
+      const f = new FormData(form);
+      if (!f.get("data")) { const er = pop.querySelector(".pop-erro"); er.hidden = false; er.textContent = "Escolha a data."; return; }
+      enviar(f.get("data"), f.get("horario"));
+    });
+    form.addEventListener("click", (c) => {
+      const acao = c.target.dataset.acao;
+      if (acao === "fechar") { popFixo = false; pop.hidden = true; }
+      if (acao === "remover") enviar(null, null);
+    });
+  });
+  document.addEventListener("keydown", (ev) => { if (ev.key === "Escape") { popFixo = false; pop.hidden = true; } });
+
+  document.getElementById("cal-ver").addEventListener("click", (ev) => {
+    const tab = document.getElementById("cal-tabela");
+    tab.hidden = !tab.hidden;
+    ev.currentTarget.setAttribute("aria-expanded", String(!tab.hidden));
+    ev.currentTarget.textContent = tab.hidden ? `Ver as ${ev.currentTarget.dataset.total} ▾` : "Fechar lista ▴";
+  });
+
+  buscar("/api/inicio/resultados").then(desenharCalendario).catch(() => {
+    document.getElementById("cal-faixa").innerHTML = '<span class="muted small">Erro ao carregar o calendário.</span>';
+  });
+
   // ---- Spreads e movimentos --------------------------------------------
   let spreadsDados = null;
 
@@ -62,6 +280,12 @@
         : variacao(c.variacao_bps, abs(c.variacao_bps, 1) + " bps", "spread") + ' <span class="ic-cinza">na semana</span>';
       raiz.title = c.data_comparacao ? `${dm(c.data_referencia)} contra ${dm(c.data_comparacao)}` : "";
     });
+    const c0 = d.classes[0];
+    if (c0 && c0.variacao_bps != null) {
+      const v = c0.variacao_bps;
+      briefing("spreads", Math.abs(v) < 0.05 ? "Spread IPCA+ estável na semana"
+        : `Spread IPCA+ <b class="${v > 0 ? "h-abre" : "h-fecha"}">${v > 0 ? "abriu" : "fechou"} ${abs(v, 1)} bps</b> na semana`);
+    }
     const ref = d.classes[0] && d.classes[0].data_referencia;
     if (ref) atualizarDatas("spreads", "Spreads de " + dm(ref));
     desenharMovers(0);
@@ -142,14 +366,16 @@
 
   buscar("/api/inicio/noticias").then((d) => {
     document.getElementById("ratings-total").textContent = d.ratings.length ? `· ${d.ratings.length} em 5 dias` : "";
-    document.getElementById("lista-ratings").innerHTML = d.ratings.length ? d.ratings.slice(0, 5).map((a) => {
+    const rebaix = d.ratings.filter((a) => tipoRating(a.titulo) === "rebaixamento").length;
+    if (d.ratings.length) briefing("ratings", `<b>${d.ratings.length}</b> ações de rating em 5 dias${rebaix ? `, ${rebaix} rebaixamento${rebaix > 1 ? "s" : ""}` : ""}`);
+    document.getElementById("lista-ratings").innerHTML = d.ratings.length ? d.ratings.slice(0, 4).map((a) => {
       const t = tipoRating(a.titulo);
       const meta = `<span class="rt-pill rt-${t}">${TIPOS_RATING[t].simbolo} ${TIPOS_RATING[t].rotulo}</span>`
         + `${a.empresas[0] ? ` <b class="ic-meta-emp">${esc(a.empresas[0])}</b>` : ""} · ${esc(agencia(a.fonte))} · ${quando(a.quando)}`;
       return item(a.url, meta, a.titulo);
     }).join("") : '<span class="muted small">Nenhuma ação nos últimos 5 dias.</span>';
 
-    document.getElementById("lista-noticias").innerHTML = d.noticias.length ? d.noticias.slice(0, 5).map((a) => {
+    document.getElementById("lista-noticias").innerHTML = d.noticias.length ? d.noticias.slice(0, 4).map((a) => {
       const tag = a.empresas[0] || a.setores[0] || "";
       return item(a.url, `${quando(a.quando)} · ${esc(a.fonte)}${tag ? ` · <b class="ic-meta-emp">${esc(tag)}</b>` : ""}`, a.titulo);
     }).join("") : '<span class="muted small">Nenhuma notícia na última semana.</span>';
@@ -159,7 +385,7 @@
 
   // ---- Relatórios ---------------------------------------------------------
   buscar("/api/inicio/relatorios").then((d) => {
-    document.getElementById("lista-relatorios").innerHTML = d.relatorios.length ? d.relatorios.slice(0, 5).map((r) => {
+    document.getElementById("lista-relatorios").innerHTML = d.relatorios.length ? d.relatorios.slice(0, 4).map((r) => {
       const sobre = r.empresas[0] || r.categoria || "";
       return item(r.url, `${dm(r.data)}${r.analista ? " · " + esc(r.analista) : ""}${sobre ? ` · <b class="ic-meta-emp">${esc(sobre)}</b>` : ""}`, r.titulo);
     }).join("") : '<span class="muted small">Nenhum relatório no repositório.</span>';

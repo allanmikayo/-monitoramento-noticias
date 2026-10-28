@@ -7,7 +7,9 @@ from __future__ import annotations
 
 import os
 
-from fastapi import APIRouter, Depends, Request
+from datetime import date
+
+from fastapi import APIRouter, Body, Depends, HTTPException, Request
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
@@ -32,11 +34,12 @@ EQUIPE = [
 EMAIL_EQUIPE = "credit.researchext@itaubba.com"
 
 
-def register_inicio_routes(require_user_dep) -> APIRouter:
+def register_inicio_routes(require_user_dep, require_admin_dep=None) -> APIRouter:
     @router.get("/", response_class=HTMLResponse)
     def pagina(request: Request, user: User = Depends(require_user_dep)):
         return templates.TemplateResponse(
-            request, "inicio.html", {"user": user, "equipe": EQUIPE, "email_equipe": EMAIL_EQUIPE},
+            request, "inicio.html", {"user": user, "equipe": EQUIPE, "email_equipe": EMAIL_EQUIPE,
+                                     "pode_confirmar": bool(user and user.role == "admin")},
         )
 
     @router.get("/api/inicio/spreads")
@@ -62,5 +65,33 @@ def register_inicio_routes(require_user_dep) -> APIRouter:
     @router.get("/api/inicio/relatorios")
     def api_relatorios(user: User = Depends(require_user_dep), db: Session = Depends(get_db)):
         return inicio.relatorios(db)
+
+    @router.get("/api/inicio/resultados")
+    def api_resultados(user: User = Depends(require_user_dep), db: Session = Depends(get_db)):
+        return inicio.resultados(db)
+
+    # Data ANUNCIADA pela empresa, digitada no próprio calendário. Só admin:
+    # é uma informação que todo o time passa a ver como "confirmada".
+    @router.post("/api/inicio/resultados/confirmar")
+    def api_confirmar(
+        company_id: int = Body(...), data: str | None = Body(None), horario: str | None = Body(None),
+        user: User = Depends(require_admin_dep or require_user_dep), db: Session = Depends(get_db),
+    ):
+        from . import calendario
+        from .models import Company, ResultadoConfirmado
+
+        if user.role != "admin":
+            raise HTTPException(status_code=403, detail="só admin confirma data")
+        if db.get(Company, company_id) is None:
+            raise HTTPException(status_code=404, detail="empresa não encontrada")
+        try:
+            dia = date.fromisoformat(data) if data else None
+        except ValueError:
+            raise HTTPException(status_code=400, detail="data no formato AAAA-MM-DD") from None
+        # A tabela nasce aqui se o job da CVM ainda não rodou (a Vercel não
+        # roda DDL no boot; checkfirst é uma consulta só).
+        ResultadoConfirmado.__table__.create(db.get_bind(), checkfirst=True)
+        calendario.confirmar(db, company_id, dia, (horario or "").strip()[:20] or None, user.email)
+        return {"ok": True}
 
     return router

@@ -13,10 +13,27 @@
   mini nem barras no placar, títulos em caixa normal.
 #}
 <div class="inicio">
-  <div class="inicio-topo">
-    <h1>Bom dia{% if user and user.name %}, {{ user.name.split(' ')[0] }}{% endif %}</h1>
-    <span class="ic-datas" id="inicio-datas"></span>
-  </div>
+  {# ABERTURA (28/10/2026, pedido do Allan: "mais chamativa, sem poluir").
+     Uma faixa escura, da mesma família da barra superior, com a saudação e
+     UMA frase que resume o dia -- montada no navegador com os números que
+     os próprios cartões carregam (static/inicio.js, `briefing`). À direita,
+     o contador da temporada de resultados. Nenhum dado novo além do
+     calendário: é a mesma informação, com hierarquia. #}
+  <section class="ic-hero">
+    <div class="ic-hero-esq">
+      <span class="ic-hero-linha1">
+        <h1><span id="hero-saudacao">Olá</span>{% if user and user.name %}, {{ user.name.split(' ')[0] }}{% endif %}</h1>
+        <span class="ic-hero-dia" id="hero-dia"></span>
+      </span>
+      <p class="ic-hero-brief" id="hero-brief"><span class="ic-hero-carregando">Montando o resumo do dia…</span></p>
+      <span class="ic-datas" id="inicio-datas"></span>
+    </div>
+    <a class="ic-hero-temp" href="#cal-card" id="hero-temp" hidden>
+      <span class="ic-hero-temp-rot">Temporada de resultados</span>
+      <span class="ic-hero-temp-num"><b id="hero-temp-rotulo">—</b><span id="hero-temp-placar"></span></span>
+      <span class="ic-hero-temp-pe"><span class="ic-hero-barra" id="hero-temp-barra"></span><span class="ic-hero-temp-prazo" id="hero-temp-prazo"></span></span>
+    </a>
+  </section>
 
   {# ---- 1. Placar ---------------------------------------------------- #}
   <section class="inicio-placar">
@@ -51,6 +68,25 @@
     </a>
   </section>
 
+  {# ---- Agenda de resultados (28/10/2026) ---------------------------- #}
+  {# Duas semanas úteis, a partir da segunda-feira desta semana. Preto =
+     divulgou, laranja = data anunciada pela empresa, tracejado = estimada
+     pelo histórico. Conta e fontes em app/calendario.py. #}
+  <section class="ic-card ic-cal" id="cal-card" data-admin="{{ 'sim' if pode_confirmar else '' }}">
+    <span class="ic-cab">
+      <span class="ic-tit-card">Agenda de resultados <span class="ic-nota" id="cal-sub"></span></span>
+      <span class="ic-cal-legenda">
+        <span><i class="st-divulgada"></i>Divulgou</span>
+        <span><i class="st-confirmada"></i>Data anunciada</span>
+        <span><i class="st-estimada"></i>Estimada</span>
+        <button type="button" class="ic-mais ic-cal-ver" id="cal-ver" aria-expanded="false" hidden>Ver todas ▾</button>
+      </span>
+    </span>
+    <div class="ic-cal-faixa" id="cal-faixa"><span class="muted small">Carregando…</span></div>
+    <div id="cal-tabela" hidden></div>
+    <div class="ic-cal-pop" id="cal-pop" hidden></div>
+  </section>
+
   {# ---- 2. Mercado --------------------------------------------------- #}
   <section class="inicio-mercado">
     <div class="ic-card">
@@ -64,7 +100,7 @@
       <span class="ic-rodape-nota" id="nota-real"></span>
     </div>
     <div class="ic-card">
-      <span class="ic-cab"><span class="ic-tit-card">Movimentos na semana</span>
+      <span class="ic-cab"><a class="ic-tit-card ic-tit-link" href="/spreads" title="Ver todos em Spreads">Movimentos na semana →</a>
         <span class="window-tabs ic-tabs" id="movers-tabs">
           <button type="button" class="win-btn active" data-i="0">IPCA+</button>
           <button type="button" class="win-btn" data-i="1">CDI+</button>
@@ -74,7 +110,6 @@
       <div id="lista-aberturas" class="ic-lista"></div>
       <span class="ic-sub">Maiores fechamentos</span>
       <div id="lista-fechamentos" class="ic-lista"></div>
-      <a href="/spreads" class="ic-mais ic-rodape">Ver todos em Spreads →</a>
     </div>
   </section>
 
