@@ -1406,3 +1406,17 @@ class ResultadoConfirmado(Base):
     __table_args__ = (
         UniqueConstraint("company_id", "data_referencia", name="uq_resultado_confirmado"),
     )
+
+
+class EmpresaTipoCobertura(Base):
+    """Como o time cobre a empresa -- Local, Offshore ou Offshore + Local
+    (28/10/2026). Vem da lista de datas de resultado que o time revisa a
+    cada temporada (importada no calendário) e vira a tag colorida da
+    agenda. `status_relatorio` é a marcação da mesma lista ("Em execução",
+    "Publicado", "Restrito"), mostrada só na dica e na lista completa."""
+    __tablename__ = "empresas_tipo_cobertura"
+
+    company_id: Mapped[int] = mapped_column(ForeignKey("companies.id"), primary_key=True)
+    tipo: Mapped[str | None] = mapped_column(String(30))
+    status_relatorio: Mapped[str | None] = mapped_column(String(30))
+    atualizado_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)

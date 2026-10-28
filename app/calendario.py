@@ -50,8 +50,8 @@ from sqlalchemy import or_, select
 from sqlalchemy.orm import Session, selectinload
 
 from .models import (
-    Article, Company, Debenture, DebentureCaracteristica, EntregaResultadoCVM, Issuer,
-    ResultadoConfirmado,
+    Article, Company, Debenture, DebentureCaracteristica, EmpresaTipoCobertura, EntregaResultadoCVM,
+    Issuer, ResultadoConfirmado,
 )
 from .spreads.issuer_key import issuer_key
 
@@ -220,9 +220,19 @@ def _estimar(entregas: list[EntregaResultadoCVM], temporada: Temporada) -> tuple
 
 
 def agenda(db: Session, hoje: date | None = None) -> dict:
+    """A agenda da temporada, no formato do relatório semanal (28/10/2026).
+
+    A DATA de cada empresa vem da lista que o time revisa (importada no
+    calendário, ou ajustada por um admin chip a chip). A CVM entra para
+    dizer quem JÁ divulgou (RAD em tempo real + arquivos ITR/DFP) e para
+    sugerir uma data a quem está sem data na lista (`estimativa`, só como
+    dica -- a agenda não inventa data). Toda empresa ativa da cobertura
+    aparece: com data ("agendada"), sem data ("sem_data") ou já divulgada.
+    """
     from zoneinfo import ZoneInfo
 
-    hoje = hoje or datetime.now(ZoneInfo("America/Sao_Paulo")).date()
+    brt = ZoneInfo("America/Sao_Paulo")
+    hoje = hoje or datetime.now(brt).date()
     tp = temporada_para(hoje)
     empresas = db.scalars(
         select(Company).options(selectinload(Company.aliases), selectinload(Company.sector))
@@ -231,7 +241,6 @@ def agenda(db: Session, hoje: date | None = None) -> dict:
     entidades = entidades_por_empresa(db, empresas)
     todos_cnpjs = set().union(*entidades.values()) if entidades else set()
 
-    # Histórico: dois anos bastam para "mesmo trimestre do ano anterior".
     entregas = db.scalars(
         select(EntregaResultadoCVM).where(
             EntregaResultadoCVM.cnpj.in_(todos_cnpjs or {""}),
@@ -243,56 +252,82 @@ def agenda(db: Session, hoje: date | None = None) -> dict:
         por_cnpj.setdefault(e.cnpj, []).append(e)
 
     rad = divulgacoes_rad(db, tp, hoje)
-    confirmadas = {r.company_id: r for r in db.scalars(
+    agendadas = {r.company_id: r for r in db.scalars(
         select(ResultadoConfirmado).where(ResultadoConfirmado.data_referencia == tp.referencia))}
+    tipos = _tipos(db)
 
-    linhas, fora_cvm = [], 0
+    linhas = []
     for c in empresas:
         cnpjs = entidades.get(c.id, set())
         hist = [e for cnpj in cnpjs for e in por_cnpj.get(cnpj, [])]
-        nomes = sorted({e.denominacao for e in hist if e.denominacao})
+        na_cvm = bool(hist) or c.id in rad
+        t = tipos.get(c.id)
+        ag = agendadas.get(c.id)
         base = {"company_id": c.id, "nome": c.name,
-                "setor": c.sector.name if c.sector else None, "entidades": nomes[:6]}
+                "setor": c.sector.name if c.sector else None,
+                "tipo": t.tipo if t else None,
+                "status_relatorio": t.status_relatorio if t else None,
+                "na_cvm": na_cvm,
+                "entidades": sorted({e.denominacao for e in hist if e.denominacao})[:6],
+                "data_agenda": ag.data_prevista.isoformat() if ag else None,
+                "horario": ag.horario if ag else None}
 
-        # 1. Divulgada (RAD em tempo real ou arquivo da CVM)
-        da_temporada = [e for e in hist if e.data_referencia == tp.referencia and e.documento == tp.documento]
+        # 1. Divulgada: RAD (tempo real) ou arquivo ITR/DFP, o que vier antes
         candidatos = []
         if c.id in rad:
             r = rad[c.id]
-            candidatos.append((r["quando"].astimezone(ZoneInfo("America/Sao_Paulo")).date()
-                               if r["quando"].tzinfo else r["quando"].date(),
-                               r["link"], f"{r['origem']} (RAD)"))
-        for e in da_temporada:
-            candidatos.append((e.data_entrega, e.link, f"{e.documento} entregue à CVM"))
+            quando = r["quando"]
+            dia = (quando.astimezone(brt) if quando.tzinfo else quando.replace(tzinfo=timezone.utc).astimezone(brt)).date()
+            candidatos.append((dia, r["link"], f"{r['origem']} (RAD)"))
+        for e in hist:
+            if e.data_referencia == tp.referencia and e.documento == tp.documento:
+                candidatos.append((e.data_entrega, e.link, f"{e.documento} entregue à CVM"))
         if candidatos:
             d, link, origem = min(candidatos, key=lambda x: x[0])
             linhas.append({**base, "status": "divulgada", "data": d.isoformat(), "origem": origem, "link": link})
             continue
 
-        # 2. Confirmada pela empresa
-        if c.id in confirmadas:
-            r = confirmadas[c.id]
-            linhas.append({**base, "status": "confirmada", "data": r.data_prevista.isoformat(),
-                           "horario": r.horario, "origem": "data anunciada pela empresa"})
+        # 2. Data da agenda do time
+        if ag:
+            if ag.data_prevista >= hoje:
+                status, origem = "agendada", "agenda do time"
+            elif na_cvm:
+                # Passou da data e a CVM ainda não mostra entrega: pode ser
+                # atraso de verdade ou só a CVM (o RAD costuma pegar no dia).
+                status, origem = "pendente", "data da agenda já passou; sem entrega na CVM ainda"
+            else:
+                # Sem registro na CVM (offshore, fechada): não há como
+                # confirmar por lá -- vale a data da agenda.
+                status, origem = "divulgada", "data da agenda (sem registro na CVM para confirmar)"
+            linhas.append({**base, "status": status, "data": ag.data_prevista.isoformat(), "origem": origem})
             continue
 
-        # 3. Estimada pelo histórico
-        if not cnpjs and c.id not in rad:
-            fora_cvm += 1
-            continue
-        estimada, origem = _estimar(hist, tp)
-        if estimada is None:
-            if not hist:
-                fora_cvm += 1          # CNPJ conhecido, mas nunca entregou ITR/DFP: não é companhia aberta
-                continue
-            linhas.append({**base, "status": "sem_estimativa", "data": None, "origem": "sem histórico"})
-            continue
-        status = "atrasada" if estimada < hoje else "estimada"
-        linhas.append({**base, "status": status, "data": estimada.isoformat(), "origem": origem})
+        # 3. Sem data na agenda. A estimativa pelo histórico vai só como dica.
+        estimada, como = _estimar(hist, tp)
+        linhas.append({**base, "status": "sem_data", "data": None,
+                       "origem": "sem data na agenda" + (" · entrega ITR/DFP na CVM" if na_cvm else ""),
+                       "estimativa": estimada.isoformat() if estimada else None,
+                       "estimativa_origem": como or None})
 
     linhas.sort(key=lambda l: (l["data"] or "9999", l["nome"]))
-    cont = {s: sum(1 for l in linhas if l["status"] == s)
-            for s in ("divulgada", "confirmada", "estimada", "atrasada", "sem_estimativa")}
+
+    # Resumo no formato do relatório semanal
+    seg = hoje - timedelta(days=hoje.weekday())
+    sex, prox_seg = seg + timedelta(days=4), seg + timedelta(days=7)
+    prox_sex = prox_seg + timedelta(days=4)
+    na_semana = lambda l, a, b: l["data"] and a.isoformat() <= l["data"] <= b.isoformat()  # noqa: E731
+    semana = [l for l in linhas if na_semana(l, seg, sex)]
+    proxima = [l for l in linhas if na_semana(l, prox_seg, prox_sex)]
+    resumo = {
+        "total": len(linhas),
+        "divulgada": sum(l["status"] == "divulgada" for l in linhas),
+        "agendada": sum(l["status"] == "agendada" for l in linhas),
+        "pendente": sum(l["status"] == "pendente" for l in linhas),
+        "sem_data": sum(l["status"] == "sem_data" for l in linhas),
+        "semana_total": len(semana),
+        "semana_divulgadas": sum(l["status"] == "divulgada" for l in semana),
+        "proxima_total": len(proxima),
+    }
     ultima_cvm = db.scalar(select(EntregaResultadoCVM.data_entrega).order_by(
         EntregaResultadoCVM.data_entrega.desc()).limit(1))
     return {
@@ -301,16 +336,31 @@ def agenda(db: Session, hoje: date | None = None) -> dict:
                       "referencia": tp.referencia.isoformat(), "prazo": tp.prazo.isoformat(),
                       "dias_para_prazo": (tp.prazo - hoje).days,
                       "encerrada": hoje > tp.prazo + FOLGA_APOS_PRAZO},
-        "resumo": {**cont, "total": len(linhas), "fora_cvm": fora_cvm},
+        "semanas": {"atual": [seg.isoformat(), sex.isoformat()],
+                    "proxima": [prox_seg.isoformat(), prox_sex.isoformat()]},
+        "resumo": resumo,
         "cvm_ate": ultima_cvm.isoformat() if ultima_cvm else None,
         "empresas": linhas,
     }
 
 
+def _tipos(db: Session) -> dict:
+    try:
+        return {t.company_id: t for t in db.scalars(select(EmpresaTipoCobertura))}
+    except Exception:  # tabela ainda não criada (nenhuma lista importada)
+        db.rollback()
+        return {}
+
+
+TIPOS_COBERTURA = ("Local", "Offshore", "Offshore + Local")
+
+
 def confirmar(db: Session, company_id: int, data_prevista: date | None, horario: str | None,
-              autor: str | None, hoje: date | None = None) -> None:
-    """Grava (ou apaga, com `data_prevista=None`) a data anunciada da
-    temporada corrente."""
+              autor: str | None, hoje: date | None = None, tipo: str | None = "",
+              ) -> None:
+    """Grava (ou apaga, com `data_prevista=None`) a data da agenda na
+    temporada corrente. `tipo` (Local/Offshore/Offshore + Local) é
+    atualizado junto quando vier; string vazia = não mexe."""
     tp = temporada_para(hoje or date.today())
     atual = db.scalar(select(ResultadoConfirmado).where(
         ResultadoConfirmado.company_id == company_id, ResultadoConfirmado.data_referencia == tp.referencia))
@@ -323,7 +373,197 @@ def confirmar(db: Session, company_id: int, data_prevista: date | None, horario:
     else:
         db.add(ResultadoConfirmado(company_id=company_id, data_referencia=tp.referencia,
                                    data_prevista=data_prevista, horario=horario, criado_por=autor))
+    if tipo != "":
+        _gravar_tipo(db, company_id, tipo or None, manter_status=True)
     db.commit()
+
+
+def _gravar_tipo(db: Session, company_id: int, tipo: str | None, status: str | None = None,
+                 manter_status: bool = False) -> None:
+    t = db.get(EmpresaTipoCobertura, company_id)
+    if t is None:
+        db.add(EmpresaTipoCobertura(company_id=company_id, tipo=tipo, status_relatorio=status))
+        return
+    t.tipo = tipo
+    if not manter_status:
+        t.status_relatorio = status
+    t.atualizado_em = datetime.now(timezone.utc)
+
+
+# ---------------------------------------------------------------------------
+# Lista de datas do time (28/10/2026)
+# ---------------------------------------------------------------------------
+# Formato colado do Excel: "Empresa  Data  Horário  Cobertura  Cor  Significado".
+# Horário: After / Before / Confirmar. Linhas sem data: "Empresa (Local)".
+_LINHA_COM_DATA = re.compile(
+    r"^\s*(?P<nome>.+?)\s+(?P<data>\d{1,2}/\d{1,2}/\d{4})\s+(?P<hora>after|before|confirmar|a confirmar)\b"
+    r"\s*(?P<cob>offshore\s*\+\s*local|local\s*\+\s*offshore|offshore|local)?(?P<resto>.*)$", re.I)
+_LINHA_SEM_DATA = re.compile(r"^\s*(?P<nome>.+?)\s*\(\s*(?P<cob>offshore\s*\+\s*local|offshore|local)\s*\)\s*$", re.I)
+HORARIOS = {"after": "após o fechamento", "before": "antes da abertura"}
+STATUS_RELATORIO = (("restrit", "Restrito"), ("publicad", "Publicado"), ("execu", "Em execução"))
+
+
+def _tipo_normalizado(txt: str | None) -> str | None:
+    t = re.sub(r"\s+", " ", (txt or "").strip().lower())
+    if not t:
+        return None
+    if "offshore" in t and "local" in t:
+        return "Offshore + Local"
+    return "Offshore" if "offshore" in t else "Local"
+
+
+def ler_lista(texto: str) -> tuple[list[dict], list[str]]:
+    """Linhas reconhecidas e linhas que não deu para ler (cabeçalho fica de fora)."""
+    itens, ignoradas = [], []
+    for bruta in (texto or "").splitlines():
+        linha = bruta.replace("\t", " ").strip()
+        if not linha or (linha.lower().startswith("empresa") and not re.search(r"\d{1,2}/\d{1,2}/", linha)):
+            continue  # cabeçalho
+        m = _LINHA_COM_DATA.match(linha)
+        if m:
+            d, mth, a = (int(x) for x in m["data"].split("/"))
+            try:
+                dia = date(a, mth, d)
+            except ValueError:
+                ignoradas.append(linha)
+                continue
+            resto = (m["resto"] or "").lower()
+            status = next((rot for chave, rot in STATUS_RELATORIO if chave in resto), None)
+            itens.append({"nome": m["nome"].strip(), "data": dia,
+                          "horario": HORARIOS.get(m["hora"].lower()),
+                          "tipo": _tipo_normalizado(m["cob"]), "status_relatorio": status})
+            continue
+        m = _LINHA_SEM_DATA.match(linha)
+        if m:
+            itens.append({"nome": m["nome"].strip(), "data": None, "horario": None,
+                          "tipo": _tipo_normalizado(m["cob"]), "status_relatorio": None})
+            continue
+        ignoradas.append(linha)
+    return itens, ignoradas
+
+
+_ABREVIACOES = (("RIO JANEIRO", "RJ"), ("SAO PAULO", "SP"), ("MINAS GERAIS", "MG"))
+
+
+def _abreviar(chave: str) -> str:
+    """"Iguá Rio de Janeiro" e "Iguá RJ" viram a mesma chave."""
+    for longo, curto in _ABREVIACOES:
+        chave = re.sub(rf"\b{longo}\b", curto, chave)
+    return chave
+
+
+def _sem_espaco(chave: str) -> str:
+    return chave.replace(" ", "")
+
+
+def casar_nome(nome: str, empresas: list[Company]) -> Company | None:
+    """Nome da lista -> empresa da cobertura. Em ordem, e só se a resposta
+    for ÚNICA: (1) mesma chave normalizada do nome, de um apelido ou do nome
+    sem o parêntese ("Norte Energia (Belo Monte)"); (2) igual sem espaços
+    ("EZtec" x "EZ Tec"); (3) um é começo do outro ("BRK" x "BRK Ambiental",
+    "CEEE Geração" x "CEEE-G"); (4) grafia quase igual ("Mercado Libre" x
+    "Mercado Livre"). Ambíguo ou nada: devolve None e o nome vai para o
+    relatório da importação, em vez de casar com a empresa errada."""
+    import difflib
+
+    alvo = _abreviar(issuer_key(nome))
+    if not alvo:
+        return None
+    chaves: list[tuple[str, Company]] = []
+    for c in empresas:
+        for n in [c.name, re.sub(r"\(.*?\)", "", c.name)] + [a.alias for a in c.aliases]:
+            k = _abreviar(issuer_key(n))
+            if k:
+                chaves.append((k, c))
+
+    def unico(cands):
+        ids = {c.id for c in cands}
+        return cands[0] if len(ids) == 1 else None
+
+    for teste in (lambda k: k == alvo,
+                  lambda k: _sem_espaco(k) == _sem_espaco(alvo)):
+        achou = unico([c for k, c in chaves if teste(k)])
+        if achou:
+            return achou
+    a = _sem_espaco(alvo)
+    if len(a) >= 3:
+        achou = unico([c for k, c in chaves
+                       if len(_sem_espaco(k)) >= 3 and (_sem_espaco(k).startswith(a) or a.startswith(_sem_espaco(k)))])
+        if achou:
+            return achou
+    notas = sorted(((difflib.SequenceMatcher(None, a, _sem_espaco(k)).ratio(), c) for k, c in chaves),
+                   key=lambda x: -x[0])
+    if notas and notas[0][0] >= 0.85 and (len(notas) == 1 or notas[1][0] < notas[0][0] or notas[1][1].id == notas[0][1].id):
+        return notas[0][1]
+    return None
+
+
+CHAVE_RELATORIO_IMPORTACAO = "agenda_ultima_importacao"
+
+
+def importar_lista(db: Session, texto: str, autor: str | None, hoje: date | None = None) -> dict:
+    """Substitui a agenda da temporada corrente pela lista colada.
+
+    A lista é a revisão COMPLETA do time: empresas que estavam na agenda e
+    sumiram da lista perdem a data (e voltam a "sem data"). Devolve -- e
+    guarda, para a tela mostrar depois -- o que não casou e o que, na
+    cobertura, ficou sem data, separando quem entrega ITR/DFP na CVM.
+    """
+    import json
+
+    hoje = hoje or date.today()
+    tp = temporada_para(hoje)
+    itens, ignoradas = ler_lista(texto)
+    if not itens:
+        raise ValueError("nenhuma linha reconhecida -- confira o formato (Empresa, Data, Horário, Cobertura)")
+    empresas = db.scalars(select(Company).options(selectinload(Company.aliases))
+                          .where(Company.active.is_(True))).all()
+    casados: dict[int, dict] = {}
+    nao_reconhecidas = []
+    for it in itens:
+        c = casar_nome(it["nome"], empresas)
+        if c is None:
+            nao_reconhecidas.append(it["nome"])
+        else:
+            casados[c.id] = {**it, "empresa": c.name}
+
+    db.query(ResultadoConfirmado).filter(ResultadoConfirmado.data_referencia == tp.referencia).delete()
+    for cid, it in casados.items():
+        if it["data"]:
+            db.add(ResultadoConfirmado(company_id=cid, data_referencia=tp.referencia, data_prevista=it["data"],
+                                       horario=it["horario"], criado_por=autor))
+        _gravar_tipo(db, cid, it["tipo"], it["status_relatorio"])
+    db.flush()
+
+    # Quem da cobertura ficou sem data -- e, desses, quem entrega na CVM
+    # (esses deveriam estar na lista: vão divulgar resultado).
+    a = agenda(db, hoje)
+    sem_data = [l for l in a["empresas"] if l["status"] == "sem_data"]
+    relatorio = {
+        "quando": datetime.now(timezone.utc).isoformat(), "por": autor, "temporada": tp.rotulo,
+        "linhas_lidas": len(itens), "com_data": sum(1 for i in casados.values() if i["data"]),
+        "nao_reconhecidas": nao_reconhecidas, "linhas_ignoradas": ignoradas[:20],
+        "sem_data_entrega_cvm": [l["nome"] for l in sem_data if l["na_cvm"]],
+        "sem_data_fora_cvm": [l["nome"] for l in sem_data if not l["na_cvm"]],
+        "ja_divulgaram_fora_da_lista": [l["nome"] for l in a["empresas"]
+                                         if l["status"] == "divulgada" and l["company_id"] not in casados],
+    }
+    from .models import AppSetting
+    s = db.get(AppSetting, CHAVE_RELATORIO_IMPORTACAO)
+    if s is None:
+        db.add(AppSetting(key=CHAVE_RELATORIO_IMPORTACAO, value=json.dumps(relatorio, ensure_ascii=False)))
+    else:
+        s.value = json.dumps(relatorio, ensure_ascii=False)
+    db.commit()
+    return relatorio
+
+
+def ultimo_relatorio(db: Session) -> dict | None:
+    import json
+
+    from .models import AppSetting
+    s = db.get(AppSetting, CHAVE_RELATORIO_IMPORTACAO)
+    return json.loads(s.value) if s and s.value else None
 
 
 # ---------------------------------------------------------------------------

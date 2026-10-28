@@ -2573,3 +2573,32 @@ divulgação de resultados das empresas da cobertura, automatizado.
   DENOM_CIA, CD_CVM, DT_RECEB, LINK_DOC) é o layout conhecido desses
   arquivos, NÃO conferido no dicionário (o site não abriu daqui); rodar o
   workflow manualmente uma vez depois do deploy.
+
+### Agenda de resultados como relatório semanal + lista do time — 28/10/2026 (2ª rodada)
+
+Allan mandou a lista revisada de datas do time (Empresa | Data | Horário
+After/Before/Confirmar | Cobertura Local/Offshore/Offshore + Local | cor |
+status do relatório Publicado/Em execução/Restrito) e pediu cara de
+relatório semanal, tag pastel por tipo de cobertura e "sem data" para quem
+da cobertura não tem data.
+- **A data agora vem da lista do time**, não da estimativa. Status:
+  `divulgada` (RAD/CVM; para quem não tem registro na CVM, a data da agenda
+  que já passou), `agendada`, `pendente` (data passou, está na CVM e não
+  entregou), `sem_data`. A estimativa pelo histórico virou só dica
+  (`estimativa`) de quem está sem data. TODA empresa ativa da cobertura
+  aparece (antes, quem não estava na CVM ficava de fora).
+- **Importação**: lista completa → "Ver as N" → "Atualizar agenda" (admin
+  cola do Excel; `POST /api/inicio/resultados/importar`,
+  `calendario.importar_lista`). SUBSTITUI a agenda da temporada. Nome da
+  lista casa com a empresa por chave normalizada, sem espaço, prefixo único
+  ("BRK" → "BRK Ambiental") ou grafia quase igual (≥0,85, única); "Rio de
+  Janeiro" vira "RJ". Ambíguo não casa. Relatório da importação (nomes não
+  casados, sem data que entrega na CVM, sem data fora da CVM, já divulgou e
+  não está na lista) fica em `AppSetting` `agenda_ultima_importacao` e só o
+  admin vê. A lista NÃO vai para o repositório (é público).
+- Tipo e status do relatório em `empresas_tipo_cobertura` (criada com
+  checkfirst nas rotas). O admin ainda ajusta data, horário e tipo chip a
+  chip.
+- Tela: coluna de números (já divulgaram, esta semana, próxima semana, sem
+  data, data passou) + duas colunas (esta semana / próxima) dia a dia.
+  Cores pastel: Local #FDE3CF, Offshore #DCE9F7, Offshore + Local #FBDDEB.

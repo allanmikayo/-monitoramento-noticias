@@ -57,105 +57,89 @@
     if (partes.length) document.getElementById("hero-brief").innerHTML = partes.join("");
   }
 
-  // ---- Agenda de resultados (28/10/2026) ----------------------------------
-  // Duas semanas úteis a partir da segunda desta semana. Quem já divulgou
-  // antes disso entra só na contagem; quem passou da data estimada sem
-  // divulgar vai para "Pendentes"; quem fica para depois vai para "Depois".
+  // ---- Agenda de resultados (28/10/2026, formato de relatório semanal) ----
+  // A data vem da lista do time (importada aqui mesmo ou ajustada chip a
+  // chip por admin); a CVM diz quem já divulgou. Duas colunas: esta semana
+  // e a próxima. Cor do chip = tipo de cobertura (Local / Offshore / os dois).
   const ROT_STATUS = {
-    divulgada: "Divulgou", confirmada: "Data anunciada", estimada: "Estimada",
-    atrasada: "Passou da data estimada", sem_estimativa: "Sem histórico",
+    divulgada: "Divulgou", agendada: "Agendada", pendente: "Data passou, sem entrega na CVM",
+    sem_data: "Sem data",
   };
-  const POR_COLUNA = 3;
-  const isoDia = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  const TIPOS = ["Local", "Offshore", "Offshore + Local"];
+  const classeTipo = (t) => (t === "Local" ? "tp-local" : t === "Offshore" ? "tp-off" : t === "Offshore + Local" ? "tp-ambos" : "tp-nd");
+  const HORA = { "após o fechamento": ["☾", "após o fechamento"], "antes da abertura": ["☀", "antes da abertura"] };
+  const POR_DIA = 7;
   const deIso = (iso) => { const [y, m, d] = iso.split("-").map(Number); return new Date(y, m - 1, d); };
+  const isoDia = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
   const DIA_CURTO = ["dom", "seg", "ter", "qua", "qui", "sex", "sáb"];
   let calDados = null;
   const calAdmin = document.getElementById("cal-card").dataset.admin === "sim";
 
-  function diasUteis(inicio, n) {
-    const out = [];
-    const d = new Date(inicio);
-    while (out.length < n) {
-      if (d.getDay() > 0 && d.getDay() < 6) out.push(isoDia(d));
-      d.setDate(d.getDate() + 1);
-    }
-    return out;
-  }
-
   function chip(e) {
-    const hora = e.horario ? ` · ${esc(e.horario)}` : "";
-    return `<button type="button" class="cal-chip st-${e.status}" data-id="${e.company_id}">${esc(e.nome)}${
-      e.status === "divulgada" ? ' <span aria-hidden="true">✓</span>' : ""}<span class="sr-only"> — ${ROT_STATUS[e.status]}${hora}</span></button>`;
+    const h = HORA[e.horario];
+    const icone = e.status === "divulgada" ? '<span class="cal-ok" aria-hidden="true">✓</span>'
+      : h ? `<span class="cal-hora" aria-hidden="true">${h[0]}</span>` : "";
+    return `<button type="button" class="cal-chip ${classeTipo(e.tipo)} st-${e.status}" data-id="${e.company_id}">${icone}${esc(e.nome)}<span class="sr-only"> — ${ROT_STATUS[e.status]}${e.tipo ? " · " + esc(e.tipo) : ""}${h ? " · " + h[1] : ""}</span></button>`;
   }
 
-  function coluna(classe, cabeca, lista, extraCab) {
-    const vis = lista.slice(0, POR_COLUNA).map(chip).join("");
-    const resto = lista.length - POR_COLUNA;
-    const mais = resto > 0
-      ? `<button type="button" class="cal-mais" title="${esc(lista.slice(POR_COLUNA).map((e) => e.nome).join(", "))}">+${resto}</button>` : "";
-    return `<div class="cal-col ${classe}"><div class="cal-dia">${cabeca}${extraCab || ""}</div>${vis}${mais}</div>`;
+  function linhaDia(iso, lista, hoje, prazo) {
+    const dt = deIso(iso);
+    const ordem = { divulgada: 0, pendente: 1, agendada: 2 };
+    lista.sort((a, b) => (ordem[a.status] ?? 3) - (ordem[b.status] ?? 3) || a.nome.localeCompare(b.nome));
+    const vis = lista.slice(0, POR_DIA).map(chip).join("");
+    const resto = lista.length - POR_DIA;
+    const mais = resto > 0 ? `<button type="button" class="cal-mais" data-dia="${iso}" title="${esc(lista.slice(POR_DIA).map((e) => e.nome).join(", "))}">+${resto}</button>` : "";
+    const cls = iso === hoje ? "cal-hoje" : iso < hoje ? "cal-passado" : "";
+    const marca = iso === prazo ? '<span class="cal-prazo" title="Prazo da CVM">prazo</span>' : "";
+    return `<div class="cal-linha ${cls}"><span class="cal-ddia"><span class="cal-dsem">${iso === hoje ? "hoje" : DIA_CURTO[dt.getDay()]}</span><b>${dt.getDate()}</b>${marca}</span>
+      <span class="cal-chips">${vis || '<span class="cal-vazio">—</span>'}${mais}</span></div>`;
+  }
+
+  function semana(titulo, [ini, fim], porDia, hoje, prazo) {
+    const dias = [];
+    for (let d = deIso(ini); isoDia(d) <= fim; d.setDate(d.getDate() + 1)) dias.push(isoDia(d));
+    const n = dias.reduce((s, iso) => s + (porDia[iso] || []).length, 0);
+    return `<div class="cal-bloco"><div class="cal-semana-tit">${titulo} <span class="muted">${dm(ini)}–${dm(fim)} · ${n} ${n === 1 ? "empresa" : "empresas"}</span></div>
+      ${dias.map((iso) => linhaDia(iso, porDia[iso] || [], hoje, prazo)).join("")}</div>`;
   }
 
   function desenharCalendario(d) {
     calDados = d;
-    const faixa = document.getElementById("cal-faixa");
+    const corpo = document.getElementById("cal-faixa");
     const t = d.temporada;
     if (!t) {
-      faixa.innerHTML = '<span class="muted small">Calendário ainda sem dados: o job da CVM (resultados_cvm.yml) não rodou.</span>';
+      corpo.innerHTML = '<span class="muted small">Agenda ainda sem dados.</span>';
       return;
     }
-    const r = d.resumo;
-    const hoje = d.hoje;
-    const seg = deIso(hoje);
-    seg.setDate(seg.getDate() - ((seg.getDay() + 6) % 7));
-    const dias = diasUteis(seg, 10);
+    const r = d.resumo, hoje = d.hoje, sem = d.semanas;
     const porDia = {};
-    const pendentes = [], depois = [];
-    d.empresas.forEach((e) => {
-      if (!e.data) return;
-      if (e.data > dias[dias.length - 1]) { depois.push(e); return; }
-      if (e.data < dias[0]) { if (e.status === "atrasada") pendentes.push(e); return; }
-      if (e.status === "atrasada") { pendentes.push(e); return; }
-      (porDia[e.data] = porDia[e.data] || []).push(e);
-    });
-    const ordem = { divulgada: 0, confirmada: 1, estimada: 2 };
-    Object.values(porDia).forEach((l) => l.sort((a, b) => ordem[a.status] - ordem[b.status] || a.nome.localeCompare(b.nome)));
+    d.empresas.forEach((e) => { if (e.data) (porDia[e.data] = porDia[e.data] || []).push(e); });
 
-    let html = "";
-    if (pendentes.length) html += coluna("cal-pend", "Pendentes", pendentes, ' <span class="cal-dica" title="Passaram da data estimada e ainda não entregaram">?</span>');
-    dias.forEach((iso, i) => {
-      const dt = deIso(iso);
-      const cls = (iso === hoje ? "cal-hoje " : iso < hoje ? "cal-passado " : "") + (i === 5 ? "cal-semana2" : "");
-      const cab = `<span class="cal-dsem">${iso === hoje ? "hoje" : DIA_CURTO[dt.getDay()]}</span><b>${dt.getDate()}</b>`
-        + (iso === t.prazo ? '<span class="cal-prazo" title="Prazo da CVM">prazo</span>' : "");
-      html += coluna(cls, cab, porDia[iso] || []);
-    });
-    html += coluna("cal-depois", `Depois de ${dm(dias[dias.length - 1])}`, depois.sort((a, b) => a.data.localeCompare(b.data)));
-    faixa.innerHTML = html;
-    faixa.style.setProperty("--cal-cols", dias.length + 1 + (pendentes.length ? 1 : 0));
+    // Coluna de números: o "relatório da semana"
+    const depois = d.empresas.filter((e) => e.data && e.data > sem.proxima[1] && e.status !== "divulgada");
+    const ultima = depois.length ? depois.map((e) => e.data).sort().pop() : null;
+    const kpi = (n, rot, sub, extra) => `<${extra ? `button type="button" class="cal-kpi cal-kpi-alerta" data-abrir="1" title="Ver na lista"` : 'div class="cal-kpi"'}><b>${n}</b><span>${rot}</span>${sub ? `<em>${sub}</em>` : ""}</${extra ? "button" : "div"}>`;
+    const kpis = kpi(`${r.divulgada}<small>/${r.total}</small>`, "já divulgaram", "")
+      + kpi(r.semana_total, "esta semana", r.semana_total ? `${r.semana_divulgadas} já divulgaram` : "")
+      + kpi(r.proxima_total, "próxima semana", depois.length ? `+${depois.length} até ${dm(ultima)}` : "")
+      + (r.sem_data ? kpi(r.sem_data, "sem data", "ver lista ›", true) : "")
+      + (r.pendente ? kpi(r.pendente, "data passou", "sem entrega na CVM", true) : "");
 
-    const semEst = r.sem_estimativa ? ` · ${r.sem_estimativa} sem histórico` : "";
-    document.getElementById("cal-sub").textContent =
-      `· ${t.rotulo} · ${r.total} empresas da cobertura com registro na CVM${semEst}`;
+    corpo.innerHTML = `<div class="cal-corpo"><div class="cal-kpis">${kpis}</div>
+      ${semana("Esta semana", sem.atual, porDia, hoje, t.prazo)}${semana("Próxima semana", sem.proxima, porDia, hoje, t.prazo)}</div>`;
 
-    // Lista completa, por data
-    const ver = document.getElementById("cal-ver");
-    ver.hidden = false;
-    ver.dataset.total = r.total;
-    ver.textContent = document.getElementById("cal-tabela").hidden ? `Ver as ${r.total} ▾` : "Fechar lista ▴";
-    document.getElementById("cal-tabela").innerHTML = `<table class="ic-cal-tab"><thead><tr><th>Empresa</th><th>Setor</th><th>Data</th><th>Situação</th><th>De onde vem a data</th></tr></thead><tbody>${
-      d.empresas.map((e) => `<tr><td><b>${esc(e.nome)}</b></td><td>${esc(e.setor || "")}</td><td>${e.data ? dm(e.data) : "—"}${e.horario ? " · " + esc(e.horario) : ""}</td>
-        <td><span class="cal-pill st-${e.status}">${ROT_STATUS[e.status]}</span></td>
-        <td class="muted">${e.link ? `<a href="${esc(e.link)}" target="_blank" rel="noopener">${esc(e.origem)}</a>` : esc(e.origem || "")}</td></tr>`).join("")
-    }</tbody></table>`;
+    const cvm = d.cvm_ate ? ` · CVM até ${dm(d.cvm_ate)}` : "";
+    document.getElementById("cal-sub").textContent = `· ${t.rotulo} · prazo CVM ${dm(t.prazo)}${cvm}`;
+
+    desenharLista(d);
 
     // Abertura: contador da temporada
-    const dentro = d.empresas.length;
+    const dentro = r.total;
     const pct = (n) => (dentro ? (100 * n / dentro) : 0).toFixed(1) + "%";
     document.getElementById("hero-temp-rotulo").textContent = t.rotulo;
     document.getElementById("hero-temp-placar").innerHTML = ` <b>${r.divulgada}</b>/${dentro} divulgaram`;
     document.getElementById("hero-temp-barra").innerHTML =
-      `<i class="b-div" style="width:${pct(r.divulgada)}"></i><i class="b-conf" style="width:${pct(r.confirmada)}"></i>`;
+      `<i class="b-div" style="width:${pct(r.divulgada)}"></i><i class="b-conf" style="width:${pct(r.agendada)}"></i>`;
     document.getElementById("hero-temp-prazo").textContent = t.encerrada
       ? "encerrada"
       : t.dias_para_prazo >= 0 ? `prazo ${dm(t.prazo)} · ${t.dias_para_prazo === 0 ? "hoje" : `${t.dias_para_prazo}d`}`
@@ -163,20 +147,63 @@
     document.getElementById("hero-temp-prazo").title = `Prazo da CVM para o ${t.documento} do ${t.rotulo}: ${dm(t.prazo)}`;
     document.getElementById("hero-temp").hidden = false;
 
-    // Frase do dia: quem divulga hoje e no resto da semana
-    const semanaFim = dias[4];
+    // Frase do dia
     const hojeL = d.empresas.filter((e) => e.data === hoje && e.status !== "divulgada");
-    const semana = d.empresas.filter((e) => e.data > hoje && e.data <= semanaFim && e.status !== "divulgada");
     const nomes = (l) => l.slice(0, 3).map((e) => `<b>${esc(e.nome)}</b>`).join(", ") + (l.length > 3 ? ` e mais ${l.length - 3}` : "");
-    // "Na agenda" e não "divulgam": quase sempre é estimativa, e a frase
-    // não pode afirmar o que o calendário só supõe.
-    const todasConf = hojeL.length && hojeL.every((e) => e.status === "confirmada");
-    if (hojeL.length) briefing("resultados", `${todasConf ? "Divulgam hoje" : "Na agenda de hoje"}: ${nomes(hojeL)}`);
-    else if (semana.length) briefing("resultados", `<b>${semana.length}</b> ${semana.length > 1 ? "empresas previstas" : "empresa prevista"} para divulgar o ${t.rotulo} até sexta`);
+    if (hojeL.length) briefing("resultados", `Divulgam hoje: ${nomes(hojeL)}`);
+    else if (r.proxima_total) briefing("resultados", `<b>${r.semana_total - r.semana_divulgadas}</b> resultados ainda esta semana e <b>${r.proxima_total}</b> na próxima`);
     else if (!t.encerrada) briefing("resultados", `<b>${r.divulgada}</b> de ${dentro} já divulgaram o ${t.rotulo}`);
   }
 
-  // Dica (hover) e confirmação de data (clique, só admin)
+  // Lista completa (e, para admin, a importação da lista do time)
+  function desenharLista(d) {
+    const r = d.resumo;
+    const ver = document.getElementById("cal-ver");
+    ver.hidden = false;
+    ver.dataset.total = r.total;
+    ver.textContent = document.getElementById("cal-tabela").hidden ? `Ver as ${r.total} ▾` : "Fechar lista ▴";
+    const ordem = { sem_data: 0, pendente: 1, agendada: 2, divulgada: 3 };
+    const linhas = [...d.empresas].sort((a, b) => ordem[a.status] - ordem[b.status] || (a.data || "").localeCompare(b.data || "") || a.nome.localeCompare(b.nome));
+    const tipo = (e) => (e.tipo ? `<span class="cal-tag ${classeTipo(e.tipo)}">${esc(e.tipo)}</span>` : "");
+    const obs = (e) => [e.status_relatorio ? `<b>${esc(e.status_relatorio)}</b>` : "",
+      e.link ? `<a href="${esc(e.link)}" target="_blank" rel="noopener">${esc(e.origem)}</a>` : esc(e.origem || ""),
+      e.estimativa ? `histórico sugere ${dm(e.estimativa)}` : ""].filter(Boolean).join(" · ");
+    const tabela = `<table class="ic-cal-tab"><thead><tr><th>Empresa</th><th>Cobertura</th><th>Setor</th><th>Data</th><th>Situação</th><th>Observação</th></tr></thead><tbody>${
+      linhas.map((e) => `<tr id="cal-l-${e.company_id}"><td><b>${esc(e.nome)}</b></td><td>${tipo(e)}</td><td>${esc(e.setor || "")}</td>
+        <td class="cal-td-data">${e.data ? dm(e.data) : "—"}${HORA[e.horario] ? ` <span title="${HORA[e.horario][1]}">${HORA[e.horario][0]}</span>` : ""}</td>
+        <td><span class="cal-pill st-${e.status}">${ROT_STATUS[e.status]}</span></td><td class="muted">${obs(e)}</td></tr>`).join("")}</tbody></table>`;
+    document.getElementById("cal-tabela").innerHTML = (calAdmin ? painelImportacao(d.importacao) : "") + tabela;
+  }
+
+  function painelImportacao(rel) {
+    const lst = (rot, l) => (l && l.length ? `<div><b>${rot} (${l.length}):</b> ${l.map(esc).join(", ")}</div>` : "");
+    const relatorio = rel ? `<div class="cal-rel"><div class="muted">Última importação: ${esc(rel.temporada)} · ${rel.com_data} com data de ${rel.linhas_lidas} linhas · ${esc(rel.por || "")}</div>
+        ${lst("Nomes que não casaram com a cobertura", rel.nao_reconhecidas)}
+        ${lst("Sem data, mas entregam ITR/DFP na CVM", rel.sem_data_entrega_cvm)}
+        ${lst("Sem data, sem registro na CVM", rel.sem_data_fora_cvm)}
+        ${lst("Já divulgaram e não estão na lista", rel.ja_divulgaram_fora_da_lista)}</div>` : "";
+    return `<details class="cal-import"><summary>Atualizar agenda (colar a lista revisada)</summary>
+      <form id="cal-import-form"><textarea name="texto" rows="6" placeholder="Empresa  Data  Horário  Cobertura … (cole direto do Excel; a lista substitui a agenda da temporada)"></textarea>
+      <span class="pop-botoes"><button type="submit" class="btn-primary btn-small">Importar</button><span class="pop-erro" hidden></span></span></form></details>${relatorio}`;
+  }
+
+  document.getElementById("cal-tabela").addEventListener("submit", (ev) => {
+    if (ev.target.id !== "cal-import-form") return;
+    ev.preventDefault();
+    const form = ev.target, er = form.querySelector(".pop-erro");
+    const texto = new FormData(form).get("texto");
+    if (!texto.trim()) return;
+    form.querySelector("button").disabled = true;
+    fetch("/api/inicio/resultados/importar", {
+      method: "POST", credentials: "same-origin", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ texto }),
+    }).then((r) => r.json().then((j) => { if (!r.ok) throw new Error(j.detail || "HTTP " + r.status); return j; }))
+      .then(() => buscar("/api/inicio/resultados"))
+      .then((d) => desenharCalendario(d))
+      .catch((x) => { er.hidden = false; er.textContent = x.message; form.querySelector("button").disabled = false; });
+  });
+
+  // Dica (hover) e ajuste de data (clique, só admin)
   const pop = document.getElementById("cal-pop");
   const card = document.getElementById("cal-card");
   let popFixo = false;
@@ -190,9 +217,11 @@
   }
   function htmlDica(e) {
     const ent = e.entidades && e.entidades.length > 1 ? `<div class="muted">${e.entidades.map(esc).join(" · ")}</div>` : "";
-    return `<div class="pop-tit">${esc(e.nome)}</div><div><span class="cal-pill st-${e.status}">${ROT_STATUS[e.status]}</span>
+    return `<div class="pop-tit">${esc(e.nome)} ${e.tipo ? `<span class="cal-tag ${classeTipo(e.tipo)}">${esc(e.tipo)}</span>` : ""}</div>
+      <div><span class="cal-pill st-${e.status}">${ROT_STATUS[e.status]}</span>
       ${e.data ? `<b>${dm(e.data)}</b>` : ""}${e.horario ? " · " + esc(e.horario) : ""}</div>
-      <div class="muted">${esc(e.origem || "")}</div>${ent}`;
+      ${e.status_relatorio ? `<div>Relatório: <b>${esc(e.status_relatorio)}</b></div>` : ""}
+      <div class="muted">${esc(e.origem || "")}${e.estimativa ? ` · histórico sugere ${dm(e.estimativa)}` : ""}</div>${ent}`;
   }
   const achar = (id) => calDados && calDados.empresas.find((e) => String(e.company_id) === String(id));
 
@@ -201,46 +230,57 @@
     if (!b || popFixo) return;
     const e = achar(b.dataset.id);
     if (!e) return;
-    pop.innerHTML = htmlDica(e) + (calAdmin && e.status !== "divulgada" ? '<div class="pop-acao">Clique para informar a data anunciada</div>' : "")
-      + (e.status === "divulgada" && e.link ? '<div class="pop-acao">Clique para abrir o documento</div>' : "");
+    pop.innerHTML = htmlDica(e) + (calAdmin ? '<div class="pop-acao">Clique para ajustar data ou cobertura</div>'
+      : e.status === "divulgada" && e.link ? '<div class="pop-acao">Clique para abrir o documento</div>' : "");
     posicionar(b);
   });
   card.addEventListener("mouseout", (ev) => {
     if (!popFixo && ev.target.closest(".cal-chip") && !ev.relatedTarget?.closest?.(".cal-chip")) pop.hidden = true;
   });
   card.addEventListener("click", (ev) => {
+    const abrir = ev.target.closest("[data-abrir]");
+    if (abrir) {
+      const tab = document.getElementById("cal-tabela");
+      tab.hidden = false;
+      document.getElementById("cal-ver").textContent = "Fechar lista ▴";
+      tab.scrollIntoView({ behavior: "smooth", block: "start" });
+      return;
+    }
     const b = ev.target.closest(".cal-chip");
     if (!b) return;
     const e = achar(b.dataset.id);
     if (!e) return;
-    if (e.status === "divulgada") { if (e.link) window.open(e.link, "_blank", "noopener"); return; }
-    if (!calAdmin) return;
+    if (!calAdmin) { if (e.status === "divulgada" && e.link) window.open(e.link, "_blank", "noopener"); return; }
     popFixo = true;
+    const opcoes = ["<option value=\"\">—</option>"].concat(TIPOS.map((t) => `<option${t === e.tipo ? " selected" : ""}>${t}</option>`)).join("");
+    const horas = [["", "a confirmar"], ["após o fechamento", "após o fechamento"], ["antes da abertura", "antes da abertura"]]
+      .map(([v, rot]) => `<option value="${v}"${(e.horario || "") === v ? " selected" : ""}>${rot}</option>`).join("");
     pop.innerHTML = htmlDica(e) + `<form class="pop-form">
-        <label>Data anunciada <input type="date" name="data" value="${e.status === "confirmada" ? e.data : ""}" required></label>
-        <label>Horário <input type="text" name="horario" maxlength="20" placeholder="ex.: após o fechamento" value="${esc(e.horario || "")}"></label>
+        <label>Data <input type="date" name="data" value="${e.data_agenda || ""}"></label>
+        <label>Horário <select name="horario">${horas}</select></label>
+        <label>Cobertura <select name="tipo">${opcoes}</select></label>
         <span class="pop-erro" hidden></span>
         <span class="pop-botoes"><button type="submit" class="btn-primary btn-small">Salvar</button>
-        ${e.status === "confirmada" ? '<button type="button" class="btn-small" data-acao="remover">Remover</button>' : ""}
+        ${e.data_agenda ? '<button type="button" class="btn-small" data-acao="remover">Remover</button>' : ""}
+        ${e.link ? `<a class="btn-small" href="${esc(e.link)}" target="_blank" rel="noopener">Documento</a>` : ""}
         <button type="button" class="btn-small" data-acao="fechar">Cancelar</button></span></form>`;
     posicionar(b);
     const form = pop.querySelector("form");
-    const enviar = (data, horario) => fetch("/api/inicio/resultados/confirmar", {
+    const enviar = (corpo) => fetch("/api/inicio/resultados/confirmar", {
       method: "POST", credentials: "same-origin", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ company_id: e.company_id, data, horario }),
+      body: JSON.stringify({ company_id: e.company_id, ...corpo }),
     }).then((r) => { if (!r.ok) throw new Error("HTTP " + r.status); return buscar("/api/inicio/resultados"); })
       .then((d) => { popFixo = false; pop.hidden = true; desenharCalendario(d); })
       .catch(() => { const er = pop.querySelector(".pop-erro"); er.hidden = false; er.textContent = "Não foi possível salvar."; });
     form.addEventListener("submit", (s) => {
       s.preventDefault();
       const f = new FormData(form);
-      if (!f.get("data")) { const er = pop.querySelector(".pop-erro"); er.hidden = false; er.textContent = "Escolha a data."; return; }
-      enviar(f.get("data"), f.get("horario"));
+      enviar({ data: f.get("data") || null, horario: f.get("horario") || null, tipo: f.get("tipo") || null });
     });
     form.addEventListener("click", (c) => {
       const acao = c.target.dataset.acao;
       if (acao === "fechar") { popFixo = false; pop.hidden = true; }
-      if (acao === "remover") enviar(null, null);
+      if (acao === "remover") enviar({ data: null, horario: null });
     });
   });
   document.addEventListener("keydown", (ev) => { if (ev.key === "Escape") { popFixo = false; pop.hidden = true; } });
@@ -253,7 +293,7 @@
   });
 
   buscar("/api/inicio/resultados").then(desenharCalendario).catch(() => {
-    document.getElementById("cal-faixa").innerHTML = '<span class="muted small">Erro ao carregar o calendário.</span>';
+    document.getElementById("cal-faixa").innerHTML = '<span class="muted small">Erro ao carregar a agenda.</span>';
   });
 
   // ---- Spreads e movimentos --------------------------------------------

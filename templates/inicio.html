@@ -69,16 +69,17 @@
   </section>
 
   {# ---- Agenda de resultados (28/10/2026) ---------------------------- #}
-  {# Duas semanas úteis, a partir da segunda-feira desta semana. Preto =
-     divulgou, laranja = data anunciada pela empresa, tracejado = estimada
-     pelo histórico. Conta e fontes em app/calendario.py. #}
+  {# Relatório da semana: quantos já divulgaram, esta semana e a próxima,
+     dia a dia. Cor = tipo de cobertura; ✓ = já divulgou. A data vem da
+     lista do time (importável na lista completa); conta em app/calendario.py. #}
   <section class="ic-card ic-cal" id="cal-card" data-admin="{{ 'sim' if pode_confirmar else '' }}">
     <span class="ic-cab">
       <span class="ic-tit-card">Agenda de resultados <span class="ic-nota" id="cal-sub"></span></span>
       <span class="ic-cal-legenda">
-        <span><i class="st-divulgada"></i>Divulgou</span>
-        <span><i class="st-confirmada"></i>Data anunciada</span>
-        <span><i class="st-estimada"></i>Estimada</span>
+        <span class="cal-tag tp-local">Local</span>
+        <span class="cal-tag tp-off">Offshore</span>
+        <span class="cal-tag tp-ambos">Offshore + Local</span>
+        <span>✓ divulgou</span><span>☀ antes da abertura</span><span>☾ após o fechamento</span>
         <button type="button" class="ic-mais ic-cal-ver" id="cal-ver" aria-expanded="false" hidden>Ver todas ▾</button>
       </span>
     </span>
