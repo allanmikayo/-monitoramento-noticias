@@ -6,8 +6,9 @@
   privado: Infra (laranja) e CP Tradicional = CP ex Infra (preto), a mesma
   identidade do dashboard original. Base: exports diário e mensal que um
   admin sobe na Administração. SEM nome de gestora ou fundo (sell side) --
-  as matrizes "Top 10 por asset" deram lugar à leitura agregada (matriz por
-  segmento e amplitude do fluxo). Ver app/captacao.py.
+  as matrizes "Top 10 por asset" deram lugar à leitura agregada ("Fundos
+  (% da base)"). Ver app/captacao.py. 2ª rodada (29/10): cards no padrão
+  das outras abas, sem rótulo nas barras, sem a matriz por segmento.
 #}
 <div class="page-head">
   <h1 style="margin:0;font-size:1.4rem;">Captação Líquida — Fundos de Crédito Privado</h1>
@@ -23,23 +24,27 @@
 </div>
 
 <div id="cl-conteudo">
-<div class="cl-quadros">
-  <div class="chart-card cl-quadro">
-    <h2>Último PL</h2>
-    <table class="cl-tabela-seg" id="q-pl"><tbody><tr><td class="muted">Carregando…</td></tr></tbody></table>
-    <p class="fonte-visual" id="q-pl-nota"></p>
-  </div>
-  <div class="chart-card cl-quadro">
-    <h2>Captação líquida por ano</h2>
-    <table class="cl-tabela-seg" id="q-ano"><tbody><tr><td class="muted">Carregando…</td></tr></tbody></table>
-    <p class="fonte-visual">%PL = captação do ano ÷ último PL.</p>
-  </div>
-  <div class="chart-card cl-quadro">
-    <h2>Captação líquida no mês</h2>
-    <table class="cl-tabela-seg" id="q-mes"><tbody><tr><td class="muted">Carregando…</td></tr></tbody></table>
-    <p class="fonte-visual">%PL = captação do mês ÷ PL do mesmo mês.</p>
-  </div>
+{# CARDS (29/10/2026, 2ª rodada): mesmo padrão compacto das outras abas.
+   O número grande é o Total CP; embaixo, Infra e CP Tradicional. #}
+<div class="kpi-row kpi-compacto" id="cl-cards">
+  <div class="kpi-card kpi-highlight"><span class="kpi-label">PL <span class="kpi-tag" id="k-pl-tag"></span></span>
+    <span class="kpi-value" id="k-pl">—</span><span class="kpi-delta muted" id="k-pl-sub">—</span>
+    <span class="cl-segs" id="k-pl-segs"></span></div>
+  <div class="kpi-card"><span class="kpi-label" id="k-mtd-rot">CAPTAÇÃO NO MÊS</span>
+    <span class="kpi-value" id="k-mtd">—</span><span class="kpi-delta muted" id="k-mtd-sub">—</span>
+    <span class="cl-segs" id="k-mtd-segs"></span></div>
+  <div class="kpi-card"><span class="kpi-label" id="k-mes-rot">CAPTAÇÃO NO MÊS ANTERIOR</span>
+    <span class="kpi-value" id="k-mes">—</span><span class="kpi-delta muted" id="k-mes-sub">—</span>
+    <span class="cl-segs" id="k-mes-segs"></span></div>
+  <div class="kpi-card"><span class="kpi-label" id="k-ytd-rot">CAPTAÇÃO NO ANO</span>
+    <span class="kpi-value" id="k-ytd">—</span><span class="kpi-delta muted" id="k-ytd-sub">—</span>
+    <span class="cl-segs" id="k-ytd-segs"></span></div>
+  <div class="kpi-card"><span class="kpi-label" id="k-fy-rot">CAPTAÇÃO NO ANO ANTERIOR</span>
+    <span class="kpi-value" id="k-fy">—</span><span class="kpi-delta muted" id="k-fy-sub">—</span>
+    <span class="cl-segs" id="k-fy-segs"></span></div>
 </div>
+<p class="fonte-visual" style="margin:-4px 0 16px;" id="cl-cards-nota">
+  %PL do mês = captação do mês ÷ PL do mesmo mês; %PL do ano = captação do ano ÷ PL mais recente.</p>
 
 <div class="filters-bar">
   <div class="window-tabs" id="mensal-janela">
@@ -82,34 +87,17 @@
 </div>
 
 <div class="chart-card">
-  <h2 class="cl-titulo" id="matriz-titulo"><b>Captação líquida mensal</b> | por segmento</h2>
-  <div style="overflow-x:auto;">
-    <table class="table tabela-casa cl-matriz" id="matriz"><tbody><tr><td class="muted">Carregando…</td></tr></tbody></table>
-  </div>
-  <p class="fonte-visual">
-    Cores por faixa de captação no mês: abaixo de −R$ 5 bi, de −R$ 5 bi a −R$ 1 bi, entre −R$ 1 bi e R$ 1 bi,
-    de R$ 1 bi a R$ 5 bi e acima de R$ 5 bi (as faixas do dashboard original, de ±R$ 100 mi e ±R$ 500 mi por
-    gestora, multiplicadas por dez para o agregado do segmento). MTD/%PL = último mês ÷ PL do mês;
-    YTD %PL = captação do ano ÷ último PL. * mês corrente, parcial.
-  </p>
-</div>
-
-<div class="chart-card">
   <div class="titulo-com-acao">
-    <h2 class="cl-titulo" style="margin:0;"><b>Amplitude do fluxo</b> | quanto do segmento captou ou resgatou</h2>
+    <h2 class="cl-titulo" style="margin:0;"><b>Fundos</b> (% da base)</h2>
     <div class="window-tabs" id="amplitude-segmento">
       <button data-seg="Infra" class="win-btn active">Infra</button>
       <button data-seg="CP ex Infra" class="win-btn">CP Tradicional</button>
     </div>
   </div>
-  <div class="cl-area" style="height:260px;"><canvas id="g-amplitude"></canvas></div>
-  <div style="overflow-x:auto;margin-top:12px;">
-    <table class="table tabela-casa" id="amplitude-tabela"><tbody><tr><td class="muted">Carregando…</td></tr></tbody></table>
-  </div>
+  <div class="cl-area" style="height:280px;"><canvas id="g-amplitude"></canvas></div>
   <p class="fonte-visual" id="amplitude-nota">
-    Barras: % do PL do segmento em gestoras com captação líquida positiva, negativa ou nula no mês.
-    Concentração: parcela do resgate (ou da captação) bruto do mês que veio das 10 gestoras que mais resgataram
-    (ou captaram). Nenhuma gestora ou fundo é identificado.
+    Base = PL do segmento no mês. Captação: gestoras com captação líquida positiva no mês; Resgate: negativa;
+    Sem fluxo: nula. Agregado por gestora, sem identificação.
   </p>
 </div>
 </div>

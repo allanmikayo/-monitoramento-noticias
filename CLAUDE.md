@@ -1575,6 +1575,11 @@ e **sem citar gestora ou fundo** (ele é sell side).
   fluxo" (% do PL captando/resgatando, nº de gestoras, top 10 sobre o
   bruto, sem nomes).
 - Cores: Infra laranja, CP Tradicional (= CP ex Infra) preto, Total branco.
+- 2ª rodada (mesmo dia): cards no padrão `kpi-row kpi-compacto` (Total CP
+  em destaque, Infra e CP Tradicional embaixo); barras sem rótulo (valor na
+  dica); saiu a matriz por segmento; "Amplitude" virou "Fundos (% da base)"
+  (Captação / Sem fluxo / Resgate), sem a tabela. Notas: só datas e
+  definições, nada de resumo do resultado.
 - Definições: Last PL = PL na data mais recente do diário; FY/YTD = soma da
   captação mensal no ano; %PL do ano = YTD ÷ Last PL; %PL do mês = captação
   do mês ÷ PL do mês. Mês corrente = o da última data do diário (parcial, *).
