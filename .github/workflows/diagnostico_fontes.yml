@@ -1,0 +1,38 @@
+name: Diagnóstico das fontes de notícia
+
+# Só manual (29/10/2026). Roda o fetch() de cada fonte sem gravar nada e
+# devolve o resultado como anotações do Actions -- ver
+# scripts/diagnostico_fontes.py. `modulos` vazio = todas as habilitadas.
+on:
+  workflow_dispatch:
+    inputs:
+      modulos:
+        description: "módulos separados por espaço (vazio = todos)"
+        required: false
+        default: ""
+
+jobs:
+  diagnostico:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      PSYCOPG_IMPL: python
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+      - name: Instalar dependencias
+        run: |
+          pip install -r requirements.txt
+          pip uninstall -y psycopg-binary || true
+          python -c "import psycopg" || (sudo apt-get update -qq && sudo apt-get install -y -qq libpq5)
+      - name: Instalar navegadores do Playwright
+        run: |
+          python -m playwright install --with-deps chromium
+          python -m playwright install --with-deps chrome || true
+      - name: Diagnosticar
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: python -m scripts.diagnostico_fontes ${{ github.event.inputs.modulos }}

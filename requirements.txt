@@ -1,9 +1,14 @@
 sqlalchemy>=2.0
 psycopg[binary]>=3.1  # driver Postgres -- necessario pra rodar contra o Supabase (DATABASE_URL postgresql+psycopg://...)
-fastapi>=0.110
-uvicorn[standard]>=0.27
-jinja2>=3.1
-python-multipart>=0.0.9
+# Pilha web atualizada em 29/10/2026. Pisos altos DE PROPÓSITO: o
+# `pip install -r requirements.txt` do "Abrir Monitoramento.bat" não atualiza
+# o que já está instalado se o piso for satisfeito -- com `fastapi>=0.110` a
+# máquina local ficava presa na versão de julho.
+fastapi>=0.162.0
+starlette>=1.10.0
+uvicorn[standard]>=0.54.0
+jinja2>=3.1.6  # 3.1.5/3.1.6 corrigem falhas de sandbox do Jinja
+python-multipart>=0.0.22  # versões antigas tinham DoS no parser de formulário
 bcrypt>=4.0
 itsdangerous>=2.1
 feedparser>=6.0

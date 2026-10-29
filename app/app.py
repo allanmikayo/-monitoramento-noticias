@@ -7,6 +7,7 @@ import re
 import logging
 import os
 import threading
+from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from zoneinfo import ZoneInfo
 
@@ -104,7 +105,15 @@ def _brt_filter(dt: datetime | None, fmt: str = "%d/%m/%Y %H:%M") -> str:
 
 templates.env.filters["brt"] = _brt_filter
 
-app = FastAPI(title="Monitoramento de Notícias — Crédito Privado")
+@asynccontextmanager
+async def _lifespan(_app: FastAPI):
+    # `@app.on_event("startup")` foi descontinuado no FastAPI; o lifespan é
+    # o substituto (29/10/2026). A lógica continua em `_on_startup`, abaixo.
+    _on_startup()
+    yield
+
+
+app = FastAPI(title="Monitoramento de Notícias — Crédito Privado", lifespan=_lifespan)
 app.mount("/static", StaticFiles(directory=os.path.join(BASE_DIR, "static")), name="static")
 
 SESSION_COOKIE = "session_token"
@@ -139,7 +148,6 @@ def _iso_utc(dt: datetime | None) -> str | None:
     return dt.isoformat()
 
 
-@app.on_event("startup")
 def _on_startup():
     # DDL NO BOOT SÓ FORA DA VERCEL (20/08/2026).
     #
