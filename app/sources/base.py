@@ -132,6 +132,35 @@ def load_coverage_names() -> list[str]:
         return []
 
 
+_TITULOS_DESAFIO = ("um momento", "just a moment", "attention required", "checking your browser")
+
+
+def esperar_desafio_cloudflare(page, max_ms: int = 30000) -> bool:
+    """Espera a página de verificação da Cloudflare ("Um momento…") dar
+    lugar ao site (29/10/2026). A Moody's Local passou a mostrar essa tela;
+    a verificação passa sozinha em alguns segundos no navegador real, mas o
+    scraper lia a página antes disso e saía com zero. Devolve False se a
+    tela de verificação ainda estiver lá no fim do prazo."""
+    gasto = 0
+    while gasto <= max_ms:
+        try:
+            titulo = (page.title() or "").strip().lower()
+        except Exception:  # noqa: BLE001 -- navegação em andamento
+            titulo = "um momento"
+        if not any(t in titulo for t in _TITULOS_DESAFIO):
+            if gasto:
+                try:
+                    page.wait_for_load_state("domcontentloaded", timeout=15000)
+                except Exception:  # noqa: BLE001
+                    pass
+                page.wait_for_timeout(2500)
+            return True
+        page.wait_for_timeout(1000)
+        gasto += 1000
+    logger.warning("verificação da Cloudflare não liberou em %d s: %s", max_ms // 1000, page.url)
+    return False
+
+
 def fetch_rendered_html(
     url: str,
     *,
@@ -169,6 +198,7 @@ def fetch_rendered_html(
             page = context.new_page()
             page.goto(url, wait_until="domcontentloaded", timeout=timeout_ms)
             page.wait_for_timeout(wait_ms)
+            esperar_desafio_cloudflare(page)
             if actions:
                 try:
                     actions(page)

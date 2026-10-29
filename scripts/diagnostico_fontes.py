@@ -96,7 +96,10 @@ def _debug_salvo(slug: str) -> str:
 def main(modulos: list[str]) -> int:
     import importlib
 
-    fontes = [s for s in config.KNOWN_SOURCES if s.get("enabled", True) is not False]
+    # Sem argumento: todas as habilitadas MENOS as lentas de assembleia
+    # (a Vórtx sozinha leva ~28 min e estourava o job; ver assembleias.yml).
+    fontes = [s for s in config.KNOWN_SOURCES if s.get("enabled", True) is not False
+              and s["scraper_module"] not in config.FONTES_LENTAS]
     if modulos:
         fontes = [s for s in config.KNOWN_SOURCES if s["scraper_module"] in modulos]
     zeradas = 0

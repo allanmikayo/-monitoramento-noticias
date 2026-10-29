@@ -20,7 +20,7 @@ from bs4 import BeautifulSoup
 from dateutil import parser as dtparser
 
 from .. import config
-from .base import RawArticle, brt_to_utc, dump_debug_html, fetch_rendered_html  # noqa: F401 (fetch_rendered_html mantido p/ compat)
+from .base import RawArticle, brt_to_utc, dump_debug_html, esperar_desafio_cloudflare, fetch_rendered_html  # noqa: F401 (fetch_rendered_html mantido p/ compat)
 
 _DATE_RE = re.compile(r"\b(\d{1,2}/\d{1,2}/\d{4})\b")
 
@@ -231,6 +231,7 @@ def fetch(url: str) -> list[RawArticle]:
             page = context.new_page()
             page.goto(url, wait_until="domcontentloaded", timeout=45000)
             page.wait_for_timeout(4000)
+            esperar_desafio_cloudflare(page)
 
             _maximizar_itens_por_pagina(page)
             _ordenar_por_data_desc(page)

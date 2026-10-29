@@ -1,0 +1,52 @@
+name: Assembleias de debenturistas (diário)
+
+# Roda scripts/rodada_assembleias.py: Vórtx, Oliveira Trust e Pentágono
+# (config.FONTES_LENTAS), que saíram da varredura de 15 em 15 min em
+# 11/09/2026 por levarem dezenas de minutos. O script nasceu naquele dia,
+# mas o workflow que deveria chamá-lo nunca foi criado -- de 11/09 a
+# 29/10/2026 nenhuma assembleia foi coletada na nuvem. 20h17 BRT.
+on:
+  schedule:
+    - cron: "17 23 * * *"
+  workflow_dispatch: {}
+
+concurrency:
+  group: assembleias
+  cancel-in-progress: false
+
+jobs:
+  assembleias:
+    runs-on: ubuntu-latest
+    env:
+      PYTHONFAULTHANDLER: "1"
+      PSYCOPG_IMPL: python
+      # A Vórtx sozinha leva ~28 min (medido em 29/10/2026); com o teto de
+      # 15 min do script ela era cortada sempre e devolvia zero.
+      SCRAPE_TIMEOUT_FONTE: "2400"
+    timeout-minutes: 75
+    steps:
+      - name: Baixar o codigo
+        uses: actions/checkout@v5
+
+      - name: Preparar Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Instalar dependencias
+        run: |
+          pip install -r requirements.txt
+          pip uninstall -y psycopg-binary || true
+          python -c "import psycopg" \
+            || (sudo apt-get update -qq && sudo apt-get install -y -qq libpq5)
+
+      - name: Instalar navegadores do Playwright
+        run: |
+          python -m playwright install --with-deps chromium
+          python -m playwright install --with-deps chrome || true
+
+      - name: Rodar as fontes de assembleia
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: python -m scripts.rodada_assembleias

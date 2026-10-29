@@ -66,6 +66,8 @@ def main() -> int:
         triggered_by="assembleias", apenas_modulos=config.FONTES_LENTAS
     )
     print(json.dumps(summary, indent=2, ensure_ascii=False))
+    # Anotação do Actions: o resultado fica legível pela API do GitHub.
+    print("::notice title=assembleias::" + json.dumps(summary.get("sources"), ensure_ascii=False, default=str)[:6000])
 
     if not summary["sources"]:
         # Nenhuma fonte rodou: ou todas estão desabilitadas na aba Fontes &
