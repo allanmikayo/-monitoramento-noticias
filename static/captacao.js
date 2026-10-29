@@ -14,13 +14,13 @@
   const num = (v, casas) => Number(v).toLocaleString("pt-BR", { minimumFractionDigits: casas, maximumFractionDigits: casas });
   const dataBR = (iso) => (iso ? `${iso.slice(8, 10)}/${iso.slice(5, 7)}/${iso.slice(0, 4)}` : "—");
 
-  /* R$ com unidade automática: tri, bi, mi ou mil. */
+  /* R$ com a unidade por extenso (29/10, pedido do Allan): trilhões, bilhões, milhões ou mil. */
   function reais(v, casas) {
     if (v == null || isNaN(v)) return "—";
     const a = Math.abs(v), c = casas == null ? 1 : casas;
-    if (a >= 1e12) return num(v / 1e12, 2) + " tri";
-    if (a >= 1e9) return num(v / 1e9, c) + " bi";
-    if (a >= 1e6) return num(v / 1e6, c) + " mi";
+    if (a >= 1e12) return num(v / 1e12, 2) + " trilhões";
+    if (a >= 1e9) return num(v / 1e9, c) + " bilhões";
+    if (a >= 1e6) return num(v / 1e6, c) + " milhões";
     if (a >= 1e3) return num(v / 1e3, 0) + " mil";
     return num(v, 0);
   }
@@ -34,21 +34,22 @@
   }
 
   const graficos = {};
+  /* Barras (mensal) ou linha (diário, `o.linha`). A unidade vai no título
+     do gráfico ("R$ bilhões"), não no eixo: o eixo só mostra o número. */
   function barras(id, labels, valores, cor, opcoes) {
     const o = opcoes || {};
     if (graficos[id]) graficos[id].destroy();
+    const conjunto = o.linha
+      ? { type: "line", data: valores, borderColor: cor, backgroundColor: cor, borderWidth: 2,
+          pointRadius: 2.5, pointHoverRadius: 4, tension: 0, spanGaps: true }
+      : { data: valores, borderWidth: 0, maxBarThickness: 34,
+          backgroundColor: valores.map((_, i) => (o.parcial && o.parcial(i) ? cor + "80" : cor)) };
     graficos[id] = new Chart(document.getElementById(id), {
-      type: "bar",
-      data: {
-        labels,
-        datasets: [{
-          data: valores,
-          backgroundColor: valores.map((_, i) => (o.parcial && o.parcial(i) ? cor + "80" : cor)),
-          borderWidth: 0, maxBarThickness: 34,
-        }],
-      },
+      type: o.linha ? "line" : "bar",
+      data: { labels, datasets: [conjunto] },
       options: {
         maintainAspectRatio: false,
+        layout: { padding: { top: 2 } },
         plugins: {
           legend: { display: false },
           tooltip: {
@@ -60,10 +61,8 @@
         },
         scales: {
           x: { grid: { display: false }, ticks: { autoSkip: true, maxRotation: 0 } },
-          y: {
-            title: { display: true, text: o.unidade === 1e6 ? "R$ mi" : "R$ bi" },
-            ticks: { callback: (v) => num(v / (o.unidade || 1e9), 0) },
-          },
+          // Zero sempre no eixo: com todos os dias negativos, a linha do zero sumia.
+          y: { suggestedMin: 0, suggestedMax: 0, ticks: { callback: (v) => num(v / (o.unidade || 1e9), 0) } },
         },
       },
       plugins: [P.linhaZero],
@@ -137,7 +136,11 @@
     const rotulos = meses.map((m) => P.mesAno(m) + (mesParcial(m) ? "*" : ""));
     const parcial = meses.some(mesParcial);
     const nota = `${P.mesAno(meses[0])} a ${P.mesAno(meses[meses.length - 1])}.`
-      + (parcial ? ` * mês corrente, até ${dataBR(resumoAtual.referencia)}.` : "");
+      + (parcial ? ` * mês corrente, até ${dataBR(resumoAtual.referencia)}.` : "")
+      // O export traz o mesmo universo de fundos em todos os meses (mesma
+      // contagem de jan/24 a hoje): a classificação Infra / CP ex Infra é a
+      // ATUAL de cada fundo, aplicada para trás.
+      + " Segmento = classificação atual do fundo, aplicada a todo o histórico.";
     [[INFRA, "g-mensal-infra", "nota-mensal-infra"], [CP, "g-mensal-cp", "nota-mensal-cp"]].forEach(([seg, id, idNota]) => {
       barras(id, rotulos, d.series[seg].captacao.slice(ini), COR[seg], { parcial: (i) => mesParcial(meses[i]) });
       texto(idNota, nota);
@@ -152,8 +155,11 @@
       const rot = d.datas.map((x) => P.diaMesCurto(x));
       const nota = d.datas.length ? `${dataBR(d.datas[0])} a ${dataBR(d.datas[d.datas.length - 1])}.` : "Sem dados diários.";
       [[INFRA, "g-diario-infra", "nota-diario-infra"], [CP, "g-diario-cp", "nota-diario-cp"]].forEach(([seg, id, idNota]) => {
-        // Diário: Infra mexe em milhões, CP Tradicional em bilhões.
-        barras(id, rot, d.series[seg] || [], COR[seg], { titulo: (i) => P.dataCheia(d.datas[i]), unidade: seg === INFRA ? 1e6 : 1e9 });
+        // Diário em linha. Infra mexe em milhões, CP Tradicional em bilhões
+        // (a unidade está no título de cada gráfico, no template).
+        barras(id, rot, d.series[seg] || [], COR[seg], {
+          linha: true, titulo: (i) => P.dataCheia(d.datas[i]), unidade: seg === INFRA ? 1e6 : 1e9,
+        });
         texto(idNota, nota);
       });
     }).catch(() => {});
@@ -168,9 +174,9 @@
       const rot = m.map((x) => P.mesAno(x.mes) + (mesParcial(x.mes) ? "*" : ""));
       if (graficos.amp) graficos.amp.destroy();
       const conj = [
-        ["Captação", "pct_pl_captando", "#7B9B72"],
-        ["Sem fluxo", "pct_pl_neutro", "#C9C9C9"],
-        ["Resgate", "pct_pl_resgatando", "#ED6B64"],
+        ["Captação", "pct_pl_captando", PRETO],
+        ["Sem fluxo", "pct_pl_neutro", "#D9D9D9"],
+        ["Resgate", "pct_pl_resgatando", LARANJA],
       ];
       graficos.amp = new Chart(document.getElementById("g-amplitude"), {
         type: "bar",
@@ -182,7 +188,12 @@
         },
         options: {
           maintainAspectRatio: false,
-          plugins: { tooltip: { callbacks: { label: (it) => ` ${it.dataset.label}: ${pct(it.raw, 1)}` } } },
+          layout: { padding: { top: 0 } },
+          plugins: {
+            // Legenda colada no canto, sem a faixa vazia que ela abria acima do gráfico.
+            legend: { position: "top", align: "end", labels: { padding: 8 } },
+            tooltip: { callbacks: { label: (it) => ` ${it.dataset.label}: ${pct(it.raw, 1)}` } },
+          },
           scales: {
             x: { stacked: true, grid: { display: false } },
             y: { stacked: true, max: 100, ticks: { callback: (v) => v + "%" } },

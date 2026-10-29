@@ -1585,6 +1585,18 @@ e **sem citar gestora ou fundo** (ele é sell side).
   "YTD"/"FY"); saiu o card do ano anterior e o do mês fechado. Eixos no
   padrão das outras abas: rótulo de data na horizontal, unidade no título do
   eixo y ("R$ bi"; diário de Infra em "R$ mi").
+- 4ª rodada (mesmo dia): unidade por extenso no TÍTULO do gráfico
+  ("Captação líquida (R$ bilhões), mensal"), eixo só com o número; cards e
+  dicas também por extenso (bilhões/milhões/trilhões). Diário em linha, com o
+  zero sempre no eixo. "Fundos (Situação, % da base)" em preto (Captação),
+  cinza (Sem fluxo) e laranja (Resgate), legenda no canto, menos espaço entre
+  título e gráfico.
+- **Segmento é a classificação ATUAL do fundo aplicada ao histórico**: o
+  export mensal traz o mesmo universo em todos os meses (1.442 fundos CP ex
+  Infra e 2.015 Infra de jan/24 a out/26, mesma contagem por gestora). Não
+  é a classificação da época; fundos encerrados antes da extração não
+  aparecem. Nota nos gráficos mensais. O diário tem cobertura parcial antes
+  de 2026 (91 fundos Infra em 02/01/2025, 1.670 em 02/01/2026, 2.015 hoje).
 - Definições: Last PL = PL na data mais recente do diário; FY/YTD = soma da
   captação mensal no ano; %PL do ano = YTD ÷ Last PL; %PL do mês = captação
   do mês ÷ PL do mês. Mês corrente = o da última data do diário (parcial, *).

@@ -1282,4 +1282,7 @@ a.ic-link:hover { border-color: #ffb27f; box-shadow: 0 3px 12px rgba(0,0,0,.05);
 .cl-seg b { color: var(--text); font-weight: 600; font-variant-numeric: tabular-nums; }
 .cl-titulo { margin: 0; font-size: 0.98rem; font-weight: 400; }
 .cl-titulo b { font-weight: 700; }
-.cl-area { position: relative; height: 300px; margin-top: 8px; }
+.cl-area { position: relative; height: 300px; margin-top: 4px; }
+/* O padrão `.chart-card canvas { margin-top: 10px }` somava espaço entre o
+   título e o gráfico; aqui o título já tem o próprio respiro. */
+.cl-area canvas { margin-top: 0; }
