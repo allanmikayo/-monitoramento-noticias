@@ -180,7 +180,10 @@
     id: "linhaZero",
     afterDatasetsDraw(chart) {
       const y = chart.scales.y;
-      if (!y || y.min > 0 || y.max < 0) return;
+      // Zero na borda do gráfico (série toda negativa ou toda positiva): não
+      // desenha. Embaixo o eixo x já é a linha; em cima virava uma borda
+      // preta no topo do gráfico (Cap. Líquida, 29/10/2026).
+      if (!y || y.min >= 0 || y.max <= 0) return;
       const { ctx, chartArea } = chart;
       const py = y.getPixelForValue(0);
       ctx.save();

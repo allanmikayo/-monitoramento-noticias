@@ -1591,6 +1591,11 @@ e **sem citar gestora ou fundo** (ele é sell side).
   zero sempre no eixo. "Fundos (Situação, % da base)" em preto (Captação),
   cinza (Sem fluxo) e laranja (Resgate), legenda no canto, menos espaço entre
   título e gráfico.
+- 5ª rodada (mesmo dia): cards "Patrimônio Líquido" e "Captação Líquida
+  Out-26*/2026*"; diário em linha suavizada (monotone, não inventa pico
+  entre pontos) sem marcadores. `linhaZero` (chart-padrao.js) não desenha
+  mais quando o zero cai na BORDA do gráfico: com a série toda negativa
+  virava uma borda preta no topo (vale para todas as abas).
 - **Segmento é a classificação ATUAL do fundo aplicada ao histórico**: o
   export mensal traz o mesmo universo em todos os meses (1.442 fundos CP ex
   Infra e 2.015 Infra de jan/24 a out/26, mesma contagem por gestora). Não

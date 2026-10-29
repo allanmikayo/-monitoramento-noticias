@@ -41,7 +41,7 @@
     if (graficos[id]) graficos[id].destroy();
     const conjunto = o.linha
       ? { type: "line", data: valores, borderColor: cor, backgroundColor: cor, borderWidth: 2,
-          pointRadius: 2.5, pointHoverRadius: 4, tension: 0, spanGaps: true }
+          pointRadius: 0, pointHoverRadius: 4, pointHitRadius: 8, cubicInterpolationMode: "monotone", spanGaps: true }
       : { data: valores, borderWidth: 0, maxBarThickness: 34,
           backgroundColor: valores.map((_, i) => (o.parcial && o.parcial(i) ? cor + "80" : cor)) };
     graficos[id] = new Chart(document.getElementById(id), {
@@ -98,7 +98,7 @@
     const c = r.mes_corrente;
     if (c) {
       const t = total(c.linhas);
-      texto("k-mtd-rot", `CAPTAÇÃO ${P.mesAno(c.mes).toUpperCase()}*`);
+      texto("k-mtd-rot", `CAPTAÇÃO LÍQUIDA ${P.mesAno(c.mes).toUpperCase()}*`);
       texto("k-mtd", "R$ " + reais(t.cap));
       texto("k-mtd-sub", pct(t.pct_pl) + " do PL");
       segs("k-mtd-segs", c.linhas, (l) => reais(l.cap));
@@ -108,7 +108,7 @@
     const ano = anos[anos.length - 1];
     if (ano) {
       const t = total(r.por_ano);
-      texto("k-ano-rot", `CAPTAÇÃO ${ano}*`);
+      texto("k-ano-rot", `CAPTAÇÃO LÍQUIDA ${ano}*`);
       texto("k-ano", "R$ " + reais(t[ano]));
       texto("k-ano-sub", pct(t.pct_pl_ytd, 1) + " do PL");
       segs("k-ano-segs", r.por_ano, (l) => reais(l[ano]));
