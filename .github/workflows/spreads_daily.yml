@@ -66,13 +66,13 @@ jobs:
       # com mensagem clara, em vez de voltar em silencio pro binario que
       # causava o segfault.
       PSYCOPG_IMPL: python
-    timeout-minutes: 15
+    timeout-minutes: 30
     steps:
       - name: Baixar o codigo
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Preparar Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: "3.11"
           cache: "pip"
@@ -116,3 +116,15 @@ jobs:
           if [ -n "${{ github.event.inputs.start }}" ]; then ARGS="$ARGS --start ${{ github.event.inputs.start }}"; fi
           if [ -n "${{ github.event.inputs.end }}" ]; then ARGS="$ARGS --end ${{ github.event.inputs.end }}"; fi
           python -m scripts.fetch_debenture_spreads $ARGS
+
+      # Casamento oferta CVM -> debêntures (29/10/2026). Era chamado de
+      # dentro da captura e estourou o limite de tempo três noites seguidas
+      # (27-29/10), levando a captura de spreads junto. Passo próprio: se
+      # falhar ou demorar, os spreads do dia já estão gravados.
+      - name: Casar ofertas da CVM com as debentures
+        if: always()
+        continue-on-error: true
+        timeout-minutes: 15
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: python -m scripts.casar_ofertas

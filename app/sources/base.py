@@ -19,6 +19,7 @@ resolvido com Playwright no projeto irmao RatingsAction.
 from __future__ import annotations
 
 import logging
+from urllib.parse import urljoin
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Callable
@@ -327,11 +328,16 @@ def parse_html_listing(
     out: list[RawArticle] = []
     seen: set[str] = set()
     for a in soup.find_all("a", href=True):
-        href = a["href"]
-        if not pat.search(href):
+        bruto = a["href"].strip()
+        # Link relativo vira absoluto ANTES do filtro (29/10/2026): os
+        # padrões das fontes incluem o domínio (ex. "metroquadrado\.com/..."),
+        # então um site que passa a usar href="/secao/materia" zerava a
+        # fonte sem erro nenhum. O padrão vale para o link bruto OU absoluto.
+        href = urljoin(base_url or url, bruto)
+        if not (pat.search(href) or pat.search(bruto)):
             continue
-        if href.startswith("/"):
-            href = (base_url or "").rstrip("/") + href
+        if not href.startswith("http"):
+            continue
         if href in seen:
             continue
 

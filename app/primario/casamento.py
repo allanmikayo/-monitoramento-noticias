@@ -194,22 +194,31 @@ def _taxonomia_por_nome(db: Session) -> dict[str, dict]:
             for nome, vs in acc.items() if len(nome) >= MIN_NOME}
 
 
-def _por_texto(texto: str, tax_nome: dict, nomes_ordenados: list[str]) -> dict | None:
-    """Primeiro nome classificado que aparece INTEIRO no texto do devedor
-    (mais longos primeiro, para "RAIZEN ENERGIA" ganhar de "RAIZEN")."""
-    alvo = f" {nome_normalizado(texto)} "
-    if len(alvo) < MIN_NOME:
+def _por_texto(texto: str, tax_nome: dict, nomes_ordenados: list[str] | None = None) -> dict | None:
+    """Nome classificado mais longo que aparece INTEIRO no texto do devedor
+    (para "RAIZEN ENERGIA" ganhar de "RAIZEN").
+
+    29/10/2026: procura pelas sequências de palavras do TEXTO no dicionário,
+    em vez de testar cada nome conhecido contra o texto. A versão antiga
+    fazia ofertas × nomes comparações (2.500 CRI/CRA × dezenas de milhares
+    de nomes) e era o grosso dos ~16 minutos do casamento na nuvem.
+    `nomes_ordenados` ficou só por compatibilidade."""
+    palavras = nome_normalizado(texto).split()
+    if len(" ".join(palavras)) + 2 < MIN_NOME:
         return None
-    for nome in nomes_ordenados:
-        if f" {nome} " in alvo:
-            return tax_nome[nome]
-    return None
+    melhor = None
+    for i in range(len(palavras)):
+        trecho = ""
+        for j in range(i, len(palavras)):
+            trecho = palavras[j] if j == i else f"{trecho} {palavras[j]}"
+            if trecho in tax_nome and (melhor is None or len(trecho) > len(melhor)):
+                melhor = trecho
+    return tax_nome[melhor] if melhor else None
 
 
 def classificar(oferta, tax_cnpj: dict, tax_sec: dict, tax_nome: dict | None = None,
                 nomes_ordenados: list[str] | None = None) -> dict:
     tax_nome = tax_nome or {}
-    nomes_ordenados = nomes_ordenados or sorted(tax_nome, key=len, reverse=True)
     base = {"numero_requerimento": oferta.numero_requerimento, "devedor": None,
             "setor": NAO_CLASSIFICADO, "subsetor": None, "grupo": None, "origem": None}
 
@@ -244,16 +253,29 @@ def classificar(oferta, tax_cnpj: dict, tax_sec: dict, tax_nome: dict | None = N
 # ---------------------------------------------------------------------------
 def recalcular(db: Session) -> dict:
     """Refaz as duas tabelas do zero e devolve estatísticas do casamento."""
+    import time
+    t0 = time.monotonic()
+    tempos: dict[str, float] = {}
+
+    def marca(etapa: str) -> None:
+        nonlocal t0
+        agora = time.monotonic()
+        tempos[etapa] = round(agora - t0, 1)
+        t0 = agora
+
     ofertas = list(db.scalars(select(OfertaCVM)))
     debs = [o for o in ofertas if o.instrumento == "DEB"]
     caracs = list(db.scalars(select(DebentureCaracteristica)))
+    marca("leitura")
     ligacoes = casar_debentures(debs, caracs)
+    marca("casar_debentures")
 
     tax_cnpj = _taxonomia_por_cnpj(db)
     tax_sec = _taxonomia_securitizados(db)
     tax_nome = _taxonomia_por_nome(db)
-    nomes = sorted(tax_nome, key=len, reverse=True)
-    classes = [classificar(o, tax_cnpj, tax_sec, tax_nome, nomes) for o in ofertas]
+    marca("taxonomias")
+    classes = [classificar(o, tax_cnpj, tax_sec, tax_nome) for o in ofertas]
+    marca("classificar")
 
     db.execute(delete(OfertaCVMAtivo))
     db.execute(delete(OfertaCVMClassificacao))
@@ -262,6 +284,7 @@ def recalcular(db: Session) -> dict:
     for k in range(0, len(classes), 2000):
         db.execute(insert(OfertaCVMClassificacao), classes[k:k + 2000])
     db.commit()
+    marca("gravar")
 
     casadas = {x["numero_requerimento"]: x["confianca"] for x in ligacoes}
     debs_validas = [o for o in debs if (o.valor_total or 0) > 0 and o.data_registro]
@@ -288,4 +311,6 @@ def recalcular(db: Session) -> dict:
         "classificadas": {f"{i}:{'sim' if ok else 'nao'}": n for (i, ok), n in sorted(classificadas.items())},
         "volume_classificado_pct": {i: round(100 * vol_cls[i] / v, 1) for i, v in vol_inst.items() if v},
         "origens": dict(origens),
+        "nomes_conhecidos": len(tax_nome),
+        "segundos": tempos,
     }

@@ -30,7 +30,10 @@ name: Negócio a negócio B3 (debêntures/CRI/CRA)
 # a própria B3 só republica o arquivo de 15 em 15 minutos.
 on:
   schedule:
-    - cron: "0 12-21 * * 1-5"  # 12h-21h UTC = 9h-18h BRT, seg-sex (fallback horário)
+    # 29/10/2026: cadência real (30 min) no agendamento nativo, porque o
+    # relay do cron-job.org parou em 09/09/2026. Minutos quebrados de
+    # propósito (o GitHub atrasa mais quem marca minuto 0).
+    - cron: "11,41 12-21 * * 1-5"  # 12h-21h UTC = 9h-18h BRT, seg-sex
   # `start`/`end` opcionais -- vazio (uso normal, disparado pelo relay a
   # cada 15 min) = só hoje. Preenchidos = backfill pontual manual (Allan
   # via Actions -> "Run workflow", pedido dele 24/07/2026: catch-up dos
@@ -84,10 +87,10 @@ jobs:
     timeout-minutes: 25
     steps:
       - name: Baixar o codigo
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Preparar Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: "3.11"
           cache: "pip"

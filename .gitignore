@@ -36,3 +36,10 @@ data/oferta_*.csv
 data/*.zip
 data/backups_cvm/
 data/meta_*.txt
+
+# Cópias de .env e anotações com connection string (29/10/2026): três
+# arquivos assim foram parar no repositório público por engano.
+*.env
+.env*
+!.env.example
+monitoramento-noticias.txt

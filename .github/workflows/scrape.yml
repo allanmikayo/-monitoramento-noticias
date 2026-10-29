@@ -10,8 +10,14 @@ name: Varredura de noticias
 # nao e' pontual (o proprio GitHub nao garante horario, atrasa bastante em
 # horario de pico -- documentado, nao e' bug daqui). 17/07/2026.
 on:
+  # 29/10/2026: o relay do cron-job.org parou em 11/09/2026 e ninguém
+  # notou -- a varredura passou a rodar só no fallback de 1x/hora, que o
+  # GitHub atrasa para 4-6 h na prática. O agendamento nativo agora tenta
+  # a cadência real (15 min), em minutos "quebrados" (o GitHub atrasa mais
+  # quem marca minuto 0). O relay, se for religado, continua valendo; o
+  # `concurrency` abaixo impede duas rodadas ao mesmo tempo.
   schedule:
-    - cron: "0 * * * *"
+    - cron: "7,22,37,52 * * * *"
   workflow_dispatch: {}
 
 # CADÊNCIA REAL: 15 MINUTOS, não 5 (mudado em 20/08/2026).
@@ -65,10 +71,10 @@ jobs:
     timeout-minutes: 20
     steps:
       - name: Baixar o codigo
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Preparar Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: "3.11"
           cache: "pip"

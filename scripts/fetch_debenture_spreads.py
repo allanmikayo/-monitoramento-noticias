@@ -140,16 +140,12 @@ def main() -> None:
         except Exception:
             logger.exception("Falha ao gravar características completas/estoque — não impede o resto")
 
-        # Características novas mudam o casamento oferta CVM -> debêntures
-        # (aba Mercado Primário). Barato: refaz tudo em memória.
-        try:
-            from app.models import OfertaCVMAtivo, OfertaCVMClassificacao
-            from app.primario import casamento
-            OfertaCVMAtivo.__table__.create(bind=engine, checkfirst=True)
-            OfertaCVMClassificacao.__table__.create(bind=engine, checkfirst=True)
-            logger.info("Casamento de ofertas CVM: %s", casamento.recalcular(db))
-        except Exception:
-            logger.exception("Falha ao casar ofertas da CVM — não impede o resto")
+        # O casamento oferta CVM -> debêntures (aba Mercado Primário) saiu
+        # daqui em 29/10/2026: na nuvem ele levava ~16 min e estourava o
+        # limite de 15 min deste job, derrubando a captura de spreads junto
+        # (27-29/10). Agora é um passo separado do workflow
+        # (`python -m scripts.casar_ofertas`), que pode falhar sem levar a
+        # captura junto.
 
     logger.info(
         "Concluído: %d dia(s) com dado, %d linha(s) de spread no total.",
