@@ -37,6 +37,7 @@ from __future__ import annotations
 
 import collections
 import re
+import os
 import unicodedata
 from datetime import date, timedelta
 
@@ -262,6 +263,8 @@ def recalcular(db: Session) -> dict:
         agora = time.monotonic()
         tempos[etapa] = round(agora - t0, 1)
         t0 = agora
+        if os.getenv("GITHUB_ACTIONS"):  # parcial visível mesmo se o job for cortado
+            print(f"::notice title=casamento {etapa}::{tempos[etapa]} s", flush=True)
 
     ofertas = list(db.scalars(select(OfertaCVM)))
     debs = [o for o in ofertas if o.instrumento == "DEB"]

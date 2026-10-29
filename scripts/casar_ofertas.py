@@ -21,17 +21,25 @@ from app.primario import casamento
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 
 
+def _marca(texto: str) -> None:
+    print(f"::notice title=casar_ofertas etapa::{texto}", flush=True)
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--baixar-caracteristicas", action="store_true")
     a = ap.parse_args()
 
+    _marca("início")
     DebentureCaracteristica.__table__.create(bind=engine, checkfirst=True)
+    _marca("create checkfirst ok")
     criadas = garantir_colunas(DebentureCaracteristica.__table__)
     if criadas:
         logging.info("colunas criadas em debenture_caracteristicas: %s", criadas)
+    _marca(f"garantir_colunas ok: {criadas}")
     OfertaCVMAtivo.__table__.create(bind=engine, checkfirst=True)
     OfertaCVMClassificacao.__table__.create(bind=engine, checkfirst=True)
+    _marca("tabelas de ligação ok")
 
     with SessionLocal() as db:
         if a.baixar_caracteristicas:
