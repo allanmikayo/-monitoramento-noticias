@@ -1580,6 +1580,11 @@ e **sem citar gestora ou fundo** (ele é sell side).
   dica); saiu a matriz por segmento; "Amplitude" virou "Fundos (% da base)"
   (Captação / Sem fluxo / Resgate), sem a tabela. Notas: só datas e
   definições, nada de resumo do resultado.
+- 3ª rodada (mesmo dia): só três cards (PL, captação do mês corrente, captação
+  do ano), rótulos "Out-26*" e "2026*" com o * explicado na nota (sem
+  "YTD"/"FY"); saiu o card do ano anterior e o do mês fechado. Eixos no
+  padrão das outras abas: rótulo de data na horizontal, unidade no título do
+  eixo y ("R$ bi"; diário de Infra em "R$ mi").
 - Definições: Last PL = PL na data mais recente do diário; FY/YTD = soma da
   captação mensal no ano; %PL do ano = YTD ÷ Last PL; %PL do mês = captação
   do mês ÷ PL do mês. Mês corrente = o da última data do diário (parcial, *).

@@ -1270,11 +1270,16 @@ a.ic-link:hover { border-color: #ffb27f; box-shadow: 0 3px 12px rgba(0,0,0,.05);
 /* Infra em laranja, CP Tradicional (CP ex Infra) em preto, Total em   */
 /* branco. Ver templates/captacao.html.                                */
 /* ------------------------------------------------------------------ */
-/* Linhas Infra / CP Tradicional embaixo do número do card (2ª rodada). */
-.cl-segs { display: flex; flex-direction: column; gap: 1px; margin-top: 4px; padding-top: 5px; border-top: 1px solid #efefef; }
-.cl-seg { font-size: 0.72rem; color: var(--muted); display: flex; align-items: center; gap: 5px; }
-.cl-seg i { width: 8px; height: 8px; border-radius: 2px; display: inline-block; }
-.cl-seg b { color: var(--text); font-weight: 600; margin-left: auto; font-variant-numeric: tabular-nums; }
+/* Cards (3ª rodada): número + complemento na mesma linha; Infra e CP
+   Tradicional numa linha só embaixo, separados por um fio. */
+.cl-cards .kpi-card { gap: 6px; }
+.cl-cards .kpi-value { font-size: 1.35rem; }
+.cl-linha-valor { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
+.cl-aux { font-size: 0.78rem; color: var(--muted); font-weight: 600; white-space: nowrap; }
+.cl-segs { display: flex; gap: 18px; flex-wrap: wrap; padding-top: 7px; border-top: 1px solid #efefef; }
+.cl-seg { font-size: 0.74rem; color: var(--muted); display: inline-flex; align-items: center; gap: 5px; }
+.cl-seg i { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+.cl-seg b { color: var(--text); font-weight: 600; font-variant-numeric: tabular-nums; }
 .cl-titulo { margin: 0; font-size: 0.98rem; font-weight: 400; }
 .cl-titulo b { font-weight: 700; }
 .cl-area { position: relative; height: 300px; margin-top: 8px; }

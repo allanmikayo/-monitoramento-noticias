@@ -59,8 +59,11 @@
           },
         },
         scales: {
-          x: { grid: { display: false }, ticks: { autoSkip: true, maxRotation: 90, minRotation: 90 } },
-          y: { ticks: { callback: (v) => reais(v, 0) } },
+          x: { grid: { display: false }, ticks: { autoSkip: true, maxRotation: 0 } },
+          y: {
+            title: { display: true, text: o.unidade === 1e6 ? "R$ mi" : "R$ bi" },
+            ticks: { callback: (v) => num(v / (o.unidade || 1e9), 0) },
+          },
         },
       },
       plugins: [P.linhaZero],
@@ -72,7 +75,7 @@
   // ---------------------------------------------------------------------
   function texto(id, t) { const el = document.getElementById(id); if (el) el.textContent = t; }
 
-  /* Linhas Infra / CP Tradicional embaixo do número do card. */
+  /* Infra e CP Tradicional numa linha só, embaixo do número do card. */
   function segs(id, linhas, valor) {
     const el = document.getElementById(id);
     if (!el) return;
@@ -90,42 +93,29 @@
 
     const pl = total(r.last_pl);
     texto("k-pl", "R$ " + reais(pl.pl));
-    texto("k-pl-tag", dataBR(r.referencia));
-    texto("k-pl-sub", pl.fundos == null ? "—" : `${num(pl.fundos, 0)} fundos`);
-    segs("k-pl-segs", r.last_pl, (l) => "R$ " + reais(l.pl));
+    texto("k-pl-sub", pl.fundos == null ? "" : `${num(pl.fundos, 0)} fundos`);
+    segs("k-pl-segs", r.last_pl, (l) => reais(l.pl));
 
-    const quadroMes = (q, rotId, valId, subId, segId, rotulo) => {
-      if (!q) { texto(valId, "—"); return; }
-      const t = total(q.linhas);
-      texto(rotId, rotulo + " " + P.mesAno(q.mes).toUpperCase());
-      texto(valId, "R$ " + reais(t.cap));
-      texto(subId, pct(t.pct_pl) + " do PL");
-      segs(segId, q.linhas, (l) => `${reais(l.cap)} (${pct(l.pct_pl)})`);
-    };
-    quadroMes(r.mes_corrente, "k-mtd-rot", "k-mtd", "k-mtd-sub", "k-mtd-segs", "CAPTAÇÃO");
-    if (r.mes_corrente) texto("k-mtd-rot", `CAPTAÇÃO ${P.mesAno(r.mes_corrente.mes).toUpperCase()}*`);
-    quadroMes(r.mes_fechado, "k-mes-rot", "k-mes", "k-mes-sub", "k-mes-segs", "CAPTAÇÃO");
+    const c = r.mes_corrente;
+    if (c) {
+      const t = total(c.linhas);
+      texto("k-mtd-rot", `CAPTAÇÃO ${P.mesAno(c.mes).toUpperCase()}*`);
+      texto("k-mtd", "R$ " + reais(t.cap));
+      texto("k-mtd-sub", pct(t.pct_pl) + " do PL");
+      segs("k-mtd-segs", c.linhas, (l) => reais(l.cap));
+    }
 
     const anos = r.anos || [];
-    const ano = anos[anos.length - 1], ant = anos[anos.length - 2];
-    const t = total(r.por_ano);
+    const ano = anos[anos.length - 1];
     if (ano) {
-      texto("k-ytd-rot", `CAPTAÇÃO YTD'${ano.slice(2)}`);
-      texto("k-ytd", "R$ " + reais(t[ano]));
-      texto("k-ytd-sub", pct(t.pct_pl_ytd, 1) + " do PL");
-      segs("k-ytd-segs", r.por_ano, (l) => `${reais(l[ano])} (${pct(l.pct_pl_ytd, 1)})`);
+      const t = total(r.por_ano);
+      texto("k-ano-rot", `CAPTAÇÃO ${ano}*`);
+      texto("k-ano", "R$ " + reais(t[ano]));
+      texto("k-ano-sub", pct(t.pct_pl_ytd, 1) + " do PL");
+      segs("k-ano-segs", r.por_ano, (l) => reais(l[ano]));
     }
-    if (ant) {
-      texto("k-fy-rot", `CAPTAÇÃO FY'${ant.slice(2)}`);
-      texto("k-fy", "R$ " + reais(t[ant]));
-      const ant2 = anos[anos.length - 3];
-      texto("k-fy-sub", ant2 ? `FY'${ant2.slice(2)}: R$ ${reais(t[ant2])}` : "—");
-      segs("k-fy-segs", r.por_ano, (l) => reais(l[ant]));
-    }
-    if (r.mes_corrente) {
-      texto("cl-cards-nota", `%PL do mês = captação do mês ÷ PL do mesmo mês; %PL do ano = captação do ano ÷ PL mais recente. `
-        + `* ${P.mesAno(r.mes_corrente.mes)} até ${dataBR(r.referencia)}.`);
-    }
+    texto("cl-cards-nota", `* Até ${dataBR(r.referencia)}. PL na mesma data. %PL do mês = captação do mês ÷ PL do mês; `
+      + `%PL do ano = captação do ano ÷ PL de ${dataBR(r.referencia)}.`);
   }
 
   // ---------------------------------------------------------------------
@@ -162,7 +152,8 @@
       const rot = d.datas.map((x) => P.diaMesCurto(x));
       const nota = d.datas.length ? `${dataBR(d.datas[0])} a ${dataBR(d.datas[d.datas.length - 1])}.` : "Sem dados diários.";
       [[INFRA, "g-diario-infra", "nota-diario-infra"], [CP, "g-diario-cp", "nota-diario-cp"]].forEach(([seg, id, idNota]) => {
-        barras(id, rot, d.series[seg] || [], COR[seg], { titulo: (i) => P.dataCheia(d.datas[i]) });
+        // Diário: Infra mexe em milhões, CP Tradicional em bilhões.
+        barras(id, rot, d.series[seg] || [], COR[seg], { titulo: (i) => P.dataCheia(d.datas[i]), unidade: seg === INFRA ? 1e6 : 1e9 });
         texto(idNota, nota);
       });
     }).catch(() => {});

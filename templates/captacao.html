@@ -26,25 +26,21 @@
 <div id="cl-conteudo">
 {# CARDS (29/10/2026, 2ª rodada): mesmo padrão compacto das outras abas.
    O número grande é o Total CP; embaixo, Infra e CP Tradicional. #}
-<div class="kpi-row kpi-compacto" id="cl-cards">
-  <div class="kpi-card kpi-highlight"><span class="kpi-label">PL <span class="kpi-tag" id="k-pl-tag"></span></span>
-    <span class="kpi-value" id="k-pl">—</span><span class="kpi-delta muted" id="k-pl-sub">—</span>
+{# 3ª rodada (29/10): só três cards -- PL, captação do mês corrente e do
+   ano. Total CP em destaque; Infra e CP Tradicional numa linha só, embaixo. #}
+<div class="kpi-row kpi-compacto cl-cards" id="cl-cards">
+  <div class="kpi-card"><span class="kpi-label">PL</span>
+    <span class="cl-linha-valor"><span class="kpi-value" id="k-pl">—</span><span class="cl-aux" id="k-pl-sub"></span></span>
     <span class="cl-segs" id="k-pl-segs"></span></div>
   <div class="kpi-card"><span class="kpi-label" id="k-mtd-rot">CAPTAÇÃO NO MÊS</span>
-    <span class="kpi-value" id="k-mtd">—</span><span class="kpi-delta muted" id="k-mtd-sub">—</span>
+    <span class="cl-linha-valor"><span class="kpi-value" id="k-mtd">—</span><span class="cl-aux" id="k-mtd-sub"></span></span>
     <span class="cl-segs" id="k-mtd-segs"></span></div>
-  <div class="kpi-card"><span class="kpi-label" id="k-mes-rot">CAPTAÇÃO NO MÊS ANTERIOR</span>
-    <span class="kpi-value" id="k-mes">—</span><span class="kpi-delta muted" id="k-mes-sub">—</span>
-    <span class="cl-segs" id="k-mes-segs"></span></div>
-  <div class="kpi-card"><span class="kpi-label" id="k-ytd-rot">CAPTAÇÃO NO ANO</span>
-    <span class="kpi-value" id="k-ytd">—</span><span class="kpi-delta muted" id="k-ytd-sub">—</span>
-    <span class="cl-segs" id="k-ytd-segs"></span></div>
-  <div class="kpi-card"><span class="kpi-label" id="k-fy-rot">CAPTAÇÃO NO ANO ANTERIOR</span>
-    <span class="kpi-value" id="k-fy">—</span><span class="kpi-delta muted" id="k-fy-sub">—</span>
-    <span class="cl-segs" id="k-fy-segs"></span></div>
+  <div class="kpi-card"><span class="kpi-label" id="k-ano-rot">CAPTAÇÃO NO ANO</span>
+    <span class="cl-linha-valor"><span class="kpi-value" id="k-ano">—</span><span class="cl-aux" id="k-ano-sub"></span></span>
+    <span class="cl-segs" id="k-ano-segs"></span></div>
 </div>
 <p class="fonte-visual" style="margin:-4px 0 16px;" id="cl-cards-nota">
-  %PL do mês = captação do mês ÷ PL do mesmo mês; %PL do ano = captação do ano ÷ PL mais recente.</p>
+  %PL = captação ÷ PL.</p>
 
 <div class="filters-bar">
   <div class="window-tabs" id="mensal-janela">
