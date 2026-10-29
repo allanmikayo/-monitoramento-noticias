@@ -1511,6 +1511,47 @@ captou" e "movimentos" (o filtro de incentivadas ficou).
   `spreads_daily` também refaz o casamento depois de gravar as
   características.
 
+### Revisão das coletas + FastAPI atualizado — 29/10/2026
+
+Pedido do Allan: atualizar o FastAPI e ver o que mais estava quebrado nas
+coletas.
+- **FastAPI 0.162 / Starlette 1.10 / uvicorn 0.54** (pisos altos no
+  requirements, porque `pip install -r` não atualiza o que já satisfaz o
+  piso). `@app.on_event("startup")` virou `lifespan`.
+- **Diagnóstico de fontes**: `scripts/diagnostico_fontes.py` +
+  `diagnostico_fontes.yml` (workflow_dispatch, campo `modulos`) rodam o
+  `fetch()` de cada fonte SEM gravar e devolvem o resultado como anotação do
+  Actions (contagem, data mais recente, títulos; se zerar, o HTML que veio).
+  Sem argumento pula as fontes lentas de assembleia.
+- **Relay do cron-job.org parado desde 09-11/09/2026** (último
+  workflow_dispatch). A varredura vivia do fallback de 1x/hora, que o GitHub
+  atrasa para 4-6 h. Agora o `schedule:` nativo já pede a cadência real:
+  `scrape.yml` 7,22,37,52 de cada hora; `b3_trades.yml` 11,41 nas horas de
+  pregão. O relay, se religado, convive (há `concurrency`).
+- **Assembleias não rodavam desde 11/09**: `scripts/rodada_assembleias.py`
+  foi criado mas nenhum workflow o chamava. Novo `assembleias.yml`, 20h17
+  BRT, teto por fonte de 40 min (`SCRAPE_TIMEOUT_FONTE=2400`; a Vórtx leva
+  ~28 min, e o teto antigo de 15 min a cortava sempre).
+- **Spreads diários estouravam 15 min (27-29/10)**: o casamento oferta CVM
+  → debênture rodava dentro da captura e levava ~16 min. Saiu para um passo
+  próprio do `spreads_daily.yml` (continue-on-error). `_por_texto` passou a
+  procurar as sequências de palavras do texto no dicionário de nomes (mesmo
+  resultado, ~30x mais rápido). Medido: leitura 3 s, classificação 0,3 s,
+  gravação ~260 s (o DELETE + INSERT no Supabase; ainda o maior custo).
+  Cada etapa sai como anotação do Actions.
+- `parse_html_listing`: link relativo vira absoluto ANTES do filtro de
+  padrão (os padrões têm o domínio; href relativo zerava a fonte).
+- **Moody's Local (3 páginas) e CanalEnergia estão atrás da verificação
+  anti-bot da Cloudflare** ("Um momento…") e voltam zero. Não contornamos
+  proteção anti-bot; caminhos legítimos: feed/RSS oficial, alerta por
+  e-mail da Moody's, ou pedir acesso ao site.
+- Removidos do repositório público: `" (2).env"`, `".env (2).example"`
+  (só valores de exemplo) e `monitoramento-noticias.txt` (tinha a
+  connection string REAL do Supabase com senha). Continuam no histórico do
+  git: **a senha do banco precisa ser trocada** no Supabase e o novo valor
+  posto no `DATABASE_URL` da Vercel e do GitHub.
+- actions/checkout@v5 e setup-python@v6 (Node 20 descontinuado).
+
 ## Regras a manter
 
 1. **Nunca** trocar `store.upsert_article` para sobrescrever corpo/título
