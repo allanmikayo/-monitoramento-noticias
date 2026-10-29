@@ -1011,6 +1011,50 @@ class MercadoSecundario(Base):
     )
 
 
+class CaptacaoDiaria(Base):
+    """Captação líquida diária dos fundos de crédito privado (29/10/2026),
+    por segmento (Infra / CP ex Infra) e gestora. Vem do export que o Allan
+    sobe na Administração (ver app/captacao.py).
+
+    A GESTORA NÃO É GUARDADA PELO NOME: só um hash dela (`gestora`). A aba
+    é de sell side e não cita gestora nem fundo; o hash serve só para
+    contar quantas gestoras captaram ou resgataram e quanto do fluxo vem
+    das maiores, sem dar nome a ninguém."""
+    __tablename__ = "captacao_diaria"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    data: Mapped[date] = mapped_column(Date, nullable=False)
+    segmento: Mapped[str] = mapped_column(String(20), nullable=False)   # "Infra" | "CP ex Infra"
+    gestora: Mapped[str] = mapped_column(String(16), nullable=False)    # hash, nunca o nome
+    qtd_fundos: Mapped[int | None] = mapped_column(Integer)
+    pl: Mapped[float | None] = mapped_column(Float)                      # R$
+    captacao: Mapped[float | None] = mapped_column(Float)                # R$, líquida do dia
+
+    __table_args__ = (
+        UniqueConstraint("data", "segmento", "gestora", name="uq_captacao_diaria"),
+        Index("ix_captacao_diaria_data", "data"),
+    )
+
+
+class CaptacaoMensal(Base):
+    """Mesma base, fechada por mês (`captacao` = acumulado do mês; no mês
+    corrente, até a última data do export). Gestora só como hash."""
+    __tablename__ = "captacao_mensal"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    mes: Mapped[date] = mapped_column(Date, nullable=False)              # dia 1 do mês
+    segmento: Mapped[str] = mapped_column(String(20), nullable=False)
+    gestora: Mapped[str] = mapped_column(String(16), nullable=False)
+    qtd_fundos: Mapped[int | None] = mapped_column(Integer)
+    pl: Mapped[float | None] = mapped_column(Float)
+    captacao: Mapped[float | None] = mapped_column(Float)
+
+    __table_args__ = (
+        UniqueConstraint("mes", "segmento", "gestora", name="uq_captacao_mensal"),
+        Index("ix_captacao_mensal_mes", "mes"),
+    )
+
+
 class CurvaJuros(Base):
     """ETTJ da ANBIMA por dia: real (IPCA), prefixada e inflação implícita
     por vértice (26/10/2026, página inicial). `vertices` é JSON

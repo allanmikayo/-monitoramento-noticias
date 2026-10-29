@@ -1264,3 +1264,36 @@ a.ic-link:hover { border-color: #ffb27f; box-shadow: 0 3px 12px rgba(0,0,0,.05);
   .inicio-placar { grid-template-columns: 1fr; }
   .cm-grade { grid-template-columns: repeat(7, minmax(90px, 1fr)); overflow-x: auto; }
 }
+
+/* ------------------------------------------------------------------ */
+/* CAP. LÍQUIDA (29/10/2026). Identidade do dashboard original:        */
+/* Infra em laranja, CP Tradicional (CP ex Infra) em preto, Total em   */
+/* branco. Ver templates/captacao.html.                                */
+/* ------------------------------------------------------------------ */
+.cl-quadros {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 16px; margin-bottom: 4px; align-items: stretch;
+}
+.cl-quadro { display: flex; flex-direction: column; }
+.cl-quadro h2 {
+  margin: 0 0 10px; font-size: 0.95rem; text-align: center;
+  padding-bottom: 6px; border-bottom: 2px solid #111111;
+}
+.cl-quadro .fonte-visual { margin-top: auto; padding-top: 8px; }
+.cl-tabela-seg { width: 100%; border-collapse: collapse; font-size: 0.82rem; font-variant-numeric: tabular-nums; }
+.cl-tabela-seg th { font-weight: 600; font-size: 0.74rem; padding: 4px 8px; text-align: right; color: var(--text); }
+.cl-tabela-seg td { padding: 6px 8px; text-align: right; white-space: nowrap; }
+.cl-tabela-seg td.col-texto { text-align: left; font-weight: 600; }
+tr.seg-cp td { background: #111111; color: #ffffff; }
+tr.seg-infra td { background: var(--accent); color: #ffffff; }
+tr.seg-total td { font-weight: 700; }
+.cl-titulo { margin: 0; font-size: 0.98rem; font-weight: 400; }
+.cl-titulo b { font-weight: 700; }
+.cl-area { position: relative; height: 300px; margin-top: 8px; }
+.cl-matriz td, .cl-matriz th { white-space: nowrap; }
+/* Na matriz, a linha do segmento colore só o rótulo: as células de mês
+   levam a cor da faixa de captação. */
+.cl-matriz tr.seg-cp td:not(.col-texto), .cl-matriz tr.seg-infra td:not(.col-texto) { color: var(--text); background: transparent; }
+.cl-matriz tr.seg-cp td.col-texto { background: #111111; color: #fff; }
+.cl-matriz tr.seg-infra td.col-texto { background: var(--accent); color: #fff; }
+.cl-matriz .cl-sep { border-left: 3px solid #111111; }

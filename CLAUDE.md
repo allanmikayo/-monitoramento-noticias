@@ -1552,6 +1552,37 @@ coletas.
   posto no `DATABASE_URL` da Vercel e do GitHub.
 - actions/checkout@v5 e setup-python@v6 (Node 20 descontinuado).
 
+### Aba "Cap. Líquida" — 29/10/2026
+
+Pedido do Allan: captação líquida dos fundos de crédito privado, seguindo o
+documento de passagem do dashboard original (QuickSight), no visual do Hub
+e **sem citar gestora ou fundo** (ele é sell side).
+- Rota `/captacao-liquida` (menu "Cap. Líquida"), `app/captacao.py`,
+  `app/captacao_routes.py`, `templates/captacao.html`, `static/captacao.js`,
+  CSS "CAP. LÍQUIDA" no fim do `style.css`.
+- Base: export diário (`data_anls … cpit_liqa`) e mensal (`mes_ref …
+  cpit_liqa_mtd`), tipo reconhecido pelo cabeçalho. Tabelas
+  `captacao_diaria` e `captacao_mensal`, criadas na 1ª importação
+  (checkfirst). Importação em Administração (`static/admin-captacao.js`,
+  lotes de 4 mil linhas, CSV lido no navegador) ou
+  `Importar Captacao Liquida.bat`. Cada arquivo SUBSTITUI o período que
+  cobre (o primeiro lote leva `periodo`).
+- **O nome da gestora vira hash (sha256, 16 caracteres) na importação e não
+  é gravado.** O hash só serve para contar gestoras e medir concentração.
+  Por isso as matrizes "Top 10 por asset" e o "Analítico Gestoras" do
+  original não existem aqui; no lugar: matriz mensal por segmento (faixas
+  de cor do original ×10, porque são agregados do segmento) e "Amplitude do
+  fluxo" (% do PL captando/resgatando, nº de gestoras, top 10 sobre o
+  bruto, sem nomes).
+- Cores: Infra laranja, CP Tradicional (= CP ex Infra) preto, Total branco.
+- Definições: Last PL = PL na data mais recente do diário; FY/YTD = soma da
+  captação mensal no ano; %PL do ano = YTD ÷ Last PL; %PL do mês = captação
+  do mês ÷ PL do mês. Mês corrente = o da última data do diário (parcial, *).
+- Início: o cartão reservado "Captação líquida" ganhou o gráfico mensal
+  (13 meses, Infra + CP Tradicional), link para a aba.
+- Base real conferida (export de 29/10): FY24 R$ 350,1 bi, FY25 R$ 124,2 bi,
+  YTD26 −R$ 132,9 bi (Total CP); último PL R$ 2,34 tri em 22/10/2026.
+
 ## Regras a manter
 
 1. **Nunca** trocar `store.upsert_article` para sobrescrever corpo/título

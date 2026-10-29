@@ -149,4 +149,21 @@
 <p class="small" id="ms-progresso"></p>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script src="/static/admin-mercado.js?v={{ v }}"></script>
+
+{# CAP. LÍQUIDA (29/10/2026): exports diário e mensal de captação dos fundos
+   de crédito privado. O nome da gestora vira hash no servidor e não é
+   gravado (ver app/captacao.py e static/admin-captacao.js). #}
+<h2 style="margin-top:24px;" id="captacao-liquida">Cap. Líquida — importar exports de captação</h2>
+<p class="muted small">
+  Suba o export diário (data_anls … cpit_liqa) e/ou o mensal (mes_ref … cpit_liqa_mtd), em .csv — pode
+  escolher os dois de uma vez. Cada arquivo substitui o período que ele cobre. O nome das gestoras não é
+  guardado.
+</p>
+<p class="small" id="cl-status">Base atual: carregando…</p>
+<div class="form-row">
+  <input type="file" id="cl-arquivo" accept=".csv" multiple>
+  <button type="button" class="btn-primary" id="cl-importar">Importar</button>
+</div>
+<p class="small" id="cl-progresso"></p>
+<script src="/static/admin-captacao.js?v={{ v }}"></script>
 {% endblock %}

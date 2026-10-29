@@ -261,4 +261,37 @@
   }).catch(() => {
     ["nota-pre", "nota-real"].forEach((id) => { document.getElementById(id).textContent = "Erro ao carregar."; });
   });
+
+  // Captação líquida mensal (29/10/2026): Infra laranja, CP Tradicional preto.
+  buscar("/api/captacao/mensal").then((d) => {
+    const cv = document.getElementById("graf-captacao");
+    if (!cv) return;
+    if (!d.meses || !d.meses.length) {
+      cv.parentElement.innerHTML = '<div class="ic-vazio-grande">Sem dados de captação ainda.</div>';
+      return;
+    }
+    const ini = Math.max(0, d.meses.length - 13);
+    const P = window.PADRAO_GRAFICO;
+    const ref = (d.referencia || "").slice(0, 7);
+    const bi = (v) => (v == null ? null : v / 1e9);
+    new Chart(cv, {
+      type: "bar",
+      data: {
+        labels: d.meses.slice(ini).map((m) => P.mesAno(m) + (m.slice(0, 7) === ref ? "*" : "")),
+        datasets: [
+          { label: "Infra", data: d.series["Infra"].captacao.slice(ini).map(bi), backgroundColor: "#FF6200", borderWidth: 0 },
+          { label: "CP Tradicional", data: d.series["CP ex Infra"].captacao.slice(ini).map(bi), backgroundColor: "#111111", borderWidth: 0 },
+        ],
+      },
+      options: {
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { position: "top", align: "end" },
+          tooltip: { callbacks: { label: (it) => ` ${it.dataset.label}: R$ ${Number(it.raw).toLocaleString("pt-BR", { maximumFractionDigits: 1 })} bi` } },
+        },
+        scales: { x: { grid: { display: false } }, y: { title: { display: true, text: "R$ bi" } } },
+      },
+      plugins: [P.linhaZero],
+    });
+  }).catch(() => {});
 })();

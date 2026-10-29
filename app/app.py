@@ -79,9 +79,9 @@ templates.env.globals["v"] = VERSAO_ESTATICA
 # idêntica a cada deploy, e com o `immutable` de 1 ano do vercel.json o
 # navegador nunca buscava o spreads.js/style.css novos. Todos recebem o
 # mesmo valor; o teste `test_paginas_renderizam_versao_estatica` guarda.
-from . import cobertura_routes as _cr, inicio_routes as _ir, mercado_secundario_routes as _msr, spreads_routes as _sr  # noqa: E402
+from . import captacao_routes as _clr, cobertura_routes as _cr, inicio_routes as _ir, mercado_secundario_routes as _msr, spreads_routes as _sr  # noqa: E402
 
-for _t in (_msr.templates, _cr.templates, _sr.templates, _ir.templates):
+for _t in (_msr.templates, _cr.templates, _sr.templates, _ir.templates, _clr.templates):
     _t.env.globals["v"] = VERSAO_ESTATICA
 
 _BRT = ZoneInfo("America/Sao_Paulo")
@@ -227,6 +227,13 @@ from .inicio_routes import register_inicio_routes  # noqa: E402
 from .mercado_secundario_routes import register_mercado_secundario_routes  # noqa: E402
 
 app.include_router(register_mercado_secundario_routes(require_user, require_admin))
+
+# Aba "Cap. Líquida" (29/10/2026): captação líquida dos fundos de crédito
+# privado (Infra e CP Tradicional), a partir do export que o Allan sobe na
+# Administração. Sem nome de gestora ou fundo -- ver app/captacao.py.
+from .captacao_routes import register_captacao_routes  # noqa: E402
+
+app.include_router(register_captacao_routes(require_user, require_admin))
 
 # Página inicial (26/10/2026): resumo do Hub numa tela só. Ver app/inicio.py.
 app.include_router(register_inicio_routes(require_user, require_admin))
