@@ -28,6 +28,7 @@ from zoneinfo import ZoneInfo
 
 from bs4 import BeautifulSoup
 
+from . import base
 from .base import RawArticle, brt_to_utc, get
 from .fiduciarios import carregar_cobertura, corte, titulo
 
@@ -84,15 +85,32 @@ def _codigos_da_pagina(html: bytes) -> list[str]:
     return out
 
 
+def _sessao():
+    """A consulta de PU devolve HTTP 500 sem o cookie de sessão que a página
+    `/PrecosUnitarios` grava (conferido no navegador, 03/11/2026)."""
+    kw = {"impersonate": base.IMPERSONATE} if base._USE_CURL_CFFI else {}
+    s = base._http.Session(**kw)
+    s.headers.update(base.DEFAULT_HEADERS)
+    s.get(f"{BASE_SITE}/PrecosUnitarios", timeout=base.REQUEST_TIMEOUT).raise_for_status()
+    return s
+
+
 def universo() -> set[str]:
     """Códigos acompanhados pela Pentágono (consulta de PU)."""
+    try:
+        sessao = _sessao()
+    except Exception as e:  # noqa: BLE001
+        logger.warning("pentagono: não abri a página de PU: %s", e)
+        return set()
     hoje = datetime.now(ZoneInfo("America/Sao_Paulo")).date()
     for atras in range(0, 6):
         dia = (hoje - timedelta(days=atras)).isoformat()
         codigos: set[str] = set()
         for pagina in range(1, MAX_PAGINAS_PU + 1):
             try:
-                lote = _codigos_da_pagina(get(PU_URL, params={"DataInicial": dia, "pagina": pagina}).content)
+                r = sessao.get(PU_URL, params={"DataInicial": dia, "pagina": pagina}, timeout=base.REQUEST_TIMEOUT)
+                r.raise_for_status()
+                lote = _codigos_da_pagina(r.content)
             except Exception as e:  # noqa: BLE001
                 logger.warning("pentagono: PU %s pagina %d falhou: %s", dia, pagina, e)
                 break
