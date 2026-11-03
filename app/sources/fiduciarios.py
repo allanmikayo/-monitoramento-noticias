@@ -98,12 +98,50 @@ def carregar_cobertura() -> Cobertura:
             ):
                 if cid in empresas and codigo:
                     cob.nome_por_ticker[codigo.upper()] = empresas[cid]
+            _tickers_pelo_nome(db, cob)
     except Exception as e:  # noqa: BLE001
         logger.warning("fiduciarios: falha carregando a cobertura: %s", e)
     return cob
 
 
-def get_json(url: str, tentativas: int = 3, **kwargs):
+def _tickers_pelo_nome(db, cob: Cobertura) -> None:
+    """Completa tickers e CNPJs pelo NOME do emissor/devedor (03/11/2026).
+    No banco de produção os vínculos `company_id` dos cadastros estão quase
+    vazios; sem isto a Pentágono (que só anda por ticker) não achava nada.
+    Fontes: características das debêntures (todas registradas, com CNPJ),
+    o cadastro ANBIMA e o originador dos CRI/CRA. Um nome por vez, com
+    cache, porque o mesmo emissor aparece em dezenas de séries."""
+    from sqlalchemy import select
+
+    from ..models import Debenture, DebentureCaracteristica, Securitizado
+
+    cache: dict[str, str | None] = {}
+
+    def empresa(nome: str | None) -> str | None:
+        if not nome:
+            return None
+        if nome not in cache:
+            cache[nome] = cob.empresa_no_texto(nome)
+        return cache[nome]
+
+    linhas = list(db.execute(select(DebentureCaracteristica.codigo, DebentureCaracteristica.empresa,
+                                    DebentureCaracteristica.cnpj, DebentureCaracteristica.situacao)))
+    linhas += [(c, n, cnpj, None) for c, n, cnpj in db.execute(select(Debenture.codigo, Debenture.nome, Debenture.cnpj))]
+    for codigo, nome, cnpj, situacao in linhas:
+        if not codigo or (situacao or "").lower().startswith("exclu"):
+            continue
+        emp = empresa(nome)
+        if emp:
+            cob.nome_por_ticker.setdefault(codigo.strip().upper(), emp)
+            if so_digitos(cnpj):
+                cob.nome_por_cnpj8.setdefault(so_digitos(cnpj)[:8], emp)
+    for codigo, originador in db.execute(select(Securitizado.codigo, Securitizado.originador_credito)):
+        emp = empresa(originador)
+        if codigo and emp:
+            cob.nome_por_ticker.setdefault(codigo.strip().upper(), emp)
+
+
+def get_json(url: str, tentativas: int = 4, **kwargs):
     """GET com até 3 tentativas (rede instável não pode zerar a fonte)."""
     ultimo: Exception | None = None
     for i in range(tentativas):
@@ -111,7 +149,8 @@ def get_json(url: str, tentativas: int = 3, **kwargs):
             return get(url, **kwargs).json()
         except Exception as e:  # noqa: BLE001
             ultimo = e
-            time.sleep(1.5 * (i + 1))
+            # 429 (limite de requisições, visto na Vórtx): espera mais.
+            time.sleep((6 if "429" in str(e) else 1.5) * (i + 1))
     raise ultimo  # type: ignore[misc]
 
 

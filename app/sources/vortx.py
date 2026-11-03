@@ -33,7 +33,7 @@ MAX_PAGINAS_BUSCA = 6       # 10 por página
 TIPO_DEB = "3"
 # Já vem pelo endpoint de assembleias (com data da assembleia, mais útil).
 GRUPOS_IGNORADOS = {"assembleia investidores"}
-TRABALHADORES = 8
+TRABALHADORES = 3  # a API devolve 429 com 8 chamadas em paralelo (03/11/2026)
 
 
 def _data(valor: str | None, so_dia: bool = False) -> datetime | None:
@@ -97,7 +97,7 @@ def _assembleias(op_id: str, empresa: str, limite: datetime) -> list[RawArticle]
 
 def _documentos_da_operacao(op: dict, empresa: str, limite: datetime) -> list[RawArticle]:
     op_id = op["codigo"]
-    serie = " ".join(b for b in [op.get("codIf") or "", f"{op.get('emissao')}ª emissão" if op.get("emissao") else ""] if b)
+    serie = f"{op.get('emissao')}ª emissão" if op.get("emissao") else (op.get("codIf") or "")
     out: list[RawArticle] = []
 
     fatos = get_json(f"{API}/operacao/{op_id}/fatos-relevantes").get("relevantFacts") or []
@@ -158,22 +158,25 @@ def fetch(url: str) -> list[RawArticle]:
                 operacoes[str(op["codigo"])] = (op, empresa)
     logger.info("vortx: %d operações da cobertura", len(operacoes))
 
-    # Assembleias: uma chamada por emissão (todas as séries vêm juntas).
-    emissoes: dict[tuple, tuple[str, str]] = {}
+    # Uma operação por EMISSÃO: assembleias, fatos e documentos são da
+    # emissão (as séries repetem os mesmos arquivos), então chamar série por
+    # série só multiplicava as chamadas e levava a 429.
+    emissoes: dict[tuple, tuple[dict, str]] = {}
     for op_id, (op, empresa) in operacoes.items():
         chave = (so_digitos(op.get("cnpj_emissora")), str(op.get("emissao")), str(op.get("operation_type_id")))
-        emissoes.setdefault(chave, (op_id, empresa))
+        emissoes.setdefault(chave, (op, empresa))
+    logger.info("vortx: %d emissões", len(emissoes))
 
     def _seguro(fn, *args):
         try:
             return fn(*args)
         except Exception as e:  # noqa: BLE001
-            logger.warning("vortx: %s%s falhou: %s", fn.__name__, args[:1], e)
+            logger.warning("vortx: %s(%s) falhou: %s", fn.__name__, (args[0] or {}).get("codigo") if isinstance(args[0], dict) else args[0], e)
             return []
 
     with ThreadPoolExecutor(TRABALHADORES) as ex:
-        tarefas = [ex.submit(_seguro, _assembleias, op_id, emp, limite) for op_id, emp in emissoes.values()]
-        tarefas += [ex.submit(_seguro, _documentos_da_operacao, op, emp, limite) for op, emp in operacoes.values()]
+        tarefas = [ex.submit(_seguro, _assembleias, str(op["codigo"]), emp, limite) for op, emp in emissoes.values()]
+        tarefas += [ex.submit(_seguro, _documentos_da_operacao, op, emp, limite) for op, emp in emissoes.values()]
         artigos = [a for t in tarefas for a in t.result()]
 
     vistos: set[str] = set()

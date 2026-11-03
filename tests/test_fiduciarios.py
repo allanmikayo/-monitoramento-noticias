@@ -51,7 +51,7 @@ def test_vortx_documentos_filtra_janela(monkeypatch):
     arts = vortx._documentos_da_operacao({"codigo": 91018, "codIf": "LIGHD2", "emissao": "22"}, "Light",
                                          agora - timedelta(days=40))
     assert [a.url for a in arts] == ["https://x/f.pdf", "https://x/a.pdf"]
-    assert arts[1].title == "Light — Relatório Garantias — Garantias.pdf (LIGHD2 22ª emissão)"
+    assert arts[1].title == "Light — Relatório Garantias — Garantias.pdf (22ª emissão)"
 
 
 def test_oliveiratrust_link_direto():
