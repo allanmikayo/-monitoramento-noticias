@@ -1544,7 +1544,8 @@ coletas.
 - **Moody's Local (3 páginas) e CanalEnergia estão atrás da verificação
   anti-bot da Cloudflare** ("Um momento…") e voltam zero. Não contornamos
   proteção anti-bot; caminhos legítimos: feed/RSS oficial, alerta por
-  e-mail da Moody's, ou pedir acesso ao site.
+  e-mail da Moody's, ou pedir acesso ao site. (Moody's resolvida em
+  03/11 com aval da própria Moody's; CanalEnergia continua zerada.)
 - Removidos do repositório público: `" (2).env"`, `".env (2).example"`
   (só valores de exemplo) e `monitoramento-noticias.txt` (tinha a
   connection string REAL do Supabase com senha). Continuam no histórico do
@@ -1624,10 +1625,15 @@ a tela continua igual (notícia com título, data e link). O que veio de lá:
   radios com id = nº de dias; aceita as colunas
   `table-module__column-pageLists`; espera as linhas antes de ler.
 - **Moody's**: seletor de 100 linhas por página (`select[name$='_length']`).
-  **Continua zerada**: a página está atrás da verificação anti-bot da
-  Cloudflare. O Radar passa por ela com o Patchright (navegador modificado
-  para não ser detectado) e Chrome visível sob xvfb; isso NÃO foi trazido,
-  pela mesma regra de não contornar proteção anti-bot.
+  A página fica atrás da verificação da Cloudflare ("Um momento…").
+  **Allan teve agenda com a Moody's (03/11) e recebeu o aval para coletar
+  as ações com este propósito** (título, data e link para o site deles,
+  sem base estruturada de ratings). Por isso, como no Radar: Patchright
+  (`requirements.txt`), Chrome real, perfil próprio, visita à home antes
+  da lista e janela visível sob xvfb no Actions (`MOODYS_HEADLESS=0`,
+  `xvfb-run -a` em `scrape.yml` e `diagnostico_fontes.yml`). Localmente,
+  sem a variável, roda sem janela (pode cair na verificação). Diagnóstico
+  03/11: Ações de Rating 62 itens, Relatórios do Emissor 85, Setoriais 2.
 - **Alarme de falha silenciosa**: `scripts/run_once.py` escreve um aviso
   amarelo no Actions quando uma fonte `rating_agency` volta 0 itens ou erro.
 - O Radar também extrai a tabela de rating de cada artigo (nota anterior,
@@ -1641,8 +1647,6 @@ a tela continua igual (notícia com título, data e link). O que veio de lá:
   `fitch.py`). Rodado com `lastMonth` + 14 dias: Fitch 19 itens (4 da
   cobertura), S&P 18 (4); 0 novos -- a varredura de 15 min já tinha tudo.
   As agências rodam dentro de `scrape.yml`, a cada 15 min, como as notícias.
-- Allan pediu de novo o Patchright na Moody's (03/11); continua fora, pela
-  regra de não contornar proteção anti-bot.
 - Testes: `tests/test_coleta_ratings.py`.
 
 ## Regras a manter

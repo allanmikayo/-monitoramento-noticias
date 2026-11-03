@@ -13,6 +13,8 @@ Precisa de navegador real (Playwright), confirmado em uso real:
    ou até não haver mais próxima página."""
 from __future__ import annotations
 
+import logging
+import os
 import re
 from datetime import datetime, timedelta, timezone
 
@@ -21,6 +23,8 @@ from dateutil import parser as dtparser
 
 from .. import config
 from .base import RawArticle, brt_to_utc, dump_debug_html, esperar_desafio_cloudflare, fetch_rendered_html  # noqa: F401 (fetch_rendered_html mantido p/ compat)
+
+logger = logging.getLogger(__name__)
 
 _DATE_RE = re.compile(r"\b(\d{1,2}/\d{1,2}/\d{4})\b")
 
@@ -215,10 +219,51 @@ def _slug_from_url(url: str) -> str:
     return "moodys_outros"
 
 
-def fetch(url: str) -> list[RawArticle]:
-    from playwright.sync_api import sync_playwright
+HOME_URL = "https://moodyslocal.com.br/"
 
-    from .base import DEFAULT_HEADERS, USER_AGENT  # noqa: F401
+
+def _abrir_navegador(pw):
+    """Chrome de verdade, perfil próprio e janela visível (03/11/2026).
+
+    A Moody's Local fica atrás da verificação da Cloudflare ("Um momento…").
+    Allan conversou com a Moody's e recebeu o aval para coletar as ações de
+    rating com este propósito (só título, data e link para o site deles).
+    Mesmo arranjo do Radar de Ratings: Patchright (Playwright sem as marcas
+    de automação do protocolo do navegador), canal "chrome", sem user agent
+    forçado e, no Actions, janela visível sob xvfb (`MOODYS_HEADLESS=0`).
+    Sem o Patchright instalado, cai no Playwright comum."""
+    import tempfile
+
+    perfil = tempfile.mkdtemp(prefix="moodys_")
+    headless = os.environ.get("MOODYS_HEADLESS", "1") != "0"
+    for canal in ("chrome", None):
+        try:
+            kw = {"user_data_dir": perfil, "headless": headless, "locale": "pt-BR", "no_viewport": True}
+            if canal:
+                kw["channel"] = canal
+            return pw.chromium.launch_persistent_context(**kw)
+        except Exception as e:  # noqa: BLE001
+            logger.warning("moodys: falha ao abrir navegador (canal=%s): %s", canal, e)
+    raise RuntimeError("moodys: nenhum navegador disponível")
+
+
+def _abrir_passando_verificacao(page, url: str, tentativas: int = 3) -> bool:
+    for i in range(1, tentativas + 1):
+        try:
+            page.goto(url, wait_until="domcontentloaded", timeout=45000)
+            if esperar_desafio_cloudflare(page, max_ms=40000):
+                return True
+        except Exception as e:  # noqa: BLE001
+            logger.warning("moodys: tentativa %d de abrir %s falhou: %s", i, url, e)
+        page.wait_for_timeout(3000 * 2 ** (i - 1))
+    return False
+
+
+def fetch(url: str) -> list[RawArticle]:
+    try:
+        from patchright.sync_api import sync_playwright
+    except ImportError:
+        from playwright.sync_api import sync_playwright
 
     cutoff = datetime.now(timezone.utc) - _MAX_AGE
     seen: set[str] = set()
@@ -226,16 +271,15 @@ def fetch(url: str) -> list[RawArticle]:
     last_html = ""
 
     with sync_playwright() as pw:
-        browser = pw.chromium.launch(headless=True, args=["--disable-blink-features=AutomationControlled"])
+        context = _abrir_navegador(pw)
         try:
-            context = browser.new_context(
-                user_agent=USER_AGENT, viewport={"width": 1280, "height": 900}, locale="pt-BR",
-            )
-            context.add_init_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
-            page = context.new_page()
-            page.goto(url, wait_until="domcontentloaded", timeout=45000)
-            page.wait_for_timeout(4000)
-            esperar_desafio_cloudflare(page)
+            page = context.pages[0] if context.pages else context.new_page()
+            # Visita a home primeiro (cookies da verificação), depois a lista.
+            _abrir_passando_verificacao(page, HOME_URL, tentativas=2)
+            page.wait_for_timeout(2000)
+            if not _abrir_passando_verificacao(page, url):
+                logger.warning("moodys: verificação não liberou %s", url)
+            page.wait_for_timeout(2000)
 
             _maximizar_itens_por_pagina(page)
             _ordenar_por_data_desc(page)
@@ -269,7 +313,7 @@ def fetch(url: str) -> list[RawArticle]:
                 if not _clicar_proxima_pagina(page):
                     break
         finally:
-            browser.close()
+            context.close()
 
     recentes = [a for a in collected if _recent_enough(a, cutoff)]
     if collected and not recentes:
