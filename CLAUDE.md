@@ -1636,6 +1636,13 @@ a tela continua igual (notícia com título, data e link). O que veio de lá:
   último comunicado da S&P era de 26/10 e isso é real: com o filtro de 7
   dias o próprio site mostra "Não há registro disponível". Por isso a S&P
   continua no filtro de 12 meses (o Radar usa 7 dias).
+- **Retroativo de 2 semanas (03/11)**: `scrape.yml` ganhou os campos
+  manuais `fitch_janela`/`fitch_dias` (env `FITCH_JANELA`/`FITCH_DIAS` em
+  `fitch.py`). Rodado com `lastMonth` + 14 dias: Fitch 19 itens (4 da
+  cobertura), S&P 18 (4); 0 novos -- a varredura de 15 min já tinha tudo.
+  As agências rodam dentro de `scrape.yml`, a cada 15 min, como as notícias.
+- Allan pediu de novo o Patchright na Moody's (03/11); continua fora, pela
+  regra de não contornar proteção anti-bot.
 - Testes: `tests/test_coleta_ratings.py`.
 
 ## Regras a manter
