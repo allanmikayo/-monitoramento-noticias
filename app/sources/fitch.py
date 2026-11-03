@@ -17,8 +17,9 @@ rápido (não abre uma aba por artigo a cada scan de 5min).
 from __future__ import annotations
 
 import logging
+import os
 import re
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 
 from bs4 import BeautifulSoup
 
@@ -140,6 +141,17 @@ def fetch(url: str) -> list[RawArticle]:
     seen: set[str] = set()
     last_html = ""
 
+    # Coleta retroativa (03/11/2026): FITCH_JANELA troca o `dateValue` da
+    # busca (ex.: "lastMonth") e FITCH_DIAS corta o que for mais antigo que
+    # N dias. Só são usadas na execução manual do workflow (campo
+    # "fitch_janela"); a varredura de 15 min continua em `lastWeek`.
+    janela = (os.environ.get("FITCH_JANELA") or "").strip()
+    if janela:
+        url = re.sub(r"dateValue=[^&]*", f"dateValue={janela}", url)
+        logger.info("fitch: janela da busca trocada para %s", janela)
+    dias = int(os.environ.get("FITCH_DIAS") or 0)
+    corte = datetime.now(timezone.utc) - timedelta(days=dias) if dias else None
+
     with sync_playwright() as pw:
         browser = pw.chromium.launch(headless=True, args=["--disable-blink-features=AutomationControlled"])
         try:
@@ -174,6 +186,9 @@ def fetch(url: str) -> list[RawArticle]:
                         novos_nesta_pagina += 1
                 if novos_nesta_pagina == 0:
                     break
+                datas = [a.published_at for a in linhas if a.published_at]
+                if corte and datas and min(datas) < corte:
+                    break
                 if not _clicar_proxima_pagina(page):
                     break
         finally:
@@ -182,4 +197,6 @@ def fetch(url: str) -> list[RawArticle]:
     if not coletados:
         dump_debug_html("fitch", last_html)
 
+    if corte:
+        coletados = [a for a in coletados if a.published_at is None or a.published_at >= corte]
     return coletados

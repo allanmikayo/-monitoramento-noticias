@@ -18,7 +18,19 @@ on:
   # `concurrency` abaixo impede duas rodadas ao mesmo tempo.
   schedule:
     - cron: "7,22,37,52 * * * *"
-  workflow_dispatch: {}
+  workflow_dispatch:
+    # Coleta retroativa da Fitch (03/11/2026): vazio = varredura normal.
+    # Ex.: fitch_janela=lastMonth e fitch_dias=14 trazem as duas últimas
+    # semanas. O botão "Forçar atualização" não manda nada, então segue normal.
+    inputs:
+      fitch_janela:
+        description: "dateValue da busca da Fitch (vazio = lastWeek)"
+        required: false
+        default: ""
+      fitch_dias:
+        description: "corta Fitch mais antiga que N dias (vazio = sem corte)"
+        required: false
+        default: ""
 
 # CADÊNCIA REAL: 15 MINUTOS, não 5 (mudado em 20/08/2026).
 #
@@ -119,6 +131,8 @@ jobs:
       - name: Rodar a varredura
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          FITCH_JANELA: ${{ github.event.inputs.fitch_janela }}
+          FITCH_DIAS: ${{ github.event.inputs.fitch_dias }}
         # ATE 3 TENTATIVAS (08/09/2026). Um `Segmentation fault` mata o
         # processo inteiro -- nao existe `except` que pegue isso, entao a
         # unica defesa e tentar de novo por fora. A troca do psycopg no
