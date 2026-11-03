@@ -183,9 +183,8 @@ KNOWN_SOURCES: list[dict] = [
         "scraper_module": "oliveiratrust",
         "url": "https://services-ft.oliveiratrust.com.br/app/v1/titulos/documentos",
         "mode": "all",
-        "notes": "API JSON publica (sem Playwright), confirmada ao vivo (23/07/2026). Filtra por "
-                 "empresa da cobertura dentro do scraper (mesmo padrao do CVM RAD) -- so' debentures "
-                 "nesta 1a versao, CRI/CRA e Relatorios Anuais ficaram de fora (pedido do Allan).",
+        "notes": "API JSON publica (sem navegador). Assembleias por data (DEB, CRI, CRA) + relatorios do ano; "
+                 "CRI/CRA casados pelo codigo do ativo -> devedor. Reescrito 03/11/2026, ver CLAUDE.md.",
     },
     {
         "domain": "vortx.com.br",
@@ -195,11 +194,8 @@ KNOWN_SOURCES: list[dict] = [
         "scraper_module": "vortx",
         "url": "https://www.vortx.com.br/investidor/dcm",
         "mode": "all",
-        "notes": "Playwright (SPA Next.js) -- busca por empresa da cobertura, abre cada operacao de "
-                 "debenture e le a aba Assembleias. CUSTO ALTO: ~96 buscas + 1 navegacao Playwright por "
-                 "operacao encontrada -- pode deixar a varredura lenta, avaliar depois do 1o uso real. "
-                 "Nao consegui calibrar o parser de linha COM assembleia de verdade (so' testei "
-                 "operacoes sem nenhuma cadastrada) -- ver docstring do modulo.",
+        "notes": "API JSON publica apis.vortx.com.br (sem navegador): busca por empresa, assembleias por emissao, "
+                 "fatos relevantes e documentos por operacao. Reescrito 03/11/2026, ver CLAUDE.md.",
     },
     {
         "domain": "pentagonotrustee.com.br",
@@ -209,10 +205,8 @@ KNOWN_SOURCES: list[dict] = [
         "scraper_module": "pentagono",
         "url": "https://www.pentagonotrustee.com.br/Site/Investidores",
         "mode": "all",
-        "notes": "HTML server-rendered simples (sem Playwright), confirmado ao vivo (23/07/2026). Busca "
-                 "por empresa da cobertura, abre a aba Publicacoes de cada ativo e filtra pelo NOME DO "
-                 "ARQUIVO (AGD/AGT/edital/convocacao) -- essa aba mistura fato relevante e aviso aos "
-                 "debenturistas tambem, que ficam de fora por enquanto.",
+        "notes": "GET simples: universo pela consulta de PU, documentos e publicacoes por ticker da cobertura "
+                 "(a busca por emissor do site esta quebrada). Reescrito 03/11/2026, ver CLAUDE.md.",
     },
     {
         "domain": "fnet.bmfbovespa.com.br",

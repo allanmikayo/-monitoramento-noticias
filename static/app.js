@@ -191,7 +191,7 @@
       news: "Notícia",
       rating_action: "Ação de rating",
       fato_relevante: "Documento CVM",
-      assembleia: "Assembleia (AGD/AGT)",
+      assembleia: "Agente fiduciário",
       research: "Research",
     }[t] || t;
   }
@@ -381,6 +381,11 @@
   function partesDocumento(a) {
     const p = String(a.title || "").split(" — ");
     if (a.article_type === "fato_relevante" && p.length >= 2) {
+      return { emissor: p[0], categoria: p[1], assunto: p.slice(2).join(" — ") };
+    }
+    // Agentes fiduciários (03/11/2026): "EMPRESA — Categoria — Assunto",
+    // categoria = Edital, Ata, Fato relevante, Relatório, Aviso...
+    if (a.article_type === "assembleia" && p.length >= 3) {
       return { emissor: p[0], categoria: p[1], assunto: p.slice(2).join(" — ") };
     }
     return { emissor: "", categoria: a.article_type === "assembleia" ? "Assembleia (AGD/AGT)" : typeLabel(a.article_type),
