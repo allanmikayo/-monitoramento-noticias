@@ -113,19 +113,17 @@ def _selecionar_ultimos_12_meses(page) -> None:
 
     # O painel é um grupo de radios cujo id/value é o número de dias
     # (confirmado no Radar de Ratings: <input type="radio" id="7" value="7"
-    # class="criteria_dropdown_radio_input">). Primeiro o maior período, que
-    # cobre a janela de 45 dias da limpeza; a paginação para no corte.
+    # class="criteria_dropdown_radio_input">). Usa "7 dias", como o Radar:
+    # a varredura roda a cada 15 min, e com "12 meses" a lista vinha parada
+    # num comunicado de dias atrás (03/11/2026). Os maiores ficam de reserva.
     clicou_opcao = False
     for sel_opcao in [
-        "label:has-text('Últimos 12 Meses')",
-        "input[type='radio'][id='365']",
-        "input[type='radio'][value='365']",
-        "text=Últimos 12 Meses",
-        "[role='option']:has-text('Últimos 12 Meses')",
-        "input[type='radio'][id='90']",
-        "input[type='radio'][id='30']",
         "input[type='radio'][id='7']",
+        "input[type='radio'][value='7']",
+        ".criteria_dropdown_radio_input[value='7']",
         "label[for='7']",
+        "input[type='radio'][id='30']",
+        "label:has-text('Últimos 12 Meses')",
     ]:
         try:
             opt = page.query_selector(sel_opcao)
