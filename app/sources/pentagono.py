@@ -176,10 +176,13 @@ def fetch(url: str) -> list[RawArticle]:
     with ThreadPoolExecutor(TRABALHADORES) as ex:
         artigos = [a for lote in ex.map(_do_ticker, nossos) for a in lote]
 
-    vistos: set[str] = set()
+    # O mesmo arquivo aparece em cada série da emissão, às vezes com id
+    # diferente: fica um por (empresa, nome do arquivo).
+    vistos: set = set()
     out = []
-    for a in artigos:  # mesmo arquivo aparece em várias séries da emissão
-        if a.url not in vistos:
-            vistos.add(a.url)
+    for a in artigos:
+        chave = (a.title.rsplit(" (", 1)[0], a.published_at)
+        if a.url not in vistos and chave not in vistos:
+            vistos.update({a.url, chave})
             out.append(a)
     return out

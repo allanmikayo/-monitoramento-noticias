@@ -1655,7 +1655,33 @@ Pedido do Allan: como coletar de forma mais eficiente os documentos novos
 (AGD, atas, relatórios) das 3 fontes. Investigado ao vivo no Chrome dele.
 Estado antes: rodada noturna com Oliveira 1 item (link dando 403), Vórtx 0
 em 27 min (Playwright por operação), Pentágono 0 (busca bloqueada).
-NADA FOI IMPLEMENTADO AINDA -- só o mapa abaixo.
+
+**IMPLEMENTADO no mesmo dia** (pedido: "rodar 3 vezes ao dia"), as três
+fontes por HTTP direto, sem navegador:
+- `app/sources/fiduciarios.py` (novo): cobertura comum (nomes/apelidos,
+  CNPJ raiz, tickers). Como no banco de produção quase nenhum cadastro tem
+  `company_id`, os tickers também saem pelo NOME do emissor (características
+  das debêntures, cadastro ANBIMA, originador dos CRI/CRA). `get_json` com
+  espera maior em HTTP 429. Título "EMPRESA — Categoria — Assunto"; a tela
+  (`partesDocumento` em `app.js`) mostra a categoria na coluna de documento.
+- Vórtx: busca por empresa da cobertura, UMA operação por emissão
+  (assembleias, fatos relevantes, documentos por tipo); 3 chamadas em
+  paralelo (8 davam 429). DEB, CRI e CRA.
+- Oliveira Trust: assembleias de hoje−40 até +365 dias (convocações) e
+  relatórios do ano, DEB/CRI/CRA. CRI/CRA casam pelo `codigo_do_ativo` da
+  ficha do título (cache em `AppSetting` `oliveiratrust_titulos`); link
+  final pela lista de downloads da operação (sem o leitor).
+- Pentágono: universo pela consulta de PU (precisa de sessão: sem cookie de
+  idioma o servidor dá 500 -- abrir `/Language/Change/pt-BR` e
+  `/PrecosUnitarios` antes), depois as abas tab-2/tab-3 de cada ticker da
+  cobertura; o mesmo arquivo em várias séries vira um item.
+- `assembleias.yml`: 08h47, 13h47 e 19h47 BRT, sem Playwright.
+- Diagnóstico ao vivo (Actions, 03/11): Vórtx 166 itens em 516 s,
+  Oliveira Trust 11 em 14 s (cache já cheio), Pentágono 157 em 164 s
+  (antes do filtro de duplicados entre séries). Testes:
+  `tests/test_fiduciarios.py`.
+
+Mapa original da investigação:
 
 **Vórtx -- API JSON pública (`apis.vortx.com.br/vxsite/api/`)**, sem
 Playwright:
