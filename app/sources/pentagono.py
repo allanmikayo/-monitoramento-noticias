@@ -86,12 +86,16 @@ def _codigos_da_pagina(html: bytes) -> list[str]:
 
 
 def _sessao():
-    """A consulta de PU devolve HTTP 500 sem o cookie de sessão que a página
-    `/PrecosUnitarios` grava (conferido no navegador, 03/11/2026)."""
+    """Sem cookie a consulta de PU devolve HTTP 500 (NullReferenceException no
+    servidor; conferido no navegador, 03/11/2026). Abre a sessão como o site:
+    idioma (`/Language/Change/pt-BR`) e a página de PU."""
     kw = {"impersonate": base.IMPERSONATE} if base._USE_CURL_CFFI else {}
     s = base._http.Session(**kw)
     s.headers.update(base.DEFAULT_HEADERS)
-    s.get(f"{BASE_SITE}/PrecosUnitarios", timeout=base.REQUEST_TIMEOUT).raise_for_status()
+    for caminho in ("/Language/Change/pt-BR", "/PrecosUnitarios"):
+        s.get(f"{BASE_SITE}{caminho}", timeout=base.REQUEST_TIMEOUT).raise_for_status()
+    s.headers["Referer"] = f"{BASE_SITE}/PrecosUnitarios"
+    logger.info("pentagono: cookies da sessão: %s", sorted(s.cookies.keys()))
     return s
 
 
