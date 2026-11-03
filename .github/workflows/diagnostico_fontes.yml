@@ -17,6 +17,7 @@ jobs:
     timeout-minutes: 30
     env:
       PSYCOPG_IMPL: python
+      MOODYS_HEADLESS: "0"
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-python@v6
@@ -32,7 +33,9 @@ jobs:
         run: |
           python -m playwright install --with-deps chromium
           python -m playwright install --with-deps chrome || true
+          # Display virtual: a Moody's roda com janela visível (MOODYS_HEADLESS=0).
+          sudo apt-get install -y -qq xvfb
       - name: Diagnosticar
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
-        run: python -m scripts.diagnostico_fontes ${{ github.event.inputs.modulos }}
+        run: xvfb-run -a python -m scripts.diagnostico_fontes ${{ github.event.inputs.modulos }}

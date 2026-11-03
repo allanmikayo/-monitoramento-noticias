@@ -76,6 +76,8 @@ jobs:
       # com mensagem clara, em vez de voltar em silencio pro binario que
       # causava o segfault.
       PSYCOPG_IMPL: python
+      # Moody's Local com janela visível sob xvfb (ver app/sources/moodys_local.py)
+      MOODYS_HEADLESS: "0"
     # 20 min, nao 10 (08/09/2026). O passo agora tenta ate 3 vezes (ver o
     # comentario no passo "Rodar a varredura"), entao o teto tem que caber
     # mais de uma tentativa. Com o N+1 corrigido uma varredura leva ~1 min;
@@ -127,6 +129,8 @@ jobs:
           # deteccao de robo, com fallback automatico pro Chromium se
           # isso falhar aqui -- nao trava o job) -- ver app/sources/spglobal.py
           python -m playwright install --with-deps chrome || true
+          # Display virtual: a Moody's roda com janela visível (MOODYS_HEADLESS=0).
+          sudo apt-get install -y -qq xvfb
 
       - name: Rodar a varredura
         env:
@@ -145,7 +149,7 @@ jobs:
         # so grava o que faltou, em vez de refazer tudo.
         run: |
           for tentativa in 1 2 3; do
-            if python -m scripts.run_once; then
+            if xvfb-run -a python -m scripts.run_once; then
               exit 0
             fi
             echo "::warning::varredura: tentativa $tentativa caiu -- repetindo em 20s"
