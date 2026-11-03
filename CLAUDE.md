@@ -1649,6 +1649,62 @@ a tela continua igual (notícia com título, data e link). O que veio de lá:
   As agências rodam dentro de `scrape.yml`, a cada 15 min, como as notícias.
 - Testes: `tests/test_coleta_ratings.py`.
 
+### Agentes fiduciários: investigação de coleta eficiente — 03/11/2026
+
+Pedido do Allan: como coletar de forma mais eficiente os documentos novos
+(AGD, atas, relatórios) das 3 fontes. Investigado ao vivo no Chrome dele.
+Estado antes: rodada noturna com Oliveira 1 item (link dando 403), Vórtx 0
+em 27 min (Playwright por operação), Pentágono 0 (busca bloqueada).
+NADA FOI IMPLEMENTADO AINDA -- só o mapa abaixo.
+
+**Vórtx -- API JSON pública (`apis.vortx.com.br/vxsite/api/`)**, sem
+Playwright:
+- `operacoes?busca=X&pagina=N` -- busca por nome ou código IF (exato),
+  10 por página, fixo. Cada item: `codigo` (= operationId),
+  `operation_type_id` (3 = DEB; 1 e 5 = CRI/CRA/NC), `cnpj_emissora`,
+  `codIf`, `emissao`, `serie`, `apelido`, `emissor`. Sem `busca`: 9.204
+  operações, 921 páginas (não dá para listar tudo).
+- `operacao/assembleias/por-emissor?operationId=N` -- todas as
+  assembleias DA EMISSÃO (não do emissor inteiro): `url` (PDF em
+  arquivos-vx-informa.vortx.com.br), `data_assembleia`, `titulo`,
+  `tipo_documento` (Edital/Ata).
+- `operacao/{id}/fatos-relevantes` (`relevantFacts`: title, description,
+  referenceDate, createdDate, files), `operacao/{id}/documentos-por-tipo/1`
+  e `/2` (grupos por tipo: Relatório Covenants, Relatório Garantias,
+  Assembleia Investidores, Aviso Mercado, Rating...; cada documento com
+  `uploadTimestamp` e `url`), `operacao/{id}/relatorios-anuais`
+  (anoReferencia, dataGeracao), `operacao/{id}/resumo`.
+- `operacoes/exportar-pu` -- xlsx com todos os códigos IF e PU do dia.
+
+**Oliveira Trust -- API `services-ft.oliveiratrust.com.br/app/v1/`**:
+- `titulos/documentos` aceita `data_inicial`/`data_final` (data da
+  assembleia, inclusive FUTURA -- convocações), `search` (nome do
+  emissor; código IF não funciona), `tipo_ativo` (debentures/cri/cra),
+  `tipo_documento` (Assembleias/Relatórios), `ano`. Ordena pela data da
+  assembleia; `codigo` é o id do documento e cresce com o envio.
+  Últimos 40 dias + próximos meses: 98 DEB, 342 CRI, 115 CRA.
+- O 403 do link: `services-ft .../titulos/{tit}` deixou de responder
+  ("Registro não localizado"). O site usa `www.oliveiratrust.com.br/api/
+  titulos/{tit}` (traz `codigo_operacao`, `codigo_do_ativo`, `emissora`)
+  e `www.oliveiratrust.com.br/api/titulos/fundos/downloads/{codigo_operacao}`
+  (lista com `cod`, `descricao`, `link`, `item` = Assembleias/Contratos/
+  Relatórios). Também `api/titulos/avisos/{TIPO}/{codigo_operacao}`.
+- CRI/CRA: o nome no feed é a securitizadora; `codigo_do_ativo` do
+  `api/titulos/{tit}` casa com `Securitizado.codigo` -> devedor.
+
+**Pentágono -- a busca por emissor está quebrada até no navegador**
+("Houve problemas no seu acesso", com ou sem `tipo`). Mas a página por
+ticker funciona por GET simples:
+- `Site/DetalhesEmissor?ativo=TICKER&aba=tab-2&tipo=undefined`
+  (Documentos: atas, análise de quórum, termo de não instalação,
+  escritura, aditamentos) e `aba=tab-3` (Publicações: editais). Arquivo
+  com data no nome ("2026.10.09 - ...") e id em `DownloadBinario('N')`.
+  Ticker que não é da Pentágono devolve 0 artigos.
+- Universo de tickers da Pentágono: `PrecosUnitarios/Consulta?
+  DataInicial=AAAA-MM-DD&pagina=N` (50 por página, ~35 páginas, ~1.750
+  códigos). `BuscaAtivoTextBox=TICKER` filtra; o filtro de emissor é
+  ignorado.
+
 ## Regras a manter
 
 1. **Nunca** trocar `store.upsert_article` para sobrescrever corpo/título
