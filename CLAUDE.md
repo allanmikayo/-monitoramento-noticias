@@ -1632,6 +1632,10 @@ a tela continua igual (notícia com título, data e link). O que veio de lá:
   amarelo no Actions quando uma fonte `rating_agency` volta 0 itens ou erro.
 - O Radar também extrai a tabela de rating de cada artigo (nota anterior,
   atual, perspectiva). Não foi trazido: a tela de notícias não usa isso.
+- Conferido no Actions (diagnóstico, 03/11): Fitch 8 itens, S&P 18. O
+  último comunicado da S&P era de 26/10 e isso é real: com o filtro de 7
+  dias o próprio site mostra "Não há registro disponível". Por isso a S&P
+  continua no filtro de 12 meses (o Radar usa 7 dias).
 - Testes: `tests/test_coleta_ratings.py`.
 
 ## Regras a manter
