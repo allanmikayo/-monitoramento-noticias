@@ -1610,6 +1610,30 @@ e **sem citar gestora ou fundo** (ele é sell side).
 - Base real conferida (export de 29/10): FY24 R$ 350,1 bi, FY25 R$ 124,2 bi,
   YTD26 −R$ 132,9 bi (Total CP); último PL R$ 2,34 tri em 22/10/2026.
 
+### Coleta das agências de rating revisada com o Radar de Ratings — 03/11/2026
+
+Allan mandou o pacote de passagem do "Radar de Ratings" (outro dashboard
+do time, com as três agências funcionando). Pedido: melhorar só a COLETA;
+a tela continua igual (notícia com título, data e link). O que veio de lá:
+- **Fitch**: data aceita mês e ano colados ("24 Sep2026") e é lida dos
+  pedaços `.frw-date__1`/`.frw-date__2`. No Radar esse formato zerou a
+  Fitch por dias, sem erro. Teto de 30 páginas.
+- **S&P**: o banner de cookies (OneTrust) agora é ESPERADO (até 4 s) e
+  fechado com "Rejeitar todos"; antes era procurado uma vez só. No Radar
+  ele cobriu os filtros e zerou a S&P por 6 dias. Filtro de período pelos
+  radios com id = nº de dias; aceita as colunas
+  `table-module__column-pageLists`; espera as linhas antes de ler.
+- **Moody's**: seletor de 100 linhas por página (`select[name$='_length']`).
+  **Continua zerada**: a página está atrás da verificação anti-bot da
+  Cloudflare. O Radar passa por ela com o Patchright (navegador modificado
+  para não ser detectado) e Chrome visível sob xvfb; isso NÃO foi trazido,
+  pela mesma regra de não contornar proteção anti-bot.
+- **Alarme de falha silenciosa**: `scripts/run_once.py` escreve um aviso
+  amarelo no Actions quando uma fonte `rating_agency` volta 0 itens ou erro.
+- O Radar também extrai a tabela de rating de cada artigo (nota anterior,
+  atual, perspectiva). Não foi trazido: a tela de notícias não usa isso.
+- Testes: `tests/test_coleta_ratings.py`.
+
 ## Regras a manter
 
 1. **Nunca** trocar `store.upsert_article` para sobrescrever corpo/título

@@ -49,7 +49,11 @@ def _parse_date(text: str) -> datetime | None:
 
 
 def _maximizar_itens_por_pagina(page) -> None:
+    # `select[name$='_length']` e o "Mostrar" vêm do Radar de Ratings: o
+    # DataTables da Moody's nomeia o seletor "table_1_length", e o padrão de
+    # 25 linhas deixava ações da semana na página 2.
     for sel in [
+        "select[name$='_length']", "label:has-text('Mostrar') select",
         "select[name='length']", ".dataTables_length select", "select[id*='length']",
         "select[aria-label*='entries']", "select[aria-label*='itens']",
     ]:

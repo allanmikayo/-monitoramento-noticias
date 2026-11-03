@@ -27,13 +27,17 @@ from .base import RawArticle, brt_to_utc, dump_debug_html
 logger = logging.getLogger(__name__)
 
 BASE_URL = "https://www.fitchratings.com"
-MAX_PAGES = 6
+MAX_PAGES = 30  # mesmo teto do Radar de Ratings; a lista de 1 semana raramente passa de 2
 
 _MESES_EN = {
     "jan": 1, "feb": 2, "mar": 3, "apr": 4, "may": 5, "jun": 6,
     "jul": 7, "aug": 8, "sep": 9, "oct": 10, "nov": 11, "dec": 12,
 }
-_DATE_RE = re.compile(r"(\d{1,2})\s+([A-Za-z]{3})[a-z]*\s+(\d{4})")
+# Zero ou mais espaços entre mês e ano (03/11/2026, vindo do Radar de
+# Ratings): a Fitch passou a colar mês e ano em alguns itens ("24 Sep2026"
+# em vez de "24 Sep 2026"). Com o espaço obrigatório, o item ficava sem
+# data -- no Radar isso derrubou 100% das linhas da Fitch por dias, sem erro.
+_DATE_RE = re.compile(r"(\d{1,2})\s*([A-Za-z]{3})[A-Za-z]*\.?\s*(\d{4})")
 
 
 def _dismiss_cookie_banner(page) -> None:
@@ -42,6 +46,8 @@ def _dismiss_cookie_banner(page) -> None:
         "button:has-text('Accept All')",
         "button:has-text('Accept')",
         "button:has-text('Aceitar')",
+        "button:has-text('I Agree')",
+        "[aria-label='Accept cookies']",
         "#accept-cookies",
         ".cookie-accept",
     ]:
@@ -104,8 +110,15 @@ def _parse_listagem(soup: BeautifulSoup) -> list[RawArticle]:
         if not titulo or not href:
             continue
 
+        # Data em dois pedaços (.frw-date__1 = "24 Sep", .frw-date__2 =
+        # "2026"), juntados com espaço, como no Radar de Ratings. Sem esses
+        # pedaços, o texto inteiro do bloco de data e, por último, da linha.
         data_el = linha.select_one(".frw-date")
-        published = _parse_data(data_el.get_text(" ", strip=True) if data_el else linha.get_text(" ", strip=True))
+        data_txt = ""
+        if data_el:
+            partes = [p.get_text(" ", strip=True) for p in data_el.select(".frw-date__1, .frw-date__2")]
+            data_txt = " ".join(x for x in partes if x) or data_el.get_text(" ", strip=True)
+        published = _parse_data(data_txt) or _parse_data(linha.get_text(" ", strip=True))
 
         out.append(
             RawArticle(

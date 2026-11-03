@@ -48,6 +48,20 @@ def main() -> None:
     summary = run_pipeline(triggered_by="scheduler", exceto_modulos=config.FONTES_LENTAS)
     print(json.dumps(summary, indent=2, ensure_ascii=False))
 
+    # Alarme de falha silenciosa (03/11/2026, lição do Radar de Ratings):
+    # agência de rating que volta ZERO itens não é "sem novidade" -- as três
+    # publicam toda semana e a janela coletada é de semanas. Vira aviso
+    # amarelo no resumo da execução do Actions (sem derrubar o job, para as
+    # outras fontes continuarem salvando).
+    for s in summary.get("sources", []):
+        if s.get("category") != "rating_agency":
+            continue
+        if s.get("error"):
+            print(f"::warning title=Rating sem coleta: {s['name']}::{s['error'][:300]}")
+        elif not s.get("found"):
+            print(f"::warning title=Rating sem coleta: {s['name']}::0 itens na listagem. "
+                  "Agência de rating publica toda semana; verificar o site ou o scraper.")
+
     if summary.get("errors"):
         logging.getLogger(__name__).warning(
             "Varredura terminou com %d erro(s) -- ver detalhes acima. "

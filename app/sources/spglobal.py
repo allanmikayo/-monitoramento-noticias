@@ -37,24 +37,32 @@ _DATE_RE = re.compile(r"(\d{1,2})-([A-Za-z]{3})-(\d{4})(?:\s+(\d{1,2}):(\d{2}))?
 
 
 def _dismiss_cookie_banner(page) -> None:
+    """Fecha o banner do OneTrust, que cobre os controles de filtro e
+    paginação. Como no Radar de Ratings (03/11/2026): ESPERA o botão
+    aparecer (até 4 s cada) em vez de só procurar uma vez -- o banner entra
+    depois do carregamento, e um `query_selector` imediato não o achava. No
+    Radar, o banner cobrindo a página deixou a S&P com zero linhas por 6
+    dias sem nenhum erro. Tenta "Rejeitar todos" primeiro."""
     for sel in [
+        "#onetrust-reject-all-handler",
+        "button:has-text('Rejeitar Todos')",
+        "button:has-text('Rejeitar todos')",
         "#onetrust-accept-btn-handler",
+        "button:has-text('Aceitar todos os cookies')",
         "button:has-text('Accept All')",
-        "button:has-text('Accept')",
-        "button:has-text('Aceitar todos')",
-        "button:has-text('Aceitar')",
-        "#accept-cookies",
-        ".cookie-accept",
-        "[data-testid='cookie-accept']",
     ]:
         try:
-            el = page.query_selector(sel)
-            if el and el.is_visible():
-                el.click()
-                page.wait_for_timeout(600)
-                return
+            el = page.wait_for_selector(sel, timeout=4000, state="visible")
         except Exception:
             continue
+        if el:
+            try:
+                el.click()
+                page.wait_for_timeout(500)
+            except Exception as e:
+                logger.warning("spglobal: falha ao fechar banner de cookies (%s): %s", sel, e)
+            return
+    logger.info("spglobal: nenhum banner de cookies visível")
 
 
 def _clicar_atualizar(page) -> None:
@@ -103,13 +111,21 @@ def _selecionar_ultimos_12_meses(page) -> None:
     else:
         logger.warning("spglobal: dropdown de periodo (criteria-dropdown) nao encontrado")
 
+    # O painel é um grupo de radios cujo id/value é o número de dias
+    # (confirmado no Radar de Ratings: <input type="radio" id="7" value="7"
+    # class="criteria_dropdown_radio_input">). Primeiro o maior período, que
+    # cobre a janela de 45 dias da limpeza; a paginação para no corte.
     clicou_opcao = False
     for sel_opcao in [
         "label:has-text('Últimos 12 Meses')",
-        "text=Últimos 12 Meses",
-        "li:has-text('Últimos 12 Meses')",
-        "[role='option']:has-text('Últimos 12 Meses')",
+        "input[type='radio'][id='365']",
         "input[type='radio'][value='365']",
+        "text=Últimos 12 Meses",
+        "[role='option']:has-text('Últimos 12 Meses')",
+        "input[type='radio'][id='90']",
+        "input[type='radio'][id='30']",
+        "input[type='radio'][id='7']",
+        "label[for='7']",
     ]:
         try:
             opt = page.query_selector(sel_opcao)
@@ -170,9 +186,11 @@ def _parse_tabela(soup: BeautifulSoup) -> list[RawArticle]:
     `.table-module__row` > 2 `.table-module__column` (1a = data em
     "10-Jul-2026 17:57 BRT", 2a = `<p><a href>título</a></p>`)."""
     out: list[RawArticle] = []
-    rows = soup.select(".table-module__content .table-module__row")
+    rows = soup.select("[class*='table-module__content'] .table-module__row")
     for row in rows:
-        cols = row.select(".table-module__column")
+        # Colunas "table-module__column-pageLists" (layout confirmado no
+        # Radar de Ratings) ou "table-module__column" (layout de 07/2026).
+        cols = row.select(".table-module__column-pageLists, .table-module__column")
         if len(cols) < 2:
             continue
         data_txt = cols[0].get_text(" ", strip=True)
@@ -253,7 +271,10 @@ def fetch(url: str) -> list[RawArticle]:
             page.wait_for_timeout(500)
             _selecionar_ultimos_12_meses(page)
             _dismiss_cookie_banner(page)
-            page.wait_for_timeout(1500)
+            try:
+                page.wait_for_selector(".table-module__row a[href]", timeout=15000)
+            except Exception:
+                logger.warning("spglobal: lista de comunicados não apareceu em 15 s")
 
             for page_num in range(1, _MAX_PAGES + 1):
                 html = page.content()
