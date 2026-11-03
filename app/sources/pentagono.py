@@ -1,117 +1,61 @@
-"""Pentágono S.A. DTVM — Assembleias/editais de convocação de debêntures.
+"""Pentágono — documentos de agente fiduciário (DEB, CRI, CRA). Reescrito em
+03/11/2026.
 
-Diferente de Vórtx (SPA em Next.js -- precisa de Playwright, ver
-vortx.py), o site da Pentágono é um ASP.NET "clássico" server-rendered --
-confirmado ao vivo (23/07/2026) que um GET comum já devolve o HTML final
-com os documentos, sem precisar de navegador/JavaScript:
+A busca por emissor do site (`/Site/Investidores?emissor=X`) está quebrada
+até no navegador ("Houve problemas no seu acesso"), e era dela que a versão
+anterior dependia: voltava zero sempre. Dois caminhos que funcionam por GET
+simples (conferidos ao vivo, ver CLAUDE.md):
 
-1. `GET /Site/Investidores?emissor={nome}` -- busca por emissor, devolve
-   uma tabela (Razão Social | Série/Emissão | Ativo) com um link por
-   ativo pra `/Site/DetalhesEmissor?ativo={CODIGO}`.
-2. `GET /Site/DetalhesEmissor?ativo={CODIGO}&aba=tab-3&tipo=undefined` --
-   `aba=tab-3` é a aba "Publicações" (a mesma URL com `aba=tab-2` é
-   "Documentos", que traz só a escritura/aditamentos, sem interesse aqui).
-   Cada publicação é um `<article>` com um link cujo texto já é o nome do
-   arquivo, ex.: "2026.04.24 - EDT de CNV 9ª Emissão - Contrata Padis e
-   HOULIHAN - vf Public DC impresso.pdf" (prefixo AAAA.MM.DD parseável).
-   O link em si não tem `href` real -- é `onclick="DownloadBinario('ID')"`,
-   que só abre `https://www.pentagonotrustee.com.br/Site/DownloadBinario
-   ?id=ID` (função JS inspecionada ao vivo) -- então construímos essa URL
-   direto, sem precisar executar o onclick.
+  1. Universo de papéis da Pentágono: a consulta de preços unitários lista
+     todos os códigos acompanhados numa data, 50 por página
+     (`/PrecosUnitarios/Consulta?DataInicial=AAAA-MM-DD&pagina=N`, ~35
+     páginas). Cruza com os tickers da cobertura (debêntures e CRI/CRA).
+  2. Página de cada papel: `/Site/DetalhesEmissor?ativo=TICKER&aba=tab-2`
+     (Documentos: atas, análise de quórum, termos, escrituras, aditamentos)
+     e `aba=tab-3` (Publicações: editais). Cada arquivo tem a data no
+     começo do nome ("2026.10.09 - ...") e o id em `DownloadBinario('N')`.
 
-"Publicações" mistura editais de convocação de AGD/AGT com Fatos
-Relevantes -- por pedido do Allan (23/07/2026, "Debêntures primeiro")
-filtramos aqui pelo NOME DO ARQUIVO pra pegar só o que parece assembleia
-(AGD/AGT/edital de convocação); Fatos Relevantes da Pentágono ficam de
-fora por enquanto (o CVM RAD já cobre fato relevante via a CVM diretamente
-pra todas as empresas da cobertura, então não é uma lacuna nova).
-
-Custo de rede: como a Pentágono não tem uma página central "todas as
-assembleias do mercado" (diferente da Oliveira Trust), a única forma de
-achar os documentos por empresa é buscar UMA A UMA as ~96 empresas da
-cobertura e abrir cada ativo encontrado -- ~100-250 requisições HTTP por
-rodada, dependendo de quantas séries cada empresa tem. Isso é MUITO mais
-pesado que as outras fontes (que trazem tudo num único GET/tabela) e pode
-ser visto como abuso pelo servidor da Pentágono se rodar a cada 5 minutos
-pra sempre -- Allan, se isso virar problema (rate limit, IP bloqueado),
-me avisa que a gente reduz a frequência só desta fonte ou troca por uma
-lista fixa de ativos já conhecidos em vez de buscar tudo de novo a cada
-rodada.
+Só entra documento com data no nome dentro de `LOOKBACK_DAYS`.
 """
 from __future__ import annotations
 
 import logging
 import re
-from datetime import datetime, timezone
+from concurrent.futures import ThreadPoolExecutor
+from datetime import datetime, timedelta
 from urllib.parse import quote
+from zoneinfo import ZoneInfo
 
 from bs4 import BeautifulSoup
 
-from .base import RawArticle, brt_to_utc, get, load_coverage_names
+from .base import RawArticle, brt_to_utc, get
+from .fiduciarios import carregar_cobertura, corte, titulo
 
 logger = logging.getLogger(__name__)
 
 BASE_SITE = "https://www.pentagonotrustee.com.br"
-SEARCH_URL = f"{BASE_SITE}/Site/Investidores"
+PU_URL = f"{BASE_SITE}/PrecosUnitarios/Consulta"
 DETALHES_URL = f"{BASE_SITE}/Site/DetalhesEmissor"
 DOWNLOAD_URL = f"{BASE_SITE}/Site/DownloadBinario"
-
-# aba=tab-3 -- "Publicacoes" (confirmado ao vivo, 23/07/2026)
-ABA_PUBLICACOES = "tab-3"
+ABAS = {"tab-2": "Documento", "tab-3": "Publicação"}
+MAX_PAGINAS_PU = 80
+TRABALHADORES = 6
 
 _NOME_ARQUIVO_DATA_RE = re.compile(r"^(\d{4})\.(\d{2})\.(\d{2})\s*-\s*(.+)$")
-_ASSEMBLEIA_RE = re.compile(r"\b(AGD|AGT|assemble|convoca[cç][aã]o|edital)\b", re.IGNORECASE)
-
-
-def _listar_ativos(nome_empresa: str) -> list[tuple[str, str, str]]:
-    """Busca por emissor e devolve [(razao_social, serie_emissao, codigo_ativo), ...]."""
-    try:
-        resp = get(f"{SEARCH_URL}?emissor={quote(nome_empresa)}")
-    except Exception as e:  # noqa: BLE001
-        logger.warning("pentagono: falha buscando emissor %r: %s", nome_empresa, e)
-        return []
-
-    soup = BeautifulSoup(resp.content, "lxml")
-    out: list[tuple[str, str, str]] = []
-    for row in soup.select("table tr"):
-        cells = row.find_all("td")
-        if len(cells) < 3:
-            continue
-        link = cells[2].find("a")
-        codigo = (link.get_text(strip=True) if link else cells[2].get_text(strip=True)).strip()
-        if not codigo:
-            continue
-        razao_social = cells[0].get_text(" ", strip=True)
-        serie_emissao = cells[1].get_text(" ", strip=True)
-        out.append((razao_social, serie_emissao, codigo))
-    return out
-
-
-def _listar_publicacoes(codigo_ativo: str) -> list[dict]:
-    try:
-        resp = get(f"{DETALHES_URL}?ativo={quote(codigo_ativo)}&aba={ABA_PUBLICACOES}&tipo=undefined")
-    except Exception as e:  # noqa: BLE001
-        logger.warning("pentagono: falha abrindo publicacoes de %r: %s", codigo_ativo, e)
-        return []
-
-    soup = BeautifulSoup(resp.content, "lxml")
-    out: list[dict] = []
-    for art in soup.find_all("article"):
-        link = art.find("a", onclick=True)
-        if not link:
-            continue
-        onclick = link.get("onclick") or ""
-        m = re.search(r"DownloadBinario\('(\d+)'\)", onclick)
-        if not m:
-            continue
-        doc_id = m.group(1)
-        nome_arquivo = link.get_text(strip=True)
-        out.append({"id": doc_id, "nome_arquivo": nome_arquivo})
-    return out
+_CATEGORIAS = [
+    (re.compile(r"edital|convoca", re.I), "Edital de convocação"),
+    (re.compile(r"\bata\b", re.I), "Ata"),
+    (re.compile(r"qu[oó]rum|n[aã]o instala|\bAGD\b|\bAGT\b|assembl", re.I), "Assembleia"),
+    (re.compile(r"fato relevante", re.I), "Fato relevante"),
+    (re.compile(r"aviso", re.I), "Aviso"),
+    (re.compile(r"aditamento", re.I), "Aditamento"),
+    (re.compile(r"relat[oó]rio", re.I), "Relatório"),
+    (re.compile(r"escritura", re.I), "Escritura"),
+]
 
 
 def _parse_data_do_nome(nome_arquivo: str) -> datetime | None:
-    m = _NOME_ARQUIVO_DATA_RE.match(nome_arquivo)
+    m = _NOME_ARQUIVO_DATA_RE.match(nome_arquivo or "")
     if not m:
         return None
     ano, mes, dia, _resto = m.groups()
@@ -121,36 +65,99 @@ def _parse_data_do_nome(nome_arquivo: str) -> datetime | None:
         return None
 
 
+def _categoria(nome: str, padrao: str) -> str:
+    for rx, cat in _CATEGORIAS:
+        if rx.search(nome):
+            return cat
+    return padrao
+
+
+def _codigos_da_pagina(html: bytes) -> list[str]:
+    soup = BeautifulSoup(html, "lxml")
+    out = []
+    for tr in soup.select("table tr"):
+        tds = tr.find_all("td")
+        if len(tds) >= 2:
+            c = tds[1].get_text(strip=True).upper()
+            if c:
+                out.append(c)
+    return out
+
+
+def universo() -> set[str]:
+    """Códigos acompanhados pela Pentágono (consulta de PU)."""
+    hoje = datetime.now(ZoneInfo("America/Sao_Paulo")).date()
+    for atras in range(0, 6):
+        dia = (hoje - timedelta(days=atras)).isoformat()
+        codigos: set[str] = set()
+        for pagina in range(1, MAX_PAGINAS_PU + 1):
+            try:
+                lote = _codigos_da_pagina(get(PU_URL, params={"DataInicial": dia, "pagina": pagina}).content)
+            except Exception as e:  # noqa: BLE001
+                logger.warning("pentagono: PU %s pagina %d falhou: %s", dia, pagina, e)
+                break
+            novos = set(lote) - codigos
+            if not novos:
+                break
+            codigos |= novos
+        if codigos:
+            logger.info("pentagono: %d códigos na consulta de PU de %s", len(codigos), dia)
+            return codigos
+    return set()
+
+
+def _listar_documentos(codigo_ativo: str, aba: str) -> list[dict]:
+    resp = get(f"{DETALHES_URL}?ativo={quote(codigo_ativo)}&aba={aba}&tipo=undefined")
+    soup = BeautifulSoup(resp.content, "lxml")
+    out = []
+    for art in soup.find_all("article"):
+        link = art.find("a", onclick=True)
+        if not link:
+            continue
+        m = re.search(r"DownloadBinario\('(\d+)'\)", link.get("onclick") or "")
+        if m:
+            out.append({"id": m.group(1), "nome_arquivo": link.get_text(" ", strip=True)})
+    return out
+
+
 def fetch(url: str) -> list[RawArticle]:
-    nomes_cobertura = load_coverage_names()
-    if not nomes_cobertura:
-        logger.warning("pentagono: lista de empresas da cobertura vazia -- nada sera' coletado")
+    cob = carregar_cobertura()
+    if not cob.nome_por_ticker:
+        logger.warning("pentagono: nenhum ticker da cobertura -- nada será coletado")
         return []
+    nossos = sorted(universo() & set(cob.nome_por_ticker))
+    logger.info("pentagono: %d tickers da cobertura acompanhados pela Pentágono", len(nossos))
+    limite = corte()
 
-    out: list[RawArticle] = []
-    ativos_vistos: set[str] = set()
-
-    for nome_empresa in nomes_cobertura:
-        for razao_social, serie_emissao, codigo_ativo in _listar_ativos(nome_empresa):
-            if codigo_ativo in ativos_vistos:
+    def _do_ticker(codigo: str) -> list[RawArticle]:
+        empresa = cob.empresa_do_ticker(codigo) or codigo
+        out = []
+        for aba, padrao in ABAS.items():
+            try:
+                docs = _listar_documentos(codigo, aba)
+            except Exception as e:  # noqa: BLE001
+                logger.warning("pentagono: %s %s falhou: %s", codigo, aba, e)
                 continue
-            ativos_vistos.add(codigo_ativo)
-
-            for doc in _listar_publicacoes(codigo_ativo):
-                nome_arquivo = doc["nome_arquivo"]
-                if not _ASSEMBLEIA_RE.search(nome_arquivo):
+            for d in docs:
+                quando = _parse_data_do_nome(d["nome_arquivo"])
+                if not quando or quando < limite:
                     continue
+                out.append(RawArticle(
+                    url=f"{DOWNLOAD_URL}?id={d['id']}",
+                    title=titulo(empresa, _categoria(d["nome_arquivo"], padrao), f"{d['nome_arquivo']} ({codigo})"),
+                    snippet="Pentágono — documento do papel",
+                    published_at=quando,
+                    article_type="assembleia",
+                ))
+        return out
 
-                published = _parse_data_do_nome(nome_arquivo)
-                titulo_bits = [b for b in [razao_social, serie_emissao, codigo_ativo, nome_arquivo] if b]
-                out.append(
-                    RawArticle(
-                        url=f"{DOWNLOAD_URL}?id={doc['id']}",
-                        title=" — ".join(titulo_bits),
-                        snippet="Pentágono — Publicações (Assembleia/edital de convocação)",
-                        published_at=published,
-                        article_type="assembleia",
-                    )
-                )
+    with ThreadPoolExecutor(TRABALHADORES) as ex:
+        artigos = [a for lote in ex.map(_do_ticker, nossos) for a in lote]
 
+    vistos: set[str] = set()
+    out = []
+    for a in artigos:  # mesmo arquivo aparece em várias séries da emissão
+        if a.url not in vistos:
+            vistos.add(a.url)
+            out.append(a)
     return out

@@ -1,179 +1,203 @@
-"""Oliveira Trust — Assembleias (AGD/AGT) de debêntures.
+"""Oliveira Trust — documentos de agente fiduciário (DEB, CRI, CRA).
+Reescrito em 03/11/2026 (mapa da API no CLAUDE.md).
 
-Achado importante (23/07/2026, via inspeção ao vivo do site com o Chrome
-do Allan): a página "Central de Documentos" (`/investidor/documentos`) é
-só a casca -- os dados de verdade vêm de uma API REST pública, sem
-autenticação, hospedada em `services-ft.oliveiratrust.com.br`:
+Lista central: `services-ft.oliveiratrust.com.br/app/v1/titulos/documentos`,
+sem autenticação.
+  * Assembleias: filtro `data_inicial`/`data_final` sobre a data da
+    assembleia. Pega os últimos `LOOKBACK_DAYS` e também as convocações já
+    publicadas para os próximos meses.
+  * Relatórios: não têm data, só o ano (`ano`). Entram os do ano corrente;
+    a data exibida é a da primeira vez que o robô viu o documento.
 
-    GET /app/v1/titulos/documentos?page=N&limit=100
-        &tipo_ativo=debentures&tipo_documento=Assembleias
+Quem é a empresa:
+  * DEB: o nome do emissor (`nomec`/`nomeg`) casa com a cobertura.
+  * CRI/CRA: o nome é o da securitizadora. A ficha do título
+    (`www.oliveiratrust.com.br/api/titulos/{tit}`) traz `codigo_do_ativo`,
+    que casa com o cadastro de CRI/CRA (`securitizados`) e daí com o devedor.
+    A resposta fica guardada em `AppSetting` (o código de um título não muda).
 
-Devolve JSON paginado (`data.current_page`, `data.total`, `data.per_page`,
-`data.data` = lista de documentos), cada item com `tit` (id do "título" --
-a série/emissão), `codigo` (id do documento em si), `data`/`data_formatada`
-(a AGD é sempre datada -- diferente de "Relatórios", que só tem `ano`, sem
-dia/mês, por isso relatório anual ficou de fora desta primeira versão),
-`titulo` (série/emissão), `nomec`/`nomeg` (razão social / nome curto do
-emissor).
-
-Como NÃO é possível baixar Playwright pra isso (é uma API JSON de
-verdade), a coleta é só `base.get()` (curl_cffi) -- mais rápida e mais
-robusta que renderizar a página. Confirmado ao vivo: 1.612 registros de
-AGD/AGT de debênture no total, ~40 publicados nos últimos 30 dias (23/06 a
-23/07/2026), incluindo pelo menos 1 empresa da cobertura (Hidrovias do
-Brasil, AGD de 26/06/2026).
-
-Link do documento: a listagem NÃO tem o link do PDF direto (só um "tit" e
-um "codigo"). O link real de download é resolvido em 2 chamadas extras
-(só para os itens que batem com a cobertura, pra não gastar requisição à
-toa com o resto do mercado):
-
-    GET /app/v1/titulos/{tit}                      -> pega `codigo_operacao`
-    GET /app/v1/titulos/fundos/downloads/{codigo_operacao}
-        -> lista de {cod, descricao, link} -- `link` é a URL final do PDF
-           (via o leitor do próprio site, ex.:
-           https://www.oliveiratrust.com.br/portal/leitor/#https://...pdf)
-
-Casa `cod` da lista de downloads com o `codigo` do item da listagem para
-achar o link exato. Se não achar (ex.: API mudou de formato), cai no
-fallback da página do "título" (`/investidor/ativo?id={tit}&typo=...`).
-
-Relatórios anuais e CRI/CRA ficaram de fora desta primeira versão (pedido
-explícito do Allan, 23/07/2026: "Debêntures primeiro, nas 3" fontes) --
-CRI/CRA têm o mesmo formato de API (só trocar tipo_ativo=cri/cra), mas o
-campo `nomec`/`nomeg` desses documentos é o nome do VEÍCULO da
-securitizadora (ex.: "CIA PROVINCIA SEC 42E"), não da empresa devedora --
-o casamento por keyword de empresa não vai bater direto, precisa de uma
-segunda etapa (abrir o documento/escritura pra achar o devedor real) antes
-de valer a pena ligar isso.
+Link do documento: a ficha traz `codigo_operacao`, e
+`www.oliveiratrust.com.br/api/titulos/fundos/downloads/{codigo_operacao}`
+lista os arquivos com o link final. O endereço antigo
+(`services-ft .../titulos/{tit}`) passou a devolver 403 em 11/2026.
 """
 from __future__ import annotations
 
+import json
 import logging
-from datetime import datetime, timedelta, timezone
+from concurrent.futures import ThreadPoolExecutor
+from datetime import date, datetime, timedelta
 
-from .base import RawArticle, brt_to_utc, get, load_coverage_names
+from .base import RawArticle, brt_to_utc
+from .fiduciarios import carregar_cobertura, corte, get_json, titulo
 
 logger = logging.getLogger(__name__)
 
 API_BASE = "https://services-ft.oliveiratrust.com.br/app/v1"
+SITE_API = "https://www.oliveiratrust.com.br/api"
 ATIVO_PAGE = "https://www.oliveiratrust.com.br/investidor/ativo"
-
-LOOKBACK_DAYS = 40  # folga sobre a janela de 30 dias do dashboard (mesma ideia do cvm_rad.py)
 PAGE_LIMIT = 100
-MAX_PAGES = 10  # trava de seguranca -- 40 dias de AGD de debenture nunca deveria passar de 3-4 paginas de 100
+MAX_PAGES = 15
+DIAS_A_FRENTE = 365
+TIPOS_ATIVO = ("debentures", "cri", "cra")
+CACHE_KEY = "oliveiratrust_titulos"  # tit -> {"ativo": codigo_do_ativo, "op": codigo_operacao}
+TRABALHADORES = 8
+
+# LOOKBACK_DAYS mantido por compatibilidade com quem importava daqui.
+LOOKBACK_DAYS = 40
 
 
 def _parse_data(data_iso: str | None) -> datetime | None:
     if not data_iso:
         return None
     try:
-        ano, mes, dia = (int(x) for x in data_iso.split("-"))
-        return brt_to_utc(ano, mes, dia)
-    except (ValueError, AttributeError):
+        d = date.fromisoformat(str(data_iso)[:10])
+        return brt_to_utc(d.year, d.month, d.day)
+    except ValueError:
         return None
 
 
-def _resolver_link_real(tit: int, codigo: int, cache_operacao: dict, cache_downloads: dict) -> str | None:
-    """Resolve o link direto do PDF via as 2 chamadas extra descritas no
-    docstring do módulo. Usa cache (por `tit`) porque vários documentos do
-    mesmo título/série reaproveitam a mesma chamada de downloads."""
-    try:
-        if tit not in cache_operacao:
-            resp = get(f"{API_BASE}/titulos/{tit}")
-            payload = resp.json()
-            registros = payload.get("data") or []
-            cache_operacao[tit] = registros[0].get("codigo_operacao") if registros else None
-        codigo_operacao = cache_operacao.get(tit)
-        if not codigo_operacao:
-            return None
+def _listar(params: dict) -> list[dict]:
+    itens: list[dict] = []
+    for page in range(1, MAX_PAGES + 1):
+        try:
+            d = get_json(f"{API_BASE}/titulos/documentos", params={**params, "page": page, "limit": PAGE_LIMIT})["data"]
+        except Exception as e:  # noqa: BLE001
+            logger.warning("oliveiratrust: lista %s pagina %d falhou: %s", params, page, e)
+            break
+        lote = d.get("data") or []
+        itens.extend(lote)
+        if not lote or page * PAGE_LIMIT >= int(d.get("total") or 0):
+            break
+    return itens
 
-        if codigo_operacao not in cache_downloads:
-            resp = get(f"{API_BASE}/titulos/fundos/downloads/{codigo_operacao}")
-            payload = resp.json()
-            cache_downloads[codigo_operacao] = payload.get("data") or []
-        for item in cache_downloads[codigo_operacao]:
-            if item.get("cod") == codigo:
-                return item.get("link")
+
+def _ler_cache() -> dict:
+    try:
+        from ..db import SessionLocal
+        from ..models import AppSetting
+
+        with SessionLocal() as db:
+            s = db.get(AppSetting, CACHE_KEY)
+            return json.loads(s.value) if s and s.value else {}
+    except Exception:  # noqa: BLE001
+        return {}
+
+
+def _gravar_cache(cache: dict) -> None:
+    try:
+        from ..db import SessionLocal
+        from ..models import AppSetting
+
+        with SessionLocal() as db:
+            s = db.get(AppSetting, CACHE_KEY)
+            valor = json.dumps(cache, separators=(",", ":"))
+            if s:
+                s.value = valor
+            else:
+                db.add(AppSetting(key=CACHE_KEY, value=valor))
+            db.commit()
     except Exception as e:  # noqa: BLE001
-        logger.warning("oliveiratrust: falha resolvendo link real (tit=%s, codigo=%s): %s", tit, codigo, e)
+        logger.warning("oliveiratrust: não gravei o cache de títulos: %s", e)
+
+
+def _ficha(tit) -> dict | None:
+    try:
+        d = get_json(f"{SITE_API}/titulos/{tit}").get("data") or []
+        if d:
+            return {"ativo": (d[0].get("codigo_do_ativo") or "").strip().upper(), "op": d[0].get("codigo_operacao")}
+    except Exception as e:  # noqa: BLE001
+        logger.warning("oliveiratrust: ficha do título %s falhou: %s", tit, e)
     return None
 
 
-def fetch(url: str) -> list[RawArticle]:
-    from ..filter import match_keywords
-
-    nomes_cobertura = load_coverage_names()
-    if not nomes_cobertura:
-        logger.warning("oliveiratrust: lista de empresas da cobertura vazia -- nada sera' coletado")
+def _downloads(codigo_operacao) -> list[dict]:
+    try:
+        return get_json(f"{SITE_API}/titulos/fundos/downloads/{codigo_operacao}").get("data") or []
+    except Exception as e:  # noqa: BLE001
+        logger.warning("oliveiratrust: downloads da operação %s falharam: %s", codigo_operacao, e)
         return []
 
-    cutoff = datetime.now(timezone.utc) - timedelta(days=LOOKBACK_DAYS)
-    cache_operacao: dict[int, int | None] = {}
-    cache_downloads: dict[int, list] = {}
 
+def _link_direto(link: str) -> str:
+    """O site devolve o leitor (`/portal/leitor/#https://...pdf`); fica o
+    arquivo em si, que abre e baixa sem o leitor."""
+    for marca in ("leitor/#", "leitor/"):
+        if marca in link:
+            resto = link.split(marca, 1)[1]
+            if resto.startswith("http"):
+                return resto
+    return link
+
+
+def fetch(url: str) -> list[RawArticle]:
+    cob = carregar_cobertura()
+    if not cob.nomes:
+        logger.warning("oliveiratrust: cobertura vazia -- nada será coletado")
+        return []
+
+    hoje = date.today()
+    ini = (datetime.combine(hoje, datetime.min.time()) - timedelta(days=LOOKBACK_DAYS)).date()
+    itens: list[dict] = []
+    for tipo in TIPOS_ATIVO:
+        itens += _listar({"tipo_ativo": tipo, "tipo_documento": "Assembleias",
+                          "data_inicial": ini.isoformat(),
+                          "data_final": (hoje + timedelta(days=DIAS_A_FRENTE)).isoformat()})
+        itens += [dict(i, _relatorio=True) for i in
+                  _listar({"tipo_ativo": tipo, "tipo_documento": "Relatórios", "ano": hoje.year})]
+
+    cache = _ler_cache()
+    faltam = sorted({str(i["tit"]) for i in itens
+                     if i.get("tit") and (i.get("tipo") or "").upper() != "DEBENTURES" and str(i["tit"]) not in cache})
+    if faltam:
+        with ThreadPoolExecutor(TRABALHADORES) as ex:
+            for tit, ficha in zip(faltam, ex.map(_ficha, faltam)):
+                if ficha:
+                    cache[tit] = ficha
+        _gravar_cache(cache)
+
+    escolhidos: list[tuple[dict, str]] = []
+    for i in itens:
+        tipo = (i.get("tipo") or "").upper()
+        if tipo == "DEBENTURES":
+            empresa = cob.empresa_no_texto(f"{i.get('nomec') or ''} {i.get('nomeg') or ''}")
+        else:
+            empresa = cob.empresa_do_ticker((cache.get(str(i.get("tit"))) or {}).get("ativo"))
+        if empresa:
+            escolhidos.append((i, empresa))
+
+    # Link final só para os escolhidos (poucos), com a ficha de cada título.
+    for tit in {str(i["tit"]) for i, _ in escolhidos if i.get("tit")} - set(cache):
+        ficha = _ficha(tit)
+        if ficha:
+            cache[tit] = ficha
+    ops = {str((cache.get(str(i.get("tit"))) or {}).get("op")) for i, _ in escolhidos} - {"None"}
+    with ThreadPoolExecutor(TRABALHADORES) as ex:
+        arquivos = dict(zip(ops, ex.map(_downloads, ops)))
+    _gravar_cache(cache)
+
+    limite = corte()
     out: list[RawArticle] = []
-    for page_num in range(1, MAX_PAGES + 1):
-        try:
-            resp = get(
-                f"{API_BASE}/titulos/documentos",
-                params={
-                    "page": page_num,
-                    "limit": PAGE_LIMIT,
-                    "tipo_ativo": "debentures",
-                    "tipo_documento": "Assembleias",
-                },
-            )
-            payload = resp.json()
-        except Exception as e:  # noqa: BLE001
-            logger.warning("oliveiratrust: falha na pagina %d: %s", page_num, e)
-            break
-
-        registros = (payload.get("data") or {}).get("data") or []
-        if not registros:
-            break
-
-        oldest_on_page: datetime | None = None
-        for item in registros:
-            published = _parse_data(item.get("data"))
-            if published and (oldest_on_page is None or published < oldest_on_page):
-                oldest_on_page = published
-            if published and published < cutoff:
-                continue
-
-            nomec = item.get("nomec") or ""
-            nomeg = item.get("nomeg") or ""
-            empresa_raw = f"{nomec} {nomeg}".strip()
-            if not match_keywords(empresa_raw, nomes_cobertura):
-                continue
-
-            tit = item.get("tit")
-            codigo = item.get("codigo")
-            link = None
-            if tit and codigo:
-                link = _resolver_link_real(tit, codigo, cache_operacao, cache_downloads)
-            if not link:
-                link = f"{ATIVO_PAGE}?id={tit}&typo=DEBENTURES#{codigo}"
-
-            titulo_serie = item.get("titulo") or ""
-            arquivo_nome = (item.get("arquivo_nome") or "").strip()
-            empresa_exibicao = nomec or nomeg
-            titulo_bits = [b for b in [empresa_exibicao, titulo_serie, arquivo_nome] if b]
-
-            out.append(
-                RawArticle(
-                    url=link,
-                    title=" — ".join(titulo_bits),
-                    snippet="Oliveira Trust — Assembleia de debenturistas",
-                    published_at=published,
-                    article_type="assembleia",
-                )
-            )
-
-        total = (payload.get("data") or {}).get("total") or 0
-        if page_num * PAGE_LIMIT >= total:
-            break
-        if oldest_on_page and oldest_on_page < cutoff:
-            break
-
+    for i, empresa in escolhidos:
+        relatorio = i.get("_relatorio", False)
+        quando = None if relatorio else _parse_data(i.get("data"))
+        if not relatorio and quando and quando < limite:
+            continue
+        ficha = cache.get(str(i.get("tit"))) or {}
+        link = None
+        for a in arquivos.get(str(ficha.get("op")), []):
+            if a.get("cod") == i.get("codigo") and a.get("link"):
+                link = _link_direto(a["link"])
+                break
+        if not link:
+            link = f"{ATIVO_PAGE}?id={i.get('tit')}&typo={(i.get('tipo') or 'DEBENTURES').upper()}#{i.get('codigo')}"
+        categoria = "Relatório" if relatorio else "Assembleia"
+        serie = " ".join(b for b in [ficha.get("ativo") or "", i.get("titulo") or ""] if b)
+        out.append(RawArticle(
+            url=link,
+            title=titulo(empresa, categoria, f"{(i.get('arquivo_nome') or '').strip()} ({serie})"),
+            snippet=f"Oliveira Trust — {(i.get('tipo') or '').title()}",
+            published_at=quando,
+            article_type="assembleia",
+        ))
     return out
