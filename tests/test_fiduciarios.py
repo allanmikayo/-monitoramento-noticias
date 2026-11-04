@@ -142,3 +142,12 @@ def test_vortx_link_estavel_sem_www_e_relatorio_gerado(monkeypatch):
     monkeypatch.setattr(vortx, "get_json", lambda u, **k: next(v for c, v in respostas.items() if u.endswith(c)))
     arts = vortx._documentos_da_operacao({"codigo": 1, "emissao": "6"}, "X", datetime.now(timezone.utc) - timedelta(days=40))
     assert [a.url for a in arts] == ["https://x/c.pdf"]
+
+
+def test_nome_de_uma_palavra_so_no_inicio():
+    cob = Cobertura(nomes=["Vale", "Light", "BRK Ambiental"],
+                    nome_por_chave={"Vale": "Vale", "Light": "Light", "BRK Ambiental": "BRK Ambiental"})
+    assert cob.empresa_no_texto("BEVAP", "BIOENERGETICA VALE DO PARACATU S/A") is None
+    assert cob.empresa_no_texto("VALE S.A.") == "Vale"
+    assert cob.empresa_no_texto("CRI - 1E - LIGHT", "VIRGO") == "Light"
+    assert cob.empresa_no_texto("Holding da BRK Ambiental S.A.") == "BRK Ambiental"

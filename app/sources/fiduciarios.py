@@ -43,14 +43,31 @@ class Cobertura:
     nome_por_cnpj8: dict[str, str] = field(default_factory=dict)
     nome_por_ticker: dict[str, str] = field(default_factory=dict)
 
-    def empresa_no_texto(self, texto: str) -> str | None:
-        """Nome da empresa da cobertura citada em `texto`, ou None."""
-        from ..filter import match_keywords
+    def empresa_no_texto(self, *textos: str) -> str | None:
+        """Empresa da cobertura citada em algum dos `textos` (nomes de
+        emissor/devedor), ou None.
 
-        achados = match_keywords(texto or "", self.nomes)
+        Nome de UMA palavra só conta como a PRIMEIRA palavra de um dos
+        textos (04/11/2026): "BIOENERGETICA VALE DO PARACATU" (Bevap) não é
+        a Vale, mas "VALE S.A." é. Nome de duas ou mais palavras vale em
+        qualquer posição."""
+        from ..filter import match_keywords, normalize
+
+        texto = " | ".join(t for t in textos if t)
+        primeiras = set()
+        for t in textos:
+            for parte in re.split(r"\s[-|/]\s|\|", t or ""):
+                palavras = re.sub(r"[^\w\s]", " ", normalize(parte)).split()
+                if palavras:
+                    primeiras.add(palavras[0])
+        achados = match_keywords(texto, self.nomes)
         for k in sorted(achados, key=len, reverse=True):
-            if k in self.nome_por_chave:
-                return self.nome_por_chave[k]
+            if k not in self.nome_por_chave:
+                continue
+            nk = re.sub(r"[^\w\s]", " ", normalize(k)).split()
+            if len(nk) == 1 and nk[0] not in primeiras:
+                continue
+            return self.nome_por_chave[k]
         return None
 
     def empresa_do_cnpj(self, cnpj: str | None) -> str | None:

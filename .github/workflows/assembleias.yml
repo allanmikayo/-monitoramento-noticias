@@ -12,7 +12,12 @@ on:
     - cron: "47 11 * * *"
     - cron: "47 16 * * *"
     - cron: "47 22 * * *"
-  workflow_dispatch: {}
+  workflow_dispatch:
+    inputs:
+      refazer_desde:
+        description: "Apaga e regrava os documentos encontrados desde esta data (AAAA-MM-DD). Vazio = não apaga."
+        required: false
+        default: ""
 
 concurrency:
   group: assembleias
@@ -49,7 +54,12 @@ jobs:
       - name: Limpar links antigos da Vortx
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
-        run: python -m scripts.limpar_links_vortx
+        run: |
+          if [ -n "${{ github.event.inputs.refazer_desde }}" ]; then
+            python -m scripts.limpar_links_vortx --refazer-desde "${{ github.event.inputs.refazer_desde }}"
+          else
+            python -m scripts.limpar_links_vortx
+          fi
 
       - name: Rodar as fontes de agente fiduciario
         env:

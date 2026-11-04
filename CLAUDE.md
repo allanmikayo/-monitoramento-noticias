@@ -1714,6 +1714,14 @@ fontes por HTTP direto, sem navegador:
   "www." (o `normalize_url` do store tira o www). Na janela de 30 dias,
   em produção: Pentágono 39 (editais, fatos, avisos), Oliveira Trust 9,
   Vórtx 6 envios de verdade.
+- **04/11/2026 (4) — empresa errada por nome**: "BIOENERGETICA VALE DO
+  PARACATU" (Bevap) saía como Vale. `Cobertura.empresa_no_texto` agora só
+  aceita nome de UMA palavra (Vale, Light, Cosan...) como primeira palavra
+  de um dos textos (apelido/emissor, nomec/nomeg, nome do cadastro); nome
+  de 2+ palavras vale em qualquer posição. Vale também para o mapa de
+  tickers pelo nome. `limpar_links_vortx --refazer-desde AAAA-MM-DD`
+  (campo `refazer_desde` no "Run workflow" do `assembleias.yml`) apaga os
+  documentos dos três agentes desde a data para a rodada regravar.
 
 Mapa original da investigação:
 

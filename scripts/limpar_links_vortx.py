@@ -10,10 +10,16 @@ com o link novo. Idempotente: sem nada a apagar, não faz nada.
 
     python -m scripts.limpar_links_vortx            # apaga
     python -m scripts.limpar_links_vortx --dry-run  # só conta
+    python -m scripts.limpar_links_vortx --refazer-desde 2026-11-03
+        # apaga TODOS os documentos dos três agentes fiduciários gravados
+        # desde a data, para a rodada seguinte gravar de novo com a regra de
+        # empresa atual (04/11/2026: "Bevap" saía como Vale).
 """
 from __future__ import annotations
 
 import argparse
+
+from datetime import datetime, timezone
 
 from sqlalchemy import or_, select
 
@@ -24,8 +30,22 @@ from app.models import Article
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--dry-run", action="store_true")
+    ap.add_argument("--refazer-desde", default="")
     args = ap.parse_args()
     with SessionLocal() as db:
+        if args.refazer_desde:
+            desde = datetime.fromisoformat(args.refazer_desde).replace(tzinfo=timezone.utc)
+            arts = list(db.scalars(select(Article).where(
+                Article.article_type == "assembleia", Article.found_at >= desde,
+                or_(*[Article.url.like(f"%{d}%") for d in ("vortx.com.br", "oliveiratrust.com.br", "pentagonotrustee.com.br")]))))
+            print(f"refazer: {len(arts)} documento(s) dos agentes fiduciários desde {args.refazer_desde}")
+            if not args.dry_run:
+                for a in arts:
+                    a.companies = []
+                    a.sector_tags = []
+                    db.delete(a)
+                db.commit()
+                print(f"apagados: {len(arts)}")
         arts = list(db.scalars(select(Article).where(
             Article.url.like("%vortx.com.br%"),
             or_(Article.url.like("%Signature=%"),

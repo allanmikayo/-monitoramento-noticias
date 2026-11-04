@@ -160,7 +160,7 @@ def fetch(url: str) -> list[RawArticle]:
     for i in itens:
         tipo = (i.get("tipo") or "").upper()
         if tipo == "DEBENTURES":
-            empresa = cob.empresa_no_texto(f"{i.get('nomec') or ''} {i.get('nomeg') or ''}")
+            empresa = cob.empresa_no_texto(i.get("nomec") or "", i.get("nomeg") or "")
         else:
             empresa = cob.empresa_do_ticker((cache.get(str(i.get("tit"))) or {}).get("ativo"))
         if empresa:

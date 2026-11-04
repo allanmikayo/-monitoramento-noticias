@@ -155,7 +155,7 @@ def _empresa_da_operacao(op: dict, cob: Cobertura) -> str | None:
     return (
         cob.empresa_do_ticker(op.get("codIf"))
         or (cob.empresa_do_cnpj(op.get("cnpj_emissora")) if str(op.get("operation_type_id")) == TIPO_DEB else None)
-        or cob.empresa_no_texto(f"{op.get('apelido') or ''} {op.get('emissor') or ''}")
+        or cob.empresa_no_texto(op.get("apelido") or "", op.get("emissor") or "")
     )
 
 
