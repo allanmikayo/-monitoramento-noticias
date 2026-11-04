@@ -43,6 +43,10 @@ MAX_PAGINAS_BUSCA = 6       # 10 por página
 TIPO_DEB = "3"
 # Já vem pelo endpoint de assembleias (com data da assembleia, mais útil).
 GRUPOS_IGNORADOS = {"assembleia investidores"}
+# Relatórios que a Vórtx GERA na hora do pedido (04/11/2026): `userId` 0 e
+# `uploadTimestamp` igual ao momento da chamada, então todo relatório antigo
+# ("Jun2024") parecia publicado hoje. Não são envios novos; ficam de fora.
+GRUPOS_GERADOS = {"relatório de covenants", "relatório de garantias"}
 TRABALHADORES = 3  # a API devolve 429 com 8 chamadas em paralelo (03/11/2026)
 
 
@@ -61,7 +65,11 @@ def link_estavel(op_id, url: str) -> str:
 
 
 def eh_link_estavel(url: str | None) -> bool:
-    return bool(url) and url.startswith(OPERACAO_URL) and "#doc-" in url
+    """O banco guarda a URL normalizada (sem "www."), então vale com ou sem."""
+    if not url or "#doc-" not in url:
+        return False
+    p = urlparse(url)
+    return p.netloc.removeprefix("www.") == "vortx.com.br" and p.path.rstrip("/") == "/investidor/dcm/operacao"
 
 
 def link_para_tela(a) -> str:
@@ -200,6 +208,8 @@ def _documentos_da_operacao(op: dict, empresa: str, limite: datetime) -> list[Ra
             if nome_grupo.lower() in GRUPOS_IGNORADOS:
                 continue
             for doc in g.get("documents") or []:
+                if doc.get("userId") == 0 or nome_grupo.lower() in GRUPOS_GERADOS:
+                    continue
                 quando = _data(doc.get("uploadTimestamp"))
                 if not doc.get("url") or not quando or quando < limite:
                     continue

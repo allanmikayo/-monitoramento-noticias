@@ -1,4 +1,6 @@
-"""Apaga os documentos da Vórtx gravados com link ASSINADO (04/11/2026).
+"""Apaga os documentos da Vórtx gravados com link ASSINADO (04/11/2026) e os
+relatórios que a Vórtx GERA na hora (Relatório de Covenants/Garantias, com
+data falsa de "hoje"; ver `vortx.GRUPOS_GERADOS`).
 
 Até 04/11 a coleta gravava a URL assinada do CloudFront, que vence em ~1 h e
 muda a cada chamada: o link morria e cada rodada duplicava o documento. A
@@ -13,7 +15,7 @@ from __future__ import annotations
 
 import argparse
 
-from sqlalchemy import select
+from sqlalchemy import or_, select
 
 from app.db import SessionLocal
 from app.models import Article
@@ -25,8 +27,11 @@ def main() -> int:
     args = ap.parse_args()
     with SessionLocal() as db:
         arts = list(db.scalars(select(Article).where(
-            Article.url.like("%vortx.com.br%"), Article.url.like("%Signature=%"))))
-        print(f"{len(arts)} documento(s) da Vórtx com link assinado")
+            Article.url.like("%vortx.com.br%"),
+            or_(Article.url.like("%Signature=%"),
+                Article.title.like("% — Relatório de Covenants — %"),
+                Article.title.like("% — Relatório de Garantias — %")))))
+        print(f"{len(arts)} documento(s) da Vórtx com link assinado ou relatório gerado")
         if args.dry_run or not arts:
             return 0
         for a in arts:

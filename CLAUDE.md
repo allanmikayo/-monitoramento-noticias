@@ -1706,6 +1706,15 @@ fontes por HTTP direto, sem navegador:
   (`_jobs_devidos`: notícias a cada 15 min, B3 a cada 30 no pregão,
   assembleias 08h45/13h45/19h45). Passo a passo: `DEPLOY.md`, Parte 5.
 
+- **04/11/2026 (3)**: os grupos "Relatório de Covenants"/"Relatório de
+  Garantias" da Vórtx são GERADOS na hora do pedido (`userId` 0,
+  `uploadTimestamp` = agora): 76 relatórios antigos ("Jun2024") entravam
+  como publicados hoje. Ficam de fora (`vortx.GRUPOS_GERADOS`) e o
+  `limpar_links_vortx` os apaga. `eh_link_estavel` aceita a URL sem
+  "www." (o `normalize_url` do store tira o www). Na janela de 30 dias,
+  em produção: Pentágono 39 (editais, fatos, avisos), Oliveira Trust 9,
+  Vórtx 6 envios de verdade.
+
 Mapa original da investigação:
 
 **Vórtx -- API JSON pública (`apis.vortx.com.br/vxsite/api/`)**, sem

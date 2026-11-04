@@ -126,3 +126,19 @@ def test_cron_auto_jobs_devidos():
     for off in range(5):
         dia = [j for m in range(off, 60, 5) for j in _jobs_devidos(d(13, m))]
         assert dia.count("news") == 4 and dia.count("b3_trades") == 2 and dia.count("assembleias") == 1
+
+
+def test_vortx_link_estavel_sem_www_e_relatorio_gerado(monkeypatch):
+    est = vortx.link_estavel(91018, ASSINADA).replace("://www.", "://")  # como o banco guarda
+    assert vortx.eh_link_estavel(est)
+    agora = datetime.now(timezone.utc).isoformat()
+    respostas = {
+        "fatos-relevantes": {"relevantFacts": []},
+        "documentos-por-tipo/1": [{"type": "Relatório de Covenants", "documents": [
+            {"url": "https://x/g.pdf", "description": "92920_Jun2024.pdf", "uploadTimestamp": agora, "userId": 0}]}],
+        "documentos-por-tipo/2": [{"type": "Covenants", "documents": [
+            {"url": "https://x/c.pdf", "description": "Covenant Jun25.pdf", "uploadTimestamp": agora, "userId": 62001}]}],
+    }
+    monkeypatch.setattr(vortx, "get_json", lambda u, **k: next(v for c, v in respostas.items() if u.endswith(c)))
+    arts = vortx._documentos_da_operacao({"codigo": 1, "emissao": "6"}, "X", datetime.now(timezone.utc) - timedelta(days=40))
+    assert [a.url for a in arts] == ["https://x/c.pdf"]
