@@ -525,8 +525,31 @@ def _links_documento(a) -> tuple[str, str | None]:
         return (f"{_RAD}frmExibirArquivoIPEExterno.aspx?NumeroProtocoloEntrega={p}",
                 f"{_RAD}frmDownloadDocumento.aspx?Tela=ext&numProtocolo={p}&descTipo=IPE&CodigoInstituicao=1")
     if a.article_type == "assembleia":
-        return a.url, f"/api/documentos/{a.id}/baixar"
+        from .sources import vortx
+
+        abrir = f"/api/documentos/{a.id}/abrir" if vortx.eh_link_estavel(a.url) else a.url
+        return abrir, f"/api/documentos/{a.id}/baixar"
     return a.url, None
+
+
+def _url_do_arquivo(art) -> str:
+    """URL que de fato entrega o arquivo. Vórtx grava a página da operação +
+    uuid (o link assinado da API vence em ~1 h); aqui se pede o link novo."""
+    from .sources import vortx
+
+    if vortx.eh_link_estavel(art.url):
+        return vortx.link_atual(art.url) or art.url.split("#", 1)[0]
+    return art.url
+
+
+@app.get("/api/documentos/{article_id}/abrir")
+def api_documento_abrir(article_id: int, user: User = Depends(require_user), db: Session = Depends(get_db)):
+    """Abre o arquivo de um documento de agente fiduciário. Só redireciona para a URL que o robô gravou (ou o link
+    novo que a própria API da Vórtx devolve para ela)."""
+    art = db.get(Article, article_id)
+    if art is None or art.article_type != "assembleia" or not (art.url or "").startswith("http"):
+        raise HTTPException(status_code=404, detail="documento não encontrado")
+    return RedirectResponse(url=_url_do_arquivo(art), status_code=302)
 
 
 @app.get("/api/documentos/{article_id}/baixar")
@@ -541,12 +564,13 @@ def api_documento_baixar(article_id: int, user: User = Depends(require_user), db
     art = db.get(Article, article_id)
     if art is None or art.article_type != "assembleia" or not (art.url or "").startswith("http"):
         raise HTTPException(status_code=404, detail="documento não encontrado")
+    url = _url_do_arquivo(art)
     try:
-        resp = requests.get(art.url, timeout=25)
+        resp = requests.get(url, timeout=25)
         resp.raise_for_status()
     except requests.RequestException:
-        return RedirectResponse(url=art.url, status_code=302)
-    nome = (art.url.split("?")[0].rstrip("/").rsplit("/", 1)[-1] or f"documento-{article_id}")
+        return RedirectResponse(url=url, status_code=302)
+    nome = (url.split("?")[0].rstrip("/").rsplit("/", 1)[-1] or f"documento-{article_id}")
     nome = re.sub(r"[^A-Za-z0-9._ ()-]", "_", requests.utils.unquote(nome))[:150]
     if "." not in nome:
         nome += ".pdf"

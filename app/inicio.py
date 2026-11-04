@@ -13,6 +13,8 @@ número da página inicial ser sempre o mesmo da aba que o link abre.
 """
 from __future__ import annotations
 
+from .sources.vortx import link_para_tela
+
 from datetime import date, timedelta
 
 from sqlalchemy import func, select
@@ -164,7 +166,7 @@ def curvas(db: Session) -> dict:
 def _artigo(a: Article) -> dict:
     quando = a.published_at or a.found_at
     return {
-        "titulo": a.title, "url": a.url, "fonte": a.source_name, "tipo": a.article_type,
+        "titulo": a.title, "url": link_para_tela(a), "fonte": a.source_name, "tipo": a.article_type,
         "quando": quando.isoformat() if quando else None,
         "empresas": [c.name for c in a.companies][:2],
         "setores": [s.name for s in a.sector_tags][:1],

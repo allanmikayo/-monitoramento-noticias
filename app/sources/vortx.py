@@ -15,11 +15,21 @@ Fluxo (mapeado ao vivo no Chrome do Allan, ver CLAUDE.md):
      (relatórios de covenants e garantias, avisos ao mercado, rating,
      notificações...), cada documento com data de envio.
 Só entra o que tem data dentro de `LOOKBACK_DAYS`.
+
+Links (04/11/2026): a API devolve o arquivo como URL ASSINADA do CloudFront
+(`arquivos-vx-informa.vortx.com.br/<uuid>/<nome>?Expires=...&Signature=...`),
+que vence em ~1 h e muda a cada chamada. Gravada assim, o link morria no
+dia seguinte e cada rodada gravava o mesmo documento de novo. Agora grava-se
+um endereço ESTÁVEL, a página da operação com o uuid do arquivo
+(`.../operacao?id=N#doc-<uuid>`), e `link_atual()` pede à API, na hora do
+clique, a URL assinada nova daquele uuid.
 """
 from __future__ import annotations
 
 import logging
+import re
 from concurrent.futures import ThreadPoolExecutor
+from urllib.parse import parse_qs, urlparse
 from datetime import datetime, timezone
 
 from .base import RawArticle, brt_to_utc
@@ -34,6 +44,67 @@ TIPO_DEB = "3"
 # Já vem pelo endpoint de assembleias (com data da assembleia, mais útil).
 GRUPOS_IGNORADOS = {"assembleia investidores"}
 TRABALHADORES = 3  # a API devolve 429 com 8 chamadas em paralelo (03/11/2026)
+
+
+_UUID_RE = re.compile(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}", re.I)
+
+
+def link_estavel(op_id, url: str) -> str:
+    """Página da operação + uuid do arquivo. URL que não é do CloudFront
+    assinado (já estável) passa igual."""
+    if "Expires=" not in url and "Signature=" not in url:
+        return url
+    m = _UUID_RE.search(urlparse(url).path)
+    if not m:
+        return f"{OPERACAO_URL}?id={op_id}"
+    return f"{OPERACAO_URL}?id={op_id}#doc-{m.group(0).lower()}"
+
+
+def eh_link_estavel(url: str | None) -> bool:
+    return bool(url) and url.startswith(OPERACAO_URL) and "#doc-" in url
+
+
+def link_para_tela(a) -> str:
+    """Link que a tela mostra para um artigo: documento da Vórtx abre pela
+    rota que renova o link assinado; o resto, a URL gravada."""
+    return f"/api/documentos/{a.id}/abrir" if eh_link_estavel(a.url) else a.url
+
+
+def link_atual(url: str, timeout: float = 4) -> str | None:
+    """URL assinada nova do arquivo de um `link_estavel`, ou None."""
+    if not eh_link_estavel(url):
+        return None
+    p = urlparse(url)
+    op_id = (parse_qs(p.query).get("id") or [""])[0]
+    uuid = p.fragment.removeprefix("doc-").lower()
+    if not op_id.isdigit() or not _UUID_RE.fullmatch(uuid):
+        return None
+    chamadas = [
+        (f"{API}/operacao/assembleias/por-emissor", {"operationId": op_id}),
+        (f"{API}/operacao/{op_id}/fatos-relevantes", None),
+        (f"{API}/operacao/{op_id}/documentos-por-tipo/1", None),
+        (f"{API}/operacao/{op_id}/documentos-por-tipo/2", None),
+    ]
+
+    def _uma(c):
+        try:
+            return get_json(c[0], tentativas=1, params=c[1], timeout=timeout)
+        except Exception:  # noqa: BLE001
+            return None
+
+    with ThreadPoolExecutor(len(chamadas)) as ex:
+        respostas = list(ex.map(_uma, chamadas))
+    for r in respostas:
+        for achado in re.findall(r"https://[^\s\"']+", _json_texto(r)):
+            if uuid in achado.lower():
+                return achado
+    return None
+
+
+def _json_texto(obj) -> str:
+    import json
+
+    return json.dumps(obj, ensure_ascii=False) if obj is not None else ""
 
 
 def _data(valor: str | None, so_dia: bool = False) -> datetime | None:
@@ -89,7 +160,7 @@ def _assembleias(op_id: str, empresa: str, limite: datetime) -> list[RawArticle]
             continue
         tipo = (a.get("tipo_documento") or "Documento").strip()
         out.append(RawArticle(
-            url=a["url"], title=titulo(empresa, f"Assembleia ({tipo})", a.get("titulo") or ""),
+            url=link_estavel(op_id, a["url"]), title=titulo(empresa, f"Assembleia ({tipo})", a.get("titulo") or ""),
             snippet="Vórtx — assembleia", published_at=quando, article_type="assembleia",
         ))
     return out
@@ -115,7 +186,7 @@ def _documentos_da_operacao(op: dict, empresa: str, limite: datetime) -> list[Ra
             link = doc.get("url")
         if not link and isinstance(doc, str) and doc.startswith("http"):
             link = doc
-        link = link or f"{OPERACAO_URL}?id={op_id}#fato-{f.get('id')}"
+        link = link_estavel(op_id, link) if link else f"{OPERACAO_URL}?id={op_id}#fato-{f.get('id')}"
         out.append(RawArticle(
             url=link, title=titulo(empresa, "Fato relevante", f"{f.get('title') or ''} ({serie})"),
             snippet=(f.get("description") or "")[:500], published_at=quando, article_type="assembleia",
@@ -133,7 +204,7 @@ def _documentos_da_operacao(op: dict, empresa: str, limite: datetime) -> list[Ra
                 if not doc.get("url") or not quando or quando < limite:
                     continue
                 out.append(RawArticle(
-                    url=doc["url"], title=titulo(empresa, nome_grupo, f"{doc.get('description') or ''} ({serie})"),
+                    url=link_estavel(op_id, doc["url"]), title=titulo(empresa, nome_grupo, f"{doc.get('description') or ''} ({serie})"),
                     snippet="Vórtx — documento da operação", published_at=quando, article_type="assembleia",
                 ))
     return out

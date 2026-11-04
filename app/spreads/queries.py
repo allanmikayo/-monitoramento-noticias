@@ -10,6 +10,8 @@ lista de datas com dado disponível (não N dias corridos) — assim feriados
 e dias sem publicação não distorcem a janela "última semana"."""
 from __future__ import annotations
 
+from ..sources.vortx import link_para_tela
+
 import itertools
 import statistics
 from datetime import date, datetime, timedelta
@@ -1875,7 +1877,7 @@ def _artigo_para_dict(a: Article) -> dict:
     return {
         "id": a.id,
         "title": a.title,
-        "url": a.url,
+        "url": link_para_tela(a),
         "source_name": a.source_name,
         "article_type": a.article_type,
         "published_at": a.published_at.isoformat() if a.published_at else None,
@@ -1982,7 +1984,7 @@ def company_news(db: Session, company_ids: list[int], limit: int = 8) -> list[di
         {
             "id": a.id,
             "title": a.title,
-            "url": a.url,
+            "url": link_para_tela(a),
             "source_name": a.source_name,
             "article_type": a.article_type,
             "published_at": a.published_at.isoformat() if a.published_at else None,

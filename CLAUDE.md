@@ -1681,6 +1681,20 @@ fontes por HTTP direto, sem navegador:
   (antes do filtro de duplicados entre séries). Testes:
   `tests/test_fiduciarios.py`.
 
+- **Correção 04/11/2026 — links da Vórtx venciam e duplicavam**: a API da
+  Vórtx devolve o arquivo como URL assinada do CloudFront (`Expires=` /
+  `Signature=`), válida por ~1 h e diferente a cada chamada. Gravada assim,
+  o link morria e cada rodada regravava os mesmos documentos (rodada de
+  03/11 22h47: 167 "novos" repetidos). Agora a coleta grava
+  `.../investidor/dcm/operacao?id=N#doc-<uuid>` (`vortx.link_estavel`); a
+  tela mostra `/api/documentos/{id}/abrir`, que pede à API o link assinado
+  novo daquele uuid (`vortx.link_atual`, 4 chamadas em paralelo) e
+  redireciona, ou cai na página da operação. "Baixar" usa o mesmo caminho.
+  `scripts/limpar_links_vortx.py` (+ `Limpar Links Vortx.bat`, e passo no
+  `assembleias.yml`) apaga as cópias antigas com link assinado. Links de
+  Oliveira Trust (`/scot/Arquivos/...pdf`) e Pentágono
+  (`DownloadBinario?id=N`, abre sem sessão) são estáveis — conferido.
+
 Mapa original da investigação:
 
 **Vórtx -- API JSON pública (`apis.vortx.com.br/vxsite/api/`)**, sem

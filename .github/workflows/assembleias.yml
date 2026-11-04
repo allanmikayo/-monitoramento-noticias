@@ -24,8 +24,7 @@ jobs:
     env:
       PYTHONFAULTHANDLER: "1"
       PSYCOPG_IMPL: python
-      # A Vórtx sozinha leva ~28 min (medido em 29/10/2026); com o teto de
-      # 15 min do script ela era cortada sempre e devolvia zero.
+      # Teto por fonte. Por API a Vórtx leva ~9 min (03/11/2026).
       SCRAPE_TIMEOUT_FONTE: "900"
     timeout-minutes: 30
     steps:
@@ -44,6 +43,13 @@ jobs:
           pip uninstall -y psycopg-binary || true
           python -c "import psycopg" \
             || (sudo apt-get update -qq && sudo apt-get install -y -qq libpq5)
+
+      # Tira os documentos da Vórtx gravados com link que vence (até
+      # 04/11/2026). Sem nada a apagar, não faz nada.
+      - name: Limpar links antigos da Vortx
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: python -m scripts.limpar_links_vortx
 
       - name: Rodar as fontes de agente fiduciario
         env:

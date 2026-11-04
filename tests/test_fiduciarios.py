@@ -74,3 +74,39 @@ def test_pentagono_pu_categoria_data():
 
 def test_titulo():
     assert titulo("Sabesp", "Ata", "AGD.pdf (SBSPF3)") == "Sabesp — Ata — AGD.pdf (SBSPF3)"
+
+
+ASSINADA = ("https://arquivos-vx-informa.vortx.com.br/6f104b9a-f919-4bb5-b27c-b42959eeac05/"
+            "AGD%20-%20LIGHT.pdf?Expires=1793797349&Signature=abc~d&Key-Pair-Id=K2")
+
+
+def test_vortx_link_estavel():
+    est = vortx.link_estavel(91018, ASSINADA)
+    assert est == "https://www.vortx.com.br/investidor/dcm/operacao?id=91018#doc-6f104b9a-f919-4bb5-b27c-b42959eeac05"
+    assert vortx.eh_link_estavel(est)
+    # Mesma URL com outra assinatura (rodada seguinte) dá o mesmo link.
+    assert vortx.link_estavel(91018, ASSINADA.replace("abc~d", "xyz")) == est
+    assert vortx.link_estavel(91018, "https://x/f.pdf") == "https://x/f.pdf"
+    assert not vortx.eh_link_estavel("https://x/f.pdf")
+
+
+def test_vortx_link_atual(monkeypatch):
+    nova = ASSINADA.replace("abc~d", "NOVA")
+    def falso(url, **k):
+        if url.endswith("documentos-por-tipo/2"):
+            return [{"type": "Assembleia", "documents": [{"url": nova}]}]
+        return {"data": []}
+    monkeypatch.setattr(vortx, "get_json", falso)
+    est = vortx.link_estavel(91018, ASSINADA)
+    assert vortx.link_atual(est) == nova
+    assert vortx.link_atual("https://x/f.pdf") is None
+    assert vortx.link_atual(est.replace("6f104b9a", "00000000")) is None
+
+
+def test_vortx_link_para_tela():
+    class A:
+        id = 7
+        url = vortx.link_estavel(91018, ASSINADA)
+    assert vortx.link_para_tela(A) == "/api/documentos/7/abrir"
+    A.url = "https://x/f.pdf"
+    assert vortx.link_para_tela(A) == "https://x/f.pdf"
