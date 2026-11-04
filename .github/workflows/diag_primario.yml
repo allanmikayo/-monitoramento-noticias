@@ -1,6 +1,7 @@
 name: Diagnóstico mercado primário (temporário)
 on:
-  workflow_dispatch: {}
+  push:
+    branches: [teste-primario]
 jobs:
   diag:
     runs-on: ubuntu-latest
