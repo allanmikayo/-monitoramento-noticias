@@ -711,6 +711,9 @@ def api_force_refresh(user: User = Depends(require_user), db: Session = Depends(
 _CRON_JOBS = {
     "news": None,  # None = usa config.GITHUB_WORKFLOW_FILE (default do _dispatch_github_workflow)
     "b3_trades": "b3_trades.yml",
+    # Agentes fiduciários (04/11/2026): o `schedule:` do GitHub chega a
+    # atrasar 4-6 h; o cron-job.org chama ?job=assembleias 3x ao dia.
+    "assembleias": "assembleias.yml",
 }
 
 # Janela de pregão de renda fixa da B3 pra debêntures/CRI/CRA (10h-16h,

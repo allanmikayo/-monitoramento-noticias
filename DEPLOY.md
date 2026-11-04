@@ -207,6 +207,25 @@ O `schedule:` do GitHub Actions continua ativo como reserva (roda 1x por
 hora, caso o cron-job.org fique fora do ar por algum motivo) — não
 precisa mexer nele.
 
+### Agentes fiduciários 3x ao dia (04/11/2026)
+
+O `schedule:` do GitHub chegou a atrasar 4 a 6 horas em 11/2026, então a
+coleta de documentos dos agentes fiduciários (Vórtx, Oliveira Trust,
+Pentágono) também deve ser disparada pelo cron-job.org:
+
+1. No cron-job.org, clique em **"Create cronjob"** (ou duplique o job de
+   notícias).
+2. **URL**:
+   ```
+   https://monitoramento-noticias.vercel.app/api/cron-trigger?job=assembleias
+   ```
+3. **Execution schedule** → "Custom": todos os dias, às **08:47, 13:47 e
+   19:47** (fuso America/Sao_Paulo).
+4. **Advanced**: método `POST` e o mesmo header `X-Cron-Secret` do job de
+   notícias.
+5. Salve e clique em "Test run": na aba **Actions** do GitHub deve aparecer
+   uma execução de "Agentes fiduciários (3x ao dia)".
+
 ---
 
 ## Parte 6 — Módulo Spreads de Debêntures (site + B3 a cada 15 min)
