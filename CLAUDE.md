@@ -1540,6 +1540,12 @@ Financeiras, CDCA e CR, e entender por que a Moody's fala em R$ 289 bi no
   usa a mesma conta do "renda fixa" da ANBIMA; sobra a diferença das
   debêntures. O card do Início soma todos os instrumentos da aba.
   Fixture de teste: a linha de fundo virou FII (FIDC agora entra).
+- Com ~10,7 mil ofertas (FIDC entrou com 5,3 mil), o casamento estourou
+  o tempo: estatísticas liam objetos expirados depois do commit (uma
+  consulta por oferta) e a gravação ia linha a linha no Supabase (668 s).
+  Agora usa uma foto das ofertas tirada antes e grava em INSERT de 1.000
+  linhas por vez: gravação 5,9 s, casamento inteiro ~24 s. FIDC não tem
+  setor (0% classificado): o devedor de um FIDC é uma carteira.
 
 ### Revisão das coletas + FastAPI atualizado — 29/10/2026
 
