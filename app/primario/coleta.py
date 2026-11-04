@@ -57,10 +57,12 @@ TIMEOUT = 120
 # Instrumentos de dívida (pedido do Allan). 04/11/2026: entraram Notas
 # Comerciais, Notas Promissórias, CDCA e "Certificados de Recebíveis" (CR, o
 # certificado genérico da Lei 14.430). Letra Financeira não aparece no
-# arquivo da CVM (nenhuma linha). Ficam de fora de propósito: cotas de fundo
-# (FIDC, FII, FIP...), CPR-F, ações e "Outros títulos de securitização".
+# arquivo da CVM (nenhuma linha). 04/11/2026 (2ª rodada): entraram também
+# FIDC e CPR-F, para a aba fechar com o "renda fixa" da ANBIMA (e da
+# Moody's). Ficam de fora: FII, FIP, FIF, Fiagro, ações e "Outros títulos de
+# securitização" (a ANBIMA também não os põe em renda fixa).
 # A sigla tem no máximo 3 letras (coluna `instrumento` é String(3)): CDCA
-# vira "CDC" no banco e "CDCA" na tela.
+# vira "CDC", FIDC "FID" e CPR-F "CPR" no banco; a tela mostra o nome.
 INSTRUMENTOS = {
     "Debêntures": "DEB",
     "Debêntures Conversíveis": "DEB",
@@ -70,12 +72,16 @@ INSTRUMENTOS = {
     "Certificados de Recebíveis do Agronegócio": "CRA",
     "Certificado de Direitos Creditórios do Agronegócio": "CDC",
     "Certificados de Recebíveis": "CR",
+    "Cotas de FIDC": "FID",
+    "Cédula de Produto Rural Financeira": "CPR",
 }
 ROTULO_INSTRUMENTO = {"DEB": "Debêntures", "NC": "Notas comerciais", "NP": "Notas promissórias",
-                      "CRI": "CRI", "CRA": "CRA", "CDC": "CDCA", "CR": "CR"}
+                      "CPR": "CPR-F", "CRI": "CRI", "CRA": "CRA", "CDC": "CDCA", "CR": "CR",
+                      "FID": "FIDC"}
 # Quem emite é o próprio devedor (o setor sai do CNPJ do emissor). Nos
 # demais o emissor é a securitizadora e o devedor vem do texto da CVM.
-EMISSOR_DEVEDOR = {"DEB", "NC", "NP"}
+# CPR-F é emitida pelo próprio produtor/empresa rural.
+EMISSOR_DEVEDOR = {"DEB", "NC", "NP", "CPR"}
 
 # Status que a CVM usa. Agrupados pelo que significam para quem olha o
 # mercado -- a tela nunca mostra "Requerimento Expirado" ao lado de uma

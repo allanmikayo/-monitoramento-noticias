@@ -116,7 +116,8 @@ def _um_ano_antes(d: date) -> date:
 
 def primario_bloco(db: Session, hoje: date | None = None) -> dict:
     """Volume ENCERRADO (data de encerramento da CVM) de todos os instrumentos
-    da aba Primário (DEB, notas comerciais e promissórias, CRI, CRA, CDCA, CR).
+    da aba Primário (DEB, NC, NP, CPR-F, CRI, CRA, CDCA, CR e FIDC: o "renda
+    fixa" da ANBIMA).
 
     * Último mês fechado contra o mesmo mês do ano anterior (YoY).
     * Acumulado do ano até a data mais recente da base contra o mesmo

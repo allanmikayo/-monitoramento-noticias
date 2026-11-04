@@ -10,10 +10,13 @@
   // 04/11/2026: entraram notas comerciais, notas promissórias, CDCA e CR.
   // Laranja = dívida emitida pela própria empresa; preto e cinzas =
   // securitização. NP e CDCA quase não aparecem (poucas ofertas na base).
-  const ORDEM = ["DEB", "NC", "NP", "CRI", "CRA", "CDC", "CR"];
-  const CORES = { DEB: "#FF6200", NC: "#ffa366", NP: "#ffd2b3", CRI: "#111111", CRA: "#6b6b6b", CDC: "#9a9a9a", CR: "#c9c9c9" };
-  const ROTULO = { DEB: "Debêntures", NC: "Notas comerciais", NP: "Notas promissórias", CRI: "CRI", CRA: "CRA", CDC: "CDCA", CR: "CR" };
-  const SIGLA = (i) => (i === "CDC" ? "CDCA" : i);
+  // 04/11/2026 (2): FIDC e CPR-F, para fechar com o "renda fixa" da ANBIMA.
+  const ORDEM = ["DEB", "NC", "NP", "CPR", "CRI", "CRA", "CDC", "CR", "FID"];
+  const CORES = { DEB: "#FF6200", NC: "#ffa366", NP: "#ffd2b3", CPR: "#c44d00", CRI: "#111111", CRA: "#4a4a4a",
+    CDC: "#8a8a8a", CR: "#bdbdbd", FID: "#3f6fa8" };
+  const ROTULO = { DEB: "Debêntures", NC: "Notas comerciais", NP: "Notas promissórias", CPR: "CPR-F", CRI: "CRI",
+    CRA: "CRA", CDC: "CDCA", CR: "CR", FID: "FIDC" };
+  const SIGLA = (i) => ({ CDC: "CDCA", FID: "FIDC", CPR: "CPR-F" }[i] || i);
   // Ofertas por subscritor: LARANJA é o que ficou com instituição financeira,
   // preto e cinzas são o papel efetivamente distribuído. A cor carrega a
   // leitura -- encarteirou ou colocou.
@@ -26,7 +29,7 @@
     ["qtd_estrangeiro", "Estrangeiro", "#c9c9c9"],
     ["qtd_outros", "Outros", "#e4e4e4"],
   ];
-  const estado = { janela: "12m", instrumentos: [...ORDEM], incentivada: "", base: "registro" };
+  const estado = { janela: "12m", instrumentos: [...ORDEM], incentivada: "", base: "encerramento" };
   const graficos = {};
 
   const $ = (id) => document.getElementById(id);
@@ -213,8 +216,8 @@
       `Volume é o valor registrado na oferta primária (secundária fica fora), não o efetivamente distribuído. `
       + `Data de ${porRegistro ? "registro na CVM" : "encerramento da oferta"}. `
       + `Quem ficou com o papel só existe em oferta encerrada e cobre ${bi(k.volume_com_quebra)} da janela. `
-      + `O total de "renda fixa" da ANBIMA (e da Moody's, que usa a ANBIMA) é maior porque soma também FIDC e CPR-F, `
-      + `conta pela data de encerramento e inclui operações de debênture que não estão no arquivo de ofertas da CVM. `
+      + `Por encerramento e com todos os instrumentos, a conta é a mesma do "renda fixa" da ANBIMA (e da Moody's, que usa a ANBIMA); `
+      + `a diferença que sobra vem de debêntures que a ANBIMA conta e não estão no arquivo de ofertas da CVM. `
       + `Fonte: CVM (Dados Abertos) e Itaú BBA`;
 
     $("titulo-serie").textContent = porRegistro ? "Volume registrado por mês" : "Volume encerrado por mês";
@@ -224,7 +227,7 @@
     grafSetores(d.setores, temAnterior);
     grafDistribuicao(d.distribuicao);
     const nc = d.setores.find((s) => s.setor === "Não classificado");
-    $("sub-setores").textContent = "R$ bilhões · setor de quem deve (em CRI, CRA, CDCA e CR, o devedor)"
+    $("sub-setores").textContent = "R$ bilhões · setor de quem deve (em CRI, CRA, CDCA, CR e FIDC, o devedor quando a CVM informa)"
       + (temAnterior ? " · contorno = mesmo período do ano anterior" : "")
       + (nc ? ` · ${n1(nc.share)}% do volume sem setor na taxonomia` : "");
     ["fonte-primario-mes", "fonte-primario-setor", "fonte-primario-dist", "fonte-emissores",

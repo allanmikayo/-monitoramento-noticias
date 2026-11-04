@@ -37,7 +37,7 @@ from ..models import OfertaCVM, OfertaCVMClassificacao, OfertaCVMStatus
 from .coleta import ROTULO_INSTRUMENTO, STATUS_ABERTO, STATUS_MORTO
 
 JANELAS = ("12m", "24m", "ano", "tudo")
-INSTRUMENTOS = tuple(ROTULO_INSTRUMENTO)          # DEB, NC, NP, CRI, CRA, CDC, CR
+INSTRUMENTOS = tuple(ROTULO_INSTRUMENTO)          # DEB NC NP CRI CRA CDC CR FID CPR
 INCENTIVADA = ("", "S", "N")                       # "" = todas
 BASES_DATA = ("registro", "encerramento")
 
@@ -469,7 +469,7 @@ def _balanco(linhas, quem: _Quem, campo: str, top: int) -> list[dict]:
 
 
 def painel(db: Session, *, janela: str = "12m", instrumentos=(), incentivada: str = "",
-           base: str = "registro", top: int = TOP_PADRAO) -> dict:
+           base: str = "encerramento", top: int = TOP_PADRAO) -> dict:
     """Tudo que a aba mostra, numa consulta só (26/10/2026: reorganizada
     para crédito -- quem emitiu, quanto, de que setor, a que taxa e quem
     ficou com o papel)."""

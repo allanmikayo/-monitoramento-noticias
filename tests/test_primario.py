@@ -46,10 +46,10 @@ def db():
 
 def test_le_so_instrumentos_de_divida():
     ofertas = coleta.parse(_csv())
-    assert {o.dados["instrumento"] for o in ofertas} == {"DEB", "CRI", "CRA"}
-    # O FIDC da amostra não entra: a aba é de dívida corporativa (pedido do
-    # Allan) e a CVM publica todo tipo de oferta no mesmo arquivo.
-    assert all("FIDC" not in o.dados["nome_emissor"] for o in ofertas)
+    # FIDC entrou em 04/11/2026 (renda fixa da ANBIMA); fundos imobiliários,
+    # FIP e ações continuam de fora.
+    assert {o.dados["instrumento"] for o in ofertas} <= set(coleta.ROTULO_INSTRUMENTO)
+    assert "DEB" in {o.dados["instrumento"] for o in ofertas}
 
 
 def test_converte_os_campos_certos():
@@ -94,7 +94,7 @@ def test_carga_inicial_nao_vira_novidade(db):
 
 def test_oferta_nova_depois_da_carga_inicial_vira_novidade(db):
     linhas = _csv().splitlines(keepends=True)
-    # -2 porque a última linha da amostra é o FIDC, que nem entra na base.
+    # -2 porque a última linha da amostra é um FII, que nem entra na base.
     coleta.coletar(db, conteudo_zip=_zip("".join(linhas[:-2])))
     resumo = coleta.coletar(db, conteudo_zip=_zip())
     assert resumo["novas"] == 1 and resumo["carga_inicial"] is False
@@ -149,7 +149,7 @@ def test_backup_guarda_o_zip_e_limpa_os_antigos(tmp_path):
 
 def test_painel_resume_a_janela(db):
     coleta.coletar(db, conteudo_zip=_zip())
-    p = queries.painel(db, janela="tudo")
+    p = queries.painel(db, janela="tudo", base="registro")
     # Caducada fora: 1,0 + 0,5 (DEB) + 0,3 (CRI) + 0,2 (CRA) = 2,0 bi
     assert p["kpis"]["volume"] == 2.0 and p["kpis"]["ofertas"] == 4
     assert p["kpis"]["ticket_mediano"] == 400.0
@@ -162,7 +162,7 @@ def test_painel_resume_a_janela(db):
 
 def test_serie_mensal_nao_pula_mes_vazio(db):
     coleta.coletar(db, conteudo_zip=_zip())
-    serie = queries.painel(db, janela="tudo")["serie"]
+    serie = queries.painel(db, janela="tudo", base="registro")["serie"]
     assert [s["mes"] for s in serie] == ["2026-01-01", "2026-02-01", "2026-03-01"]
     assert serie[0]["DEB"] == 1.0 and serie[1]["CRI"] == 0.3 and serie[2]["CRA"] == 0.2
 
@@ -176,15 +176,15 @@ def test_pipeline_so_traz_oferta_viva_e_marca_a_parada(db):
 
 def test_filtro_de_instrumento_e_de_incentivada(db):
     coleta.coletar(db, conteudo_zip=_zip())
-    so_cri = queries.painel(db, janela="tudo", instrumentos=["CRI"])
+    so_cri = queries.painel(db, janela="tudo", instrumentos=["CRI"], base="registro")
     assert so_cri["kpis"]["ofertas"] == 1 and so_cri["kpis"]["volume"] == 0.3
-    so_inc = queries.painel(db, janela="tudo", incentivada="S")
+    so_inc = queries.painel(db, janela="tudo", incentivada="S", base="registro")
     assert so_inc["kpis"]["ofertas"] == 1
 
 
 def test_emissores_mostram_quem_voltou_ao_mercado(db):
     coleta.coletar(db, conteudo_zip=_zip())
-    em = queries.painel(db, janela="tudo")["emissores"]
+    em = queries.painel(db, janela="tudo", base="registro")["emissores"]
     assert em[0]["nome"] == "CIA SANEAMENTO ALFA S.A." and em[0]["volume"] == 1000.0
     assert em[0]["ofertas"] == 1 and em[0]["instrumentos"] == ["DEB"]
     assert em[0]["pct_banco"] == 20.0 and em[0]["setor"] == queries.NAO_CLASSIFICADO
@@ -202,13 +202,13 @@ def test_secundaria_fica_fora_e_compara_com_o_ano_anterior(db):
     _add(db, 3, date(2025, 6, 1), 1e9, nome="VELHA S.A.")
     _add(db, 4, date(2026, 7, 2), 1e9, nome="VELHA S.A.")
     db.commit()
-    p = queries.painel(db, janela="ano")
+    p = queries.painel(db, janela="ano", base="registro")
     k = p["kpis"]
     assert k["volume"] == 3.0 and k["volume_anterior"] == 1.0 and k["variacao"] == 2.0
     # EMISSORA X aparece pela primeira vez em 2026; a VELHA já tinha vindo em 2025.
     assert k["emissores"] == 2 and k["estreantes"] == 1
     assert {e["nome"]: e["estreante"] for e in p["emissores"]} == {"EMISSORA X S.A.": True, "VELHA S.A.": False}
-    assert queries.painel(db, janela="tudo")["kpis"]["estreantes"] is None
+    assert queries.painel(db, janela="tudo", base="registro")["kpis"]["estreantes"] is None
 
 
 def test_setor_vem_da_classificacao_e_balanco_pega_banco_majoritario(db):
@@ -220,7 +220,7 @@ def test_setor_vem_da_classificacao_e_balanco_pega_banco_majoritario(db):
                                   grupo="Grupo X", origem="cnpj_emissor"))
     db.commit()
     try:
-        p = queries.painel(db, janela="ano")
+        p = queries.painel(db, janela="ano", base="registro")
         assert [(s["setor"], s["volume"]) for s in p["setores"]] == [("Energia", 2.0), ("Não classificado", 1.0)]
         assert p["emissores"][0]["nome"] == "EMISSORA X" and p["emissores"][0]["grupo"] == "Grupo X"
         assert [o["numero_requerimento"] for o in p["balanco"]] == ["1"]
@@ -265,13 +265,13 @@ def test_quem_ficou_com_o_papel(db):
     """O KPI de encarteiramento é a pergunta que o Allan faz primeiro: o
     banco ficou com o papel ou distribuiu?"""
     coleta.coletar(db, conteudo_zip=_zip())
-    k = queries.painel(db, janela="tudo")["kpis"]
+    k = queries.painel(db, janela="tudo", base="registro")["kpis"]
     # 1001 (R$ 1,0 bi): 80% fundos, 20% bancos do consórcio.
     # 1002 (R$ 0,5 bi): 100% pessoa física.
     # -> encarteirado 13,3% e pessoa física 33,3% sobre R$ 1,5 bi cobertos.
     assert k["encarteirado_pct"] == 13.3 and k["pessoa_fisica_pct"] == 33.3
     assert k["volume_com_quebra"] == 1.5
-    tri = queries.painel(db, janela="tudo")["distribuicao"]
+    tri = queries.painel(db, janela="tudo", base="registro")["distribuicao"]
     t1 = [t for t in tri if t["trimestre"] == "2026-T1"][0]
     assert t1["qtd_fundos"] == 53.3 and t1["encarteirado"] == 13.3
     assert t1["qtd_pessoa_natural"] == 33.3
@@ -351,7 +351,7 @@ def test_pagina_e_api_respondem(cliente, db):
     pagina = cliente.get("/primario")
     assert pagina.status_code == 200
     assert "/static/primario.js?v=" in pagina.text and "Mercado Primário" in pagina.text
-    dados = cliente.get("/api/primario/dados?janela=tudo").json()
+    dados = cliente.get("/api/primario/dados?janela=tudo&base=registro").json()
     assert dados["kpis"]["ofertas"] == 4 and dados["janela"] == "tudo"
     assert "distribuicao" in dados and "emissores" in dados and "emissoes" in dados and "setores" in dados
 
@@ -403,7 +403,7 @@ def test_notas_comerciais_cdca_e_cr_entram_com_sigla_de_3_letras():
         texto = _com_instrumento(texto, "1001", k, vm)
     por = {o.chave: o.dados["instrumento"] for o in coleta.parse(texto)}
     assert [por.get(k) for k in ("2001", "2002", "2003", "2004", "2005", "2006", "2007")] == \
-        ["NC", "NP", "CDC", "CR", "DEB", None, None]
+        ["NC", "NP", "CDC", "CR", "DEB", "FID", "CPR"]
     assert all(len(i) <= 3 for i in coleta.ROTULO_INSTRUMENTO)
     assert coleta.ROTULO_INSTRUMENTO["CDC"] == "CDCA"
 
@@ -418,5 +418,11 @@ def test_instrumento_que_entra_na_coleta_nao_vira_novidade(db):
     mais = _com_instrumento(com_nc, "1001", "2002", "Notas Comerciais")
     coleta.coletar(db, conteudo_zip=_zip(mais))
     assert [s.numero_requerimento for s in db.query(OfertaCVMStatus)] == ["2002"]
-    serie = queries.painel(db, janela="tudo")["serie"]
+    serie = queries.painel(db, janela="tudo", base="registro")["serie"]
     assert sum(m["NC"] for m in serie) > 0          # a série mensal ganhou a coluna NC
+
+
+def test_padrao_e_por_encerramento(db):
+    """04/11/2026: a aba abre por encerramento, o mesmo critério da ANBIMA."""
+    coleta.coletar(db, conteudo_zip=_zip())
+    assert queries.painel(db, janela="tudo")["base"] == "encerramento"

@@ -22,7 +22,7 @@ from .primario.coleta import ROTULO_INSTRUMENTO, STATUS_MORTO
 
 
 def _validar(janela: str, instrumento: list[str], incentivada: str,
-             base: str = "registro") -> tuple[str, list[str], str, str]:
+             base: str = "encerramento") -> tuple[str, list[str], str, str]:
     if janela not in queries.JANELAS:
         raise HTTPException(400, f"janela inválida: {janela} — use {list(queries.JANELAS)}")
     ruins = [i for i in instrumento if i not in queries.INSTRUMENTOS]
@@ -48,7 +48,7 @@ def register_primario_routes(require_user_dep, templates) -> APIRouter:
     @router.get("/api/primario/dados")
     def api_dados(
         janela: str = "12m", instrumento: list[str] = Query(default=[]), incentivada: str = "",
-        base: str = "registro",
+        base: str = "encerramento",
         user: User | None = Depends(require_user_dep), db: Session = Depends(get_db),
     ):
         janela, instrumento, incentivada, base = _validar(janela, instrumento, incentivada, base)
@@ -58,7 +58,7 @@ def register_primario_routes(require_user_dep, templates) -> APIRouter:
     @router.get("/api/primario/ofertas.csv")
     def api_csv(
         janela: str = "12m", instrumento: list[str] = Query(default=[]), incentivada: str = "",
-        base: str = "registro",
+        base: str = "encerramento",
         user: User | None = Depends(require_user_dep), db: Session = Depends(get_db),
     ):
         """A janela inteira, uma oferta por linha — para cruzar no Excel.

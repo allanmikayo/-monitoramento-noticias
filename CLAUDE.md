@@ -1533,6 +1533,13 @@ Financeiras, CDCA e CR, e entender por que a Moody's fala em R$ 289 bi no
   43 ops no 1S26; ≈R$ 4 bi no 1S25) não estão no arquivo de ofertas da CVM.
   "Outros títulos de securitização" (R$ 29,5 bi no 1S26 na CVM) não
   aparece na tabela da ANBIMA. Nota explicando isso no rodapé da aba.
+- **2ª rodada (mesmo dia, "sim e sim" do Allan)**: entraram FIDC ("Cotas
+  de FIDC" → `FID`) e CPR-F (`CPR`, emitida pelo próprio produtor, entra
+  em `EMISSOR_DEVEDOR`), e a aba passou a abrir **por encerramento**
+  (padrão em `painel`, nas rotas, no template e no JS). Com isso a aba
+  usa a mesma conta do "renda fixa" da ANBIMA; sobra a diferença das
+  debêntures. O card do Início soma todos os instrumentos da aba.
+  Fixture de teste: a linha de fundo virou FII (FIDC agora entra).
 
 ### Revisão das coletas + FastAPI atualizado — 29/10/2026
 
