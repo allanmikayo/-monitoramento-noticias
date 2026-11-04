@@ -402,7 +402,7 @@ class OfertaCVM(Base):
     data_encerramento: Mapped[date | None] = mapped_column(Date)
     status: Mapped[str] = mapped_column(String(40), default="")
 
-    instrumento: Mapped[str] = mapped_column(String(3), default="")   # DEB | CRI | CRA
+    instrumento: Mapped[str] = mapped_column(String(3), default="")   # DEB NC NP CRI CRA CDC CR
     valor_mobiliario: Mapped[str | None] = mapped_column(String(80))  # texto cru da CVM
 
     cnpj_emissor: Mapped[str | None] = mapped_column(String(20))

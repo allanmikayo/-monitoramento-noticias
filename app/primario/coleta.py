@@ -54,15 +54,28 @@ URL_ZIP = "https://dados.cvm.gov.br/dados/OFERTA/DISTRIB/DADOS/oferta_distribuic
 ARQUIVO_INTERNO = "oferta_resolucao_160.csv"
 TIMEOUT = 120
 
-# Só instrumentos de dívida corporativa (pedido do Allan). "Certificados de
-# Recebíveis" genérico e "Outros títulos de securitização" ficam de fora: são
-# poucas dezenas de linhas e não dá para dizer com segurança o que são.
+# Instrumentos de dívida (pedido do Allan). 04/11/2026: entraram Notas
+# Comerciais, Notas Promissórias, CDCA e "Certificados de Recebíveis" (CR, o
+# certificado genérico da Lei 14.430). Letra Financeira não aparece no
+# arquivo da CVM (nenhuma linha). Ficam de fora de propósito: cotas de fundo
+# (FIDC, FII, FIP...), CPR-F, ações e "Outros títulos de securitização".
+# A sigla tem no máximo 3 letras (coluna `instrumento` é String(3)): CDCA
+# vira "CDC" no banco e "CDCA" na tela.
 INSTRUMENTOS = {
     "Debêntures": "DEB",
+    "Debêntures Conversíveis": "DEB",
+    "Notas Comerciais": "NC",
+    "Notas Promissórias": "NP",
     "Certificados de Recebíveis Imobiliários": "CRI",
     "Certificados de Recebíveis do Agronegócio": "CRA",
+    "Certificado de Direitos Creditórios do Agronegócio": "CDC",
+    "Certificados de Recebíveis": "CR",
 }
-ROTULO_INSTRUMENTO = {"DEB": "Debêntures", "CRI": "CRI", "CRA": "CRA"}
+ROTULO_INSTRUMENTO = {"DEB": "Debêntures", "NC": "Notas comerciais", "NP": "Notas promissórias",
+                      "CRI": "CRI", "CRA": "CRA", "CDC": "CDCA", "CR": "CR"}
+# Quem emite é o próprio devedor (o setor sai do CNPJ do emissor). Nos
+# demais o emissor é a securitizadora e o devedor vem do texto da CVM.
+EMISSOR_DEVEDOR = {"DEB", "NC", "NP"}
 
 # Status que a CVM usa. Agrupados pelo que significam para quem olha o
 # mercado -- a tela nunca mostra "Requerimento Expirado" ao lado de uma
@@ -370,12 +383,16 @@ def gravar(db: Session, ofertas: list[Oferta], *, piso_relativo: float = PISO_RE
     # bloco de novidades da semana. A trilha passa a valer da segunda rodada
     # em diante, que é quando "novo" quer dizer novo de verdade.
     primeira_carga = not existentes
+    # Instrumento que entrou na coleta agora (ex.: notas comerciais em
+    # 04/11/2026) também é carga inicial: as centenas de ofertas antigas dele
+    # não são novidade da semana.
+    ja_coletados = {o.instrumento for o in existentes.values()}
     novas = mudancas = 0
     for oferta in ofertas:
         atual = existentes.get(oferta.chave)
         if atual is None:
             db.add(OfertaCVM(**oferta.dados, coletado_em=agora, atualizado_em=agora))
-            if not primeira_carga:
+            if not primeira_carga and oferta.dados["instrumento"] in ja_coletados:
                 db.add(OfertaCVMStatus(numero_requerimento=oferta.chave, status_anterior=None,
                                        status_novo=oferta.dados["status"], visto_em=agora))
             novas += 1

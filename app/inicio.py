@@ -17,7 +17,7 @@ from .sources.vortx import link_para_tela
 
 from datetime import date, timedelta
 
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session, selectinload
 
 from . import store
@@ -94,7 +94,9 @@ def _volume_encerrado(db: Session, inicio: date, fim: date) -> tuple[float, int]
     vol, n = db.execute(
         select(func.coalesce(func.sum(OfertaCVM.valor_total), 0), func.count(OfertaCVM.numero_requerimento))
         .where(OfertaCVM.data_encerramento >= inicio, OfertaCVM.data_encerramento <= fim,
-               OfertaCVM.status.not_in(STATUS_MORTO))
+               OfertaCVM.status.not_in(STATUS_MORTO),
+               # Mesmo recorte da aba: secundária não é dinheiro novo.
+               or_(OfertaCVM.tipo_oferta.is_(None), OfertaCVM.tipo_oferta != "SECUNDARIA"))
     ).one()
     return float(vol or 0), int(n or 0)
 
@@ -113,7 +115,8 @@ def _um_ano_antes(d: date) -> date:
 
 
 def primario_bloco(db: Session, hoje: date | None = None) -> dict:
-    """Volume ENCERRADO (data de encerramento da CVM) de DEB, CRI e CRA.
+    """Volume ENCERRADO (data de encerramento da CVM) de todos os instrumentos
+    da aba Primário (DEB, notas comerciais e promissórias, CRI, CRA, CDCA, CR).
 
     * Último mês fechado contra o mesmo mês do ano anterior (YoY).
     * Acumulado do ano até a data mais recente da base contra o mesmo

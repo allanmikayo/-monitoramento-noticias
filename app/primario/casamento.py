@@ -230,7 +230,9 @@ def classificar(oferta, tax_cnpj: dict, tax_sec: dict, tax_nome: dict | None = N
                     devedor=(devedor or t.get("nome") or base["devedor"]))
         return True
 
-    if oferta.instrumento == "DEB":
+    from .coleta import EMISSOR_DEVEDOR
+
+    if oferta.instrumento in EMISSOR_DEVEDOR:   # DEB, nota comercial, nota promissória
         base["devedor"] = oferta.nome_emissor
         (preencher(tax_cnpj.get(so_digitos(oferta.cnpj_emissor)), "cnpj_emissor", oferta.nome_emissor)
          or preencher(tax_nome.get(nome_normalizado(oferta.nome_emissor)), "nome_emissor", oferta.nome_emissor))

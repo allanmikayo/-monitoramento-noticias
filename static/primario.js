@@ -7,8 +7,13 @@
  * bloco por bloco seria pagar várias idas ao banco pela mesma tabela.
  */
 (function () {
-  const CORES = { DEB: "#FF6200", CRI: "#111111", CRA: "#9a9a9a" };
-  const ROTULO = { DEB: "Debêntures", CRI: "CRI", CRA: "CRA" };
+  // 04/11/2026: entraram notas comerciais, notas promissórias, CDCA e CR.
+  // Laranja = dívida emitida pela própria empresa; preto e cinzas =
+  // securitização. NP e CDCA quase não aparecem (poucas ofertas na base).
+  const ORDEM = ["DEB", "NC", "NP", "CRI", "CRA", "CDC", "CR"];
+  const CORES = { DEB: "#FF6200", NC: "#ffa366", NP: "#ffd2b3", CRI: "#111111", CRA: "#6b6b6b", CDC: "#9a9a9a", CR: "#c9c9c9" };
+  const ROTULO = { DEB: "Debêntures", NC: "Notas comerciais", NP: "Notas promissórias", CRI: "CRI", CRA: "CRA", CDC: "CDCA", CR: "CR" };
+  const SIGLA = (i) => (i === "CDC" ? "CDCA" : i);
   // Ofertas por subscritor: LARANJA é o que ficou com instituição financeira,
   // preto e cinzas são o papel efetivamente distribuído. A cor carrega a
   // leitura -- encarteirou ou colocou.
@@ -21,7 +26,7 @@
     ["qtd_estrangeiro", "Estrangeiro", "#c9c9c9"],
     ["qtd_outros", "Outros", "#e4e4e4"],
   ];
-  const estado = { janela: "12m", instrumentos: ["DEB", "CRI", "CRA"], incentivada: "", base: "registro" };
+  const estado = { janela: "12m", instrumentos: [...ORDEM], incentivada: "", base: "registro" };
   const graficos = {};
 
   const $ = (id) => document.getElementById(id);
@@ -208,6 +213,8 @@
       `Volume é o valor registrado na oferta primária (secundária fica fora), não o efetivamente distribuído. `
       + `Data de ${porRegistro ? "registro na CVM" : "encerramento da oferta"}. `
       + `Quem ficou com o papel só existe em oferta encerrada e cobre ${bi(k.volume_com_quebra)} da janela. `
+      + `O total de "renda fixa" da ANBIMA (e da Moody's, que usa a ANBIMA) é maior porque soma também FIDC e CPR-F, `
+      + `conta pela data de encerramento e inclui operações de debênture que não estão no arquivo de ofertas da CVM. `
       + `Fonte: CVM (Dados Abertos) e Itaú BBA`;
 
     $("titulo-serie").textContent = porRegistro ? "Volume registrado por mês" : "Volume encerrado por mês";
@@ -217,7 +224,7 @@
     grafSetores(d.setores, temAnterior);
     grafDistribuicao(d.distribuicao);
     const nc = d.setores.find((s) => s.setor === "Não classificado");
-    $("sub-setores").textContent = "R$ bilhões · setor de quem deve (em CRI/CRA, o devedor)"
+    $("sub-setores").textContent = "R$ bilhões · setor de quem deve (em CRI, CRA, CDCA e CR, o devedor)"
       + (temAnterior ? " · contorno = mesmo período do ano anterior" : "")
       + (nc ? ` · ${n1(nc.share)}% do volume sem setor na taxonomia` : "");
     ["fonte-primario-mes", "fonte-primario-setor", "fonte-primario-dist", "fonte-emissores",
@@ -229,7 +236,7 @@
       <tr><td class="col-texto">${esc(e.nome)}${e.estreante ? etiqueta("estreante") : ""}</td>
         <td class="col-texto muted small">${esc(e.grupo || "—")}</td>
         <td class="col-texto">${esc(e.setor)}</td>
-        <td class="muted small">${esc(e.instrumentos.join(", "))}</td>
+        <td class="muted small">${esc(e.instrumentos.map(SIGLA).join(", "))}</td>
         <td class="${e.ofertas > 2 ? "cell-abertura" : ""}">${e.ofertas}</td>
         <td><b>${mn(e.volume)}</b></td>
         <td class="${(e.pct_banco ?? 0) >= 50 ? "cell-abertura" : ""}">${pct(e.pct_banco)}</td>
@@ -267,7 +274,7 @@
 
     corpo("tabela-balanco", d.balanco, (o) => `
       <tr title="${esc(o.setor)}"><td>${dma(o.data)}</td><td class="col-texto">${quemDeve(o)}</td>
-        <td>${o.instrumento}</td><td><b>${mn(o.valor)}</b></td>
+        <td>${SIGLA(o.instrumento)}</td><td><b>${mn(o.valor)}</b></td>
         <td class="cell-abertura">${pct(o.pct_banco)}</td><td class="col-texto">${esc(o.lider)}</td></tr>`,
       "Nenhuma oferta encerrada com banco majoritário na janela.");
 
@@ -281,7 +288,7 @@
       <tr title="${esc(o.status)} · líder ${esc(o.lider)} · público ${esc(o.publico)}">
         <td>${dma(o.data_registro)}</td><td>${o.dias ?? "—"}</td>
         <td class="col-texto">${quemDeve(o)}</td><td class="col-texto muted small">${esc(o.setor)}</td>
-        <td>${o.instrumento}</td><td>${mn(o.valor)}</td></tr>`,
+        <td>${SIGLA(o.instrumento)}</td><td>${mn(o.valor)}</td></tr>`,
       "Nenhuma oferta na fila com estes filtros.");
   }
 
@@ -307,7 +314,7 @@
       const marcado = estado.instrumentos.includes(i);
       if (marcado && estado.instrumentos.length === 1) return;
       estado.instrumentos = marcado ? estado.instrumentos.filter((x) => x !== i)
-        : [...estado.instrumentos, i].sort((a, c) => ["DEB", "CRI", "CRA"].indexOf(a) - ["DEB", "CRI", "CRA"].indexOf(c));
+        : [...estado.instrumentos, i].sort((a, c) => ORDEM.indexOf(a) - ORDEM.indexOf(c));
       b.classList.toggle("active", !marcado);
       if (!marcado && window.registrarUso) registrarUso("filtro", "Instrumento: " + b.textContent.trim());
       carregar();

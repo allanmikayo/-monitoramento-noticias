@@ -37,7 +37,7 @@ from ..models import OfertaCVM, OfertaCVMClassificacao, OfertaCVMStatus
 from .coleta import ROTULO_INSTRUMENTO, STATUS_ABERTO, STATUS_MORTO
 
 JANELAS = ("12m", "24m", "ano", "tudo")
-INSTRUMENTOS = tuple(ROTULO_INSTRUMENTO)          # DEB, CRI, CRA
+INSTRUMENTOS = tuple(ROTULO_INSTRUMENTO)          # DEB, NC, NP, CRI, CRA, CDC, CR
 INCENTIVADA = ("", "S", "N")                       # "" = todas
 BASES_DATA = ("registro", "encerramento")
 

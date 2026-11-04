@@ -1511,6 +1511,29 @@ captou" e "movimentos" (o filtro de incentivadas ficou).
   `spreads_daily` também refaz o casamento depois de gravar as
   características.
 
+### Mercado Primário: mais instrumentos + conciliação com ANBIMA/Moody's — 04/11/2026
+
+Pedido do Allan: incluir Notas Comerciais, Notas Promissórias, Letras
+Financeiras, CDCA e CR, e entender por que a Moody's fala em R$ 289 bi no
+1S26 (R$ 304 bi no 1S25).
+- `coleta.INSTRUMENTOS` ganhou NC, NP, CDC (CDCA; a coluna é String(3)),
+  CR e "Debêntures Conversíveis" (vira DEB). **Letra Financeira não existe
+  no arquivo da CVM** (0 linhas em 15.080). `EMISSOR_DEVEDOR` (DEB, NC, NP):
+  setor pelo CNPJ do emissor; CDCA e CR como CRI/CRA (devedor no texto).
+  Instrumento que entra na coleta pela 1ª vez é carga inicial (não vai para
+  a trilha de novidades). Início também passou a tirar a oferta secundária.
+- Conciliação (rodada de diagnóstico no Actions, arquivo da CVM de 04/11):
+  o R$ 289 bi da Moody's é o "renda fixa" da ANBIMA (R$ 288,8 bi; 1S25
+  R$ 304,4 bi = DEB 193,1 + NC 30,6 + CRI 24,1 + CRA 14,4 + FIDC 41,0 +
+  CR 1,2). Inclui FIDC e CPR-F, que a aba não tem, e conta pela data de
+  ENCERRAMENTO (notas comerciais de jun/26 batem exatas: 9,8 bi/23 ops).
+  CVM por encerramento, 1S26: DEB 148,0 (235) vs ANBIMA 169,8 (278); NC
+  28,6 vs 27,1; CRI 22,2 vs 20,3; CRA 7,3 vs 7,1; FIDC 65,7 vs 53,1; CPR-F
+  11,0 vs 11,0; CR 0,4 vs 0,4. As debêntures a mais da ANBIMA (≈R$ 22 bi,
+  43 ops no 1S26; ≈R$ 4 bi no 1S25) não estão no arquivo de ofertas da CVM.
+  "Outros títulos de securitização" (R$ 29,5 bi no 1S26 na CVM) não
+  aparece na tabela da ANBIMA. Nota explicando isso no rodapé da aba.
+
 ### Revisão das coletas + FastAPI atualizado — 29/10/2026
 
 Pedido do Allan: atualizar o FastAPI e ver o que mais estava quebrado nas

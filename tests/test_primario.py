@@ -377,3 +377,46 @@ def test_aba_exige_login():
 
     r = TestClient(A.app).get("/primario", follow_redirects=False)
     assert r.status_code == 303 and r.headers["location"] == "/login"
+
+
+# --------------------- instrumentos novos (04/11/2026) ----------------------
+
+def _com_instrumento(texto: str, chave_origem: str, nova_chave: str, valor_mobiliario: str) -> str:
+    """Copia a linha `chave_origem` da amostra trocando chave e Valor_Mobiliario."""
+    linhas = texto.splitlines(keepends=True)
+    cab = linhas[0].rstrip("\r\n").split(";")
+    i_req, i_vm = cab.index("Numero_Requerimento"), cab.index("Valor_Mobiliario")
+    for ln in linhas[1:]:
+        campos = ln.rstrip("\r\n").split(";")
+        if campos[i_req] == chave_origem:
+            campos[i_req], campos[i_vm] = nova_chave, valor_mobiliario
+            return texto + ";".join(campos) + "\r\n"
+    raise AssertionError("linha de origem não achada")
+
+
+def test_notas_comerciais_cdca_e_cr_entram_com_sigla_de_3_letras():
+    texto = _csv()
+    for k, vm in (("2001", "Notas Comerciais"), ("2002", "Notas Promissórias"),
+                  ("2003", "Certificado de Direitos Creditórios do Agronegócio"),
+                  ("2004", "Certificados de Recebíveis"), ("2005", "Debêntures Conversíveis"),
+                  ("2006", "Cotas de FIDC"), ("2007", "Cédula de Produto Rural Financeira")):
+        texto = _com_instrumento(texto, "1001", k, vm)
+    por = {o.chave: o.dados["instrumento"] for o in coleta.parse(texto)}
+    assert [por.get(k) for k in ("2001", "2002", "2003", "2004", "2005", "2006", "2007")] == \
+        ["NC", "NP", "CDC", "CR", "DEB", None, None]
+    assert all(len(i) <= 3 for i in coleta.ROTULO_INSTRUMENTO)
+    assert coleta.ROTULO_INSTRUMENTO["CDC"] == "CDCA"
+
+
+def test_instrumento_que_entra_na_coleta_nao_vira_novidade(db):
+    """Notas comerciais antigas, na primeira rodada que as lê, são carga
+    inicial; uma nota comercial nova na rodada seguinte já é novidade."""
+    coleta.coletar(db, conteudo_zip=_zip())                      # só DEB/CRI/CRA
+    com_nc = _com_instrumento(_csv(), "1001", "2001", "Notas Comerciais")
+    resumo = coleta.coletar(db, conteudo_zip=_zip(com_nc))
+    assert resumo["novas"] == 1 and db.query(OfertaCVMStatus).count() == 0
+    mais = _com_instrumento(com_nc, "1001", "2002", "Notas Comerciais")
+    coleta.coletar(db, conteudo_zip=_zip(mais))
+    assert [s.numero_requerimento for s in db.query(OfertaCVMStatus)] == ["2002"]
+    serie = queries.painel(db, janela="tudo")["serie"]
+    assert sum(m["NC"] for m in serie) > 0          # a série mensal ganhou a coluna NC
