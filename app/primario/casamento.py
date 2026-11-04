@@ -290,10 +290,14 @@ def recalcular(db: Session) -> dict:
             for o in ofertas]
     db.execute(delete(OfertaCVMAtivo))
     db.execute(delete(OfertaCVMClassificacao))
-    for k in range(0, len(ligacoes), 2000):
-        db.execute(insert(OfertaCVMAtivo), ligacoes[k:k + 2000])
-    for k in range(0, len(classes), 2000):
-        db.execute(insert(OfertaCVMClassificacao), classes[k:k + 2000])
+    # Um INSERT com várias linhas por lote (`.values(lista)`), não
+    # executemany: no Supabase o executemany ia linha a linha e a gravação
+    # de ~13 mil linhas levava 11 min (04/11/2026, com FIDC na base).
+    for tabela, linhas in ((OfertaCVMAtivo.__table__, ligacoes),
+                           (OfertaCVMClassificacao.__table__, classes)):
+        for k in range(0, len(linhas), 1000):
+            if linhas[k:k + 1000]:
+                db.execute(insert(tabela).values(linhas[k:k + 1000]))
     db.commit()
     marca("gravar")
 
