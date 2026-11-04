@@ -41,7 +41,7 @@ jobs:
       # com mensagem clara, em vez de voltar em silencio pro binario que
       # causava o segfault.
       PSYCOPG_IMPL: python
-    timeout-minutes: 20
+    timeout-minutes: 35
     steps:
       - name: Baixar o codigo
         uses: actions/checkout@v5

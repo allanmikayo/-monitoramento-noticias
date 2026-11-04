@@ -282,6 +282,12 @@ def recalcular(db: Session) -> dict:
     classes = [classificar(o, tax_cnpj, tax_sec, tax_nome) for o in ofertas]
     marca("classificar")
 
+    # Fotografa os campos das estatísticas ANTES do commit: depois dele o
+    # SQLAlchemy expira os objetos e cada `o.status` vira um SELECT. Com
+    # 10 mil ofertas (FIDC entrou em 04/11/2026) isso passava de 13 min e o
+    # job era cortado pelo teto do workflow.
+    foto = [(o.numero_requerimento, o.instrumento, o.status, o.valor_total, o.data_registro)
+            for o in ofertas]
     db.execute(delete(OfertaCVMAtivo))
     db.execute(delete(OfertaCVMClassificacao))
     for k in range(0, len(ligacoes), 2000):
@@ -292,21 +298,20 @@ def recalcular(db: Session) -> dict:
     marca("gravar")
 
     casadas = {x["numero_requerimento"]: x["confianca"] for x in ligacoes}
-    debs_validas = [o for o in debs if (o.valor_total or 0) > 0 and o.data_registro]
-    por_conf = collections.Counter(casadas[o.numero_requerimento] for o in debs_validas
-                                   if o.numero_requerimento in casadas)
-    vol_total = sum(o.valor_total or 0 for o in debs_validas)
-    vol_casado = sum(o.valor_total or 0 for o in debs_validas if o.numero_requerimento in casadas)
+    debs_validas = [f for f in foto if f[1] == "DEB" and (f[3] or 0) > 0 and f[4]]
+    por_conf = collections.Counter(casadas[f[0]] for f in debs_validas if f[0] in casadas)
+    vol_total = sum(f[3] or 0 for f in debs_validas)
+    vol_casado = sum(f[3] or 0 for f in debs_validas if f[0] in casadas)
     classificadas = collections.Counter(
-        (o.instrumento, c["setor"] != NAO_CLASSIFICADO) for o, c in zip(ofertas, classes))
+        (f[1], c["setor"] != NAO_CLASSIFICADO) for f, c in zip(foto, classes))
     vol_inst = collections.Counter()
     vol_cls = collections.Counter()
     origens = collections.Counter(c["origem"] for c in classes if c["origem"])
-    for o, c in zip(ofertas, classes):
-        if o.status in ("Oferta Encerrada",) and (o.valor_total or 0) > 0:
-            vol_inst[o.instrumento] += o.valor_total
+    for f, c in zip(foto, classes):
+        if f[2] == "Oferta Encerrada" and (f[3] or 0) > 0:
+            vol_inst[f[1]] += f[3]
             if c["setor"] != NAO_CLASSIFICADO:
-                vol_cls[o.instrumento] += o.valor_total
+                vol_cls[f[1]] += f[3]
     return {
         "debentures_registradas": len(debs_validas),
         "debentures_casadas": sum(por_conf.values()),
