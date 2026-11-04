@@ -116,7 +116,7 @@ jobs:
         # no Windows do Allan nao ha libpq do sistema, e la o wheel binario e
         # a unica opcao que funciona. A troca vale so aqui, no runner Linux.
         run: |
-          pip install -r requirements.txt
+          pip install -r requirements.txt -r requirements-coleta.txt
           pip uninstall -y psycopg-binary || true
           python -c "import psycopg" \
             || (sudo apt-get update -qq && sudo apt-get install -y -qq libpq5)

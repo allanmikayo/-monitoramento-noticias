@@ -1,0 +1,6 @@
+# Dependências SÓ do robô de coleta (GitHub Actions e uso local), fora do
+# requirements.txt de propósito: a Vercel instala o requirements.txt, e com o
+# Patchright o deploy do site falhava (03-04/11/2026).
+# Patchright: Playwright sem as marcas de automação, usado só no coletor da
+# Moody's Local (verificação da Cloudflare; coleta autorizada pela Moody's).
+patchright>=1.55

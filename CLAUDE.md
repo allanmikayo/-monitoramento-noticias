@@ -1695,6 +1695,17 @@ fontes por HTTP direto, sem navegador:
   Oliveira Trust (`/scot/Arquivos/...pdf`) e Pentágono
   (`DownloadBinario?id=N`, abre sem sessão) são estáveis — conferido.
 
+- **04/11/2026 (2) — deploy da Vercel quebrado e agenda do GitHub**: todo
+  deploy da Vercel falhava desde 3a37fa5 (03/11, Moody's): `patchright` no
+  `requirements.txt`, que a Vercel instala. Foi para
+  `requirements-coleta.txt` (instalado só em `scrape.yml`,
+  `diagnostico_fontes.yml` e no `Abrir Monitoramento.bat`). E o
+  `schedule:` do GitHub caiu para ~14 execuções/dia no repositório
+  inteiro (varredura ~4/dia). `/api/cron-trigger?job=auto`: um cronjob a
+  cada 5 min no cron-job.org e o servidor decide o que disparar
+  (`_jobs_devidos`: notícias a cada 15 min, B3 a cada 30 no pregão,
+  assembleias 08h45/13h45/19h45). Passo a passo: `DEPLOY.md`, Parte 5.
+
 Mapa original da investigação:
 
 **Vórtx -- API JSON pública (`apis.vortx.com.br/vxsite/api/`)**, sem

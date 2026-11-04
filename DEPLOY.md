@@ -207,24 +207,27 @@ O `schedule:` do GitHub Actions continua ativo como reserva (roda 1x por
 hora, caso o cron-job.org fique fora do ar por algum motivo) — não
 precisa mexer nele.
 
-### Agentes fiduciários 3x ao dia (04/11/2026)
+### Um só cronjob para tudo (04/11/2026)
 
-O `schedule:` do GitHub chegou a atrasar 4 a 6 horas em 11/2026, então a
-coleta de documentos dos agentes fiduciários (Vórtx, Oliveira Trust,
-Pentágono) também deve ser disparada pelo cron-job.org:
+Em 11/2026 o `schedule:` do GitHub passou a rodar a varredura de notícias
+~4 vezes por dia (deveria ser ~96), o negócio a negócio da B3 1-2 vezes e
+os agentes fiduciários com horas de atraso. Agora basta UM cronjob, que
+chama o site a cada 5 minutos; o próprio site decide o que está na hora
+(notícias a cada 15 min, B3 a cada 30 min no pregão, agentes fiduciários
+às 08h45, 13h45 e 19h45):
 
-1. No cron-job.org, clique em **"Create cronjob"** (ou duplique o job de
-   notícias).
+1. No cron-job.org, edite o cronjob que já existe (ou crie um).
 2. **URL**:
    ```
-   https://monitoramento-noticias.vercel.app/api/cron-trigger?job=assembleias
+   https://monitoramento-noticias.vercel.app/api/cron-trigger?job=auto
    ```
-3. **Execution schedule** → "Custom": todos os dias, às **08:47, 13:47 e
-   19:47** (fuso America/Sao_Paulo).
-4. **Advanced**: método `POST` e o mesmo header `X-Cron-Secret` do job de
-   notícias.
-5. Salve e clique em "Test run": na aba **Actions** do GitHub deve aparecer
-   uma execução de "Agentes fiduciários (3x ao dia)".
+3. **Execution schedule**: "Every 5 minutes".
+4. **Advanced**: método `POST` e o header `X-Cron-Secret` = o valor de
+   `CRON_SECRET` da Vercel.
+5. Salve e clique em "Test run": a resposta deve ser algo como
+   `{"dispatched": ["news"], "errors": {}}` (ou uma lista vazia, se não
+   for hora de nada). Se o cronjob antigo de `?job=b3_trades` existir,
+   pode apagar.
 
 ---
 

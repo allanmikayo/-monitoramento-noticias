@@ -110,3 +110,19 @@ def test_vortx_link_para_tela():
     assert vortx.link_para_tela(A) == "/api/documentos/7/abrir"
     A.url = "https://x/f.pdf"
     assert vortx.link_para_tela(A) == "https://x/f.pdf"
+
+
+def test_cron_auto_jobs_devidos():
+    from datetime import datetime
+    from app.app import _BRT, _jobs_devidos
+    d = lambda h, m, dia=4: datetime(2026, 11, dia, h, m, tzinfo=_BRT)  # 04/11/2026 = quarta
+    assert _jobs_devidos(d(8, 47)) == ["news", "assembleias"]
+    assert _jobs_devidos(d(8, 50)) == []
+    assert _jobs_devidos(d(10, 2)) == ["news", "b3_trades"]
+    assert _jobs_devidos(d(10, 17)) == ["news"]
+    assert _jobs_devidos(d(10, 7)) == []
+    assert _jobs_devidos(d(10, 2, dia=7)) == ["news"]  # sábado: sem B3
+    # chamado a cada 5 min, em qualquer offset, cada job sai uma vez por janela
+    for off in range(5):
+        dia = [j for m in range(off, 60, 5) for j in _jobs_devidos(d(13, m))]
+        assert dia.count("news") == 4 and dia.count("b3_trades") == 2 and dia.count("assembleias") == 1

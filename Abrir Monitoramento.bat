@@ -64,7 +64,7 @@ rem no meio do caminho.
 python -m pip install --upgrade pip >nul 2>nul
 echo Verificando dependencias... isso pode demorar alguns minutos na
 echo primeira vez.
-pip install -r requirements.txt -q
+pip install -r requirements.txt -r requirements-coleta.txt -q
 if errorlevel 1 (
     echo ERRO ao instalar as dependencias. Veja a mensagem acima.
     pause

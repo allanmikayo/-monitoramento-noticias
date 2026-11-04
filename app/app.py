@@ -736,6 +736,26 @@ def _b3_market_aberto_agora() -> bool:
     return _B3_MARKET_OPEN_HOUR <= agora.hour < _B3_MARKET_CLOSE_HOUR
 
 
+# `?job=auto` (04/11/2026): UM só cronjob no cron-job.org, a cada 5 min, e o
+# servidor decide o que está na hora. O `schedule:` do GitHub passou a rodar
+# a varredura de notícias ~4 vezes por dia (deveria ser ~96) e o negócio a
+# negócio da B3 ~1-2. Janelas de 5 min, então funciona com o cron chamando
+# em qualquer minuto, desde que de 5 em 5.
+_AUTO_ASSEMBLEIAS = {8, 13, 19}  # 08h45, 13h45 e 19h45 BRT
+
+
+def _jobs_devidos(agora: datetime) -> list[str]:
+    m = agora.minute
+    jobs = []
+    if m % 15 < 5:
+        jobs.append("news")
+    if m % 30 < 5 and agora.weekday() < 5 and _B3_MARKET_OPEN_HOUR <= agora.hour < _B3_MARKET_CLOSE_HOUR:
+        jobs.append("b3_trades")
+    if agora.hour in _AUTO_ASSEMBLEIAS and 45 <= m < 50:
+        jobs.append("assembleias")
+    return jobs
+
+
 @app.post("/api/cron-trigger")
 def api_cron_trigger(
     job: str = "news",
@@ -753,8 +773,16 @@ def api_cron_trigger(
         raise HTTPException(status_code=403, detail="Segredo inválido ou não configurado (CRON_SECRET)")
     if not config.CLOUD_MODE:
         raise HTTPException(status_code=400, detail="Só funciona em modo nuvem (GITHUB_TOKEN/GITHUB_REPO)")
+    if job == "auto":
+        acionados, erros = [], {}
+        for j in _jobs_devidos(datetime.now(_BRT)):
+            ok, err = _dispatch_github_workflow(_CRON_JOBS[j])
+            (acionados.append(j) if ok else erros.__setitem__(j, err))
+        if erros and not acionados:
+            raise HTTPException(status_code=502, detail=f"Falha ao acionar o GitHub Actions: {erros}")
+        return {"dispatched": acionados, "errors": erros}
     if job not in _CRON_JOBS:
-        raise HTTPException(status_code=400, detail=f"job inválido -- use um de {list(_CRON_JOBS)}")
+        raise HTTPException(status_code=400, detail=f"job inválido -- use auto ou um de {list(_CRON_JOBS)}")
 
     if job == "b3_trades" and not _b3_market_aberto_agora():
         return {"dispatched": False, "reason": "fora do horário de pregão (9h-18h, seg-sex)"}
