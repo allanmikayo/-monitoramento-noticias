@@ -1286,3 +1286,40 @@ a.ic-link:hover { border-color: #ffb27f; box-shadow: 0 3px 12px rgba(0,0,0,.05);
 /* O padrão `.chart-card canvas { margin-top: 10px }` somava espaço entre o
    título e o gráfico; aqui o título já tem o próprio respiro. */
 .cl-area canvas { margin-top: 0; }
+
+/* --------------------------------------------------------------------- */
+/* Topo em telas menores (10/11/2026, QA). Antes: em notebook (1280-1440  */
+/* px) "Mercado Secundário", "Mercado Primário" e "Cap. Líquida" quebravam */
+/* em duas linhas cada; no celular o menu não encolhia e deixava a página */
+/* inteira com ~990 px, rolando para o lado. Agora o rótulo nunca quebra  */
+/* e, abaixo de 760 px, o menu vira uma faixa própria que rola sozinha.   */
+/* --------------------------------------------------------------------- */
+.topbar nav a { white-space: nowrap; }
+/* o topo tem no máximo 1280 px em qualquer tela, então o espaçamento vale sempre */
+.topbar-inner { gap: 20px; }
+.topbar nav { gap: 16px; }
+.user-box { white-space: nowrap; }
+@media (max-width: 1240px) {
+  .topbar nav a { font-size: 0.8rem; }
+  .topbar nav { gap: 13px; }
+}
+@media (max-width: 1080px) {
+  .topbar-inner { flex-wrap: wrap; row-gap: 8px; }
+  .topbar nav { order: 3; flex: 1 0 100%; overflow-x: auto; scrollbar-width: none; padding-bottom: 2px; }
+  .topbar nav::-webkit-scrollbar { display: none; }
+  .user-box { margin-left: auto; }
+  .ic-cab { flex-wrap: wrap; }
+}
+@media (max-width: 760px) {
+  .topbar-inner { padding: 10px 16px; }
+  .container { padding: 16px; }
+  /* grades de dois cartões: um embaixo do outro, sem largura mínima maior que a tela */
+  .emissor-duplo, .movers-grid { grid-template-columns: minmax(0, 1fr); }
+  .window-tabs { flex-wrap: wrap; }
+  /* tabelas largas rolam dentro do cartão, não a página */
+  .chart-card { overflow-x: auto; }
+  .container > table, .diagnostic-panel > table { display: block; overflow-x: auto; }
+  .ic-cab { flex-wrap: wrap; }
+  .ic-grafico { min-width: 0; overflow: hidden; }
+  .ic-grafico canvas { max-width: 100%; }
+}

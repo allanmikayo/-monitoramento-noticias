@@ -1809,6 +1809,31 @@ ticker funciona por GET simples:
   códigos). `BuscaAtivoTextBox=TICKER` filtra; o filtro de emissor é
   ignorado.
 
+### QA de 10/11/2026: relógio das coletas, topo responsivo, testes
+
+- **Coleta rara**: de 03 a 10/11 a varredura de notícias rodou 27 vezes
+  (~4/dia, pedida a cada 15 min) e o negócio a negócio da B3 8 vezes. O
+  `schedule:` do GitHub não entrega cadência curta e o cron-job.org
+  (`/api/cron-trigger?job=auto`) não estava configurado desde 04/11.
+  Novo `relogio.yml` + `scripts/relogio.py`: uma execução fica de pé ~5h45 e
+  aciona `scrape.yml` a cada 15 min e `b3_trades.yml` a cada 30 min no
+  pregão (dia útil, 9h-18h BRT), por `workflow_dispatch` com o
+  `GITHUB_TOKEN` do próprio workflow (`permissions: actions: write`). O
+  `schedule:` do relógio (de 2 em 2 h) só garante que haja uma execução na
+  fila para assumir quando a atual terminar. O cron-job.org, se religado,
+  convive (os workflows têm `concurrency`).
+- **Ratings vazios intermitentes** (S&P em 5 rodadas de 07-08/11; S&P e
+  Moody's na das 12h44 de 10/11): o diagnóstico logo depois trouxe as quatro
+  fontes cheias. É o site, não o coletor; com a varredura a cada 15 min uma
+  rodada vazia só atrasa até a seguinte. Nada mudado no código.
+- **Topo**: os rótulos do menu não quebram mais em duas linhas; abaixo de
+  1080 px o menu vira uma faixa própria que rola sozinha (antes deixava a
+  página com ~990 px no celular). Abaixo de 760 px as grades de dois cartões
+  empilham e as tabelas largas rolam dentro do cartão. Conferido de 390 a
+  1920 px em todas as abas.
+- Os dois testes do drill-down até ticker passaram a mandar o emissor, como
+  a tela faz desde 11/09.
+
 ## Regras a manter
 
 1. **Nunca** trocar `store.upsert_article` para sobrescrever corpo/título

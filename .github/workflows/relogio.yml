@@ -1,0 +1,37 @@
+name: Relógio das coletas frequentes
+
+# Aciona a varredura de notícias a cada 15 min e o negócio a negócio da B3 a
+# cada 30 min no pregão -- ver scripts/relogio.py (10/11/2026). Existe porque
+# o `schedule:` do GitHub entrega ~4 execuções por dia em vez de 96, e o
+# relay do cron-job.org não está configurado.
+#
+# Cada execução fica de pé ~5h45. Os horários abaixo só garantem que sempre
+# haja uma execução na fila para assumir quando a atual terminar; o
+# `concurrency` impede duas ao mesmo tempo (sem cancelar a que está rodando).
+on:
+  schedule:
+    - cron: "13 */2 * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: relogio
+  cancel-in-progress: false
+
+permissions:
+  actions: write
+  contents: read
+
+jobs:
+  relogio:
+    runs-on: ubuntu-latest
+    timeout-minutes: 355
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+      - run: pip install -q requests
+      - name: Disparar as coletas na cadência certa
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: python -m scripts.relogio

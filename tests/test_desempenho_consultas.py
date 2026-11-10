@@ -435,7 +435,10 @@ def test_drill_down_ate_o_ticker_traz_nome_e_grupo(db_setor):
     from app.spreads import queries
 
     r = queries.spread_por_setor(db_setor, "IPCA + Incentivadas", dias_comparacao=1,
-                                 nivel="ticker", setor="Energia Elétrica", subsetor="Geração")
+                                 nivel="ticker", setor="Energia Elétrica", subsetor="Geração",
+                                 emissor="Papel ENER12")
+    # Desde 11/09/2026 o nível de ticker fica abaixo do de emissor: a tela
+    # sempre manda o emissor aberto (static/spreads.js).
     assert len(r["linhas"]) == 1
     linha = r["linhas"][0]
     assert linha["rotulo"] == "ENER12"
@@ -455,7 +458,7 @@ def test_papel_sem_taxonomia_aparece_em_vez_de_sumir(db_setor):
     # e o drill-down até ele também funciona
     r = queries.spread_por_setor(db_setor, "IPCA + Incentivadas", dias_comparacao=1,
                                  nivel="ticker", setor=SEM_CLASSIFICACAO,
-                                 subsetor=SEM_CLASSIFICACAO)
+                                 subsetor=SEM_CLASSIFICACAO, emissor="Papel SEMTX9")
     assert [l["rotulo"] for l in r["linhas"]] == ["SEMTX9"]
 
 
