@@ -157,3 +157,25 @@ jobs:
           done
           echo "::error::varredura falhou nas 3 tentativas"
           exit 1
+
+      # HUB DO ITAÚ (24/11/2026). Depois da varredura, gera os JSONs de
+      # Notícias, Início e Repositório e publica no Dashboard Data Feeder
+      # (ver scripts/export_hub_frequente.py). Roda mesmo se a varredura cair
+      # (o que já está no banco continua valendo) e nunca deixa o job vermelho
+      # por causa do hub. Sem o secret DASHBOARD_FEEDER_API_KEY, só avisa.
+      - name: Publicar Noticias, Inicio e Repositorio no hub do Itau
+        if: always()
+        continue-on-error: true
+        timeout-minutes: 8
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          DASHBOARD_FEEDER_URL: ${{ vars.DASHBOARD_FEEDER_URL }}
+          DASHBOARD_FEEDER_PROJECT_ID: ${{ vars.DASHBOARD_FEEDER_PROJECT_ID }}
+          DASHBOARD_FEEDER_API_KEY: ${{ secrets.DASHBOARD_FEEDER_API_KEY }}
+        run: |
+          if [ -z "$DASHBOARD_FEEDER_API_KEY" ] || [ -z "$DASHBOARD_FEEDER_PROJECT_ID" ]; then
+            echo "::notice::Feeder ainda nao configurado; publicacao pulada."
+            exit 0
+          fi
+          python -m scripts.export_hub_frequente --saida saida_hub
+          python -m scripts.publicar_feeder saida_hub/*.json

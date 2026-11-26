@@ -128,3 +128,26 @@ jobs:
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
         run: python -m scripts.casar_ofertas
+
+      # HUB DO ITAÚ (24/11/2026). Depois da captura, gera os JSONs das abas
+      # Spreads e Mercado Secundário e publica no Dashboard Data Feeder; o
+      # dashboard do banco lê esses arquivos (ver scripts/export_*_dashboard.py).
+      # Enquanto o secret DASHBOARD_FEEDER_API_KEY não existir, o passo só
+      # avisa e sai sem erro -- a captura acima não depende dele.
+      - name: Publicar abas Spreads e Mercado Secundario no hub do Itau
+        if: always()
+        continue-on-error: true
+        timeout-minutes: 20
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          DASHBOARD_FEEDER_URL: ${{ vars.DASHBOARD_FEEDER_URL }}
+          DASHBOARD_FEEDER_PROJECT_ID: ${{ vars.DASHBOARD_FEEDER_PROJECT_ID }}
+          DASHBOARD_FEEDER_API_KEY: ${{ secrets.DASHBOARD_FEEDER_API_KEY }}
+        run: |
+          if [ -z "$DASHBOARD_FEEDER_API_KEY" ] || [ -z "$DASHBOARD_FEEDER_PROJECT_ID" ]; then
+            echo "::notice::Feeder ainda nao configurado (DASHBOARD_FEEDER_PROJECT_ID / DASHBOARD_FEEDER_API_KEY); publicacao pulada."
+            exit 0
+          fi
+          python -m scripts.export_spreads_dashboard --saida saida_dashboard
+          python -m scripts.export_mercado_secundario_dashboard --saida saida_dashboard
+          python -m scripts.publicar_feeder saida_dashboard/*.json
