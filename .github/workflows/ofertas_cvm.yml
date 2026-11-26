@@ -107,7 +107,7 @@ jobs:
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           DASHBOARD_FEEDER_URL: ${{ vars.DASHBOARD_FEEDER_URL }}
-          DASHBOARD_FEEDER_PROJECT_ID: ${{ vars.DASHBOARD_FEEDER_PROJECT_ID }}
+          DASHBOARD_FEEDER_PROJECT_ID: ${{ vars.DASHBOARD_FEEDER_PROJECT_ID || secrets.DASHBOARD_FEEDER_PROJECT_ID }}
           DASHBOARD_FEEDER_API_KEY: ${{ secrets.DASHBOARD_FEEDER_API_KEY }}
         run: |
           if [ -z "$DASHBOARD_FEEDER_API_KEY" ] || [ -z "$DASHBOARD_FEEDER_PROJECT_ID" ]; then
