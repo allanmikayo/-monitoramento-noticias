@@ -87,7 +87,7 @@ def _avisar_falha(base: str, chave: str, caminho: str, corpo: dict) -> None:
 
 def main(argv: list[str]) -> int:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
-    base = os.environ.get("DASHBOARD_FEEDER_URL", URL_PADRAO).rstrip("/")
+    base = (os.environ.get("DASHBOARD_FEEDER_URL") or URL_PADRAO).rstrip("/")
     projeto = os.environ.get("DASHBOARD_FEEDER_PROJECT_ID")
     chave = os.environ.get("DASHBOARD_FEEDER_API_KEY")
     if not projeto or not chave:
