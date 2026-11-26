@@ -46,8 +46,13 @@ def _post(base: str, chave: str, caminho: str, corpo: dict | None = None) -> dic
         method="POST",
         headers={"Authorization": f"Bearer {chave}", "Content-Type": "application/json"},
     )
-    with urlopen(req, timeout=60) as resp:
-        return json.load(resp)
+    try:
+        with urlopen(req, timeout=60) as resp:
+            return json.load(resp)
+    except HTTPError as erro:
+        # A mensagem do Feeder diz o motivo (chave, projeto, permissão).
+        detalhe = erro.read().decode("utf-8", "replace")[:300]
+        raise RuntimeError(f"HTTP {erro.code} em {caminho}: {detalhe}") from erro
 
 
 def publicar(arquivo: Path, base: str, projeto: str, chave: str) -> int:
@@ -88,8 +93,10 @@ def _avisar_falha(base: str, chave: str, caminho: str, corpo: dict) -> None:
 def main(argv: list[str]) -> int:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
     base = (os.environ.get("DASHBOARD_FEEDER_URL") or URL_PADRAO).rstrip("/")
-    projeto = os.environ.get("DASHBOARD_FEEDER_PROJECT_ID")
-    chave = os.environ.get("DASHBOARD_FEEDER_API_KEY")
+    # strip(): espaço ou quebra de linha colados junto com o valor no cadastro
+    # do segredo viram parte da chave e o Feeder responde 401.
+    projeto = (os.environ.get("DASHBOARD_FEEDER_PROJECT_ID") or "").strip()
+    chave = (os.environ.get("DASHBOARD_FEEDER_API_KEY") or "").strip()
     if not projeto or not chave:
         logger.error("Faltam DASHBOARD_FEEDER_PROJECT_ID e/ou DASHBOARD_FEEDER_API_KEY.")
         return 2
