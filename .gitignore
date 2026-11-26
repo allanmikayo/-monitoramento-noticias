@@ -43,3 +43,14 @@ data/meta_*.txt
 .env*
 !.env.example
 monitoramento-noticias.txt
+
+# Hub do Itaú (24/11/2026): cópia do repositório do Raul (privado), saída do
+# exportador e amostra local -- nada disso vai para este repositório público.
+research-dashboards-main.zip
+_hub_itau/
+saida_dashboard/
+saida_hub/
+saida_primario/
+ms_amostra_hub.json
+hub_amostra_2.json
+hub_amostra_3.json

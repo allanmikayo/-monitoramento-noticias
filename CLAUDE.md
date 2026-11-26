@@ -1834,6 +1834,151 @@ ticker funciona por GET simples:
 - Os dois testes do drill-down até ticker passaram a mandar o emissor, como
   a tela faz desde 11/09.
 
+### Migração para o hub do Itaú: aba Spreads — 24/11/2026
+
+O banco usa o "Research Dashboard Hub" do Raul (repositório privado
+`rTaiShan/research-dashboards`, React + TypeScript, dentro do portal Smart).
+Lá o site é só tela: não tem servidor nem banco, lê JSONs publicados no
+Mindassets pelo Dashboard Data Feeder. A COLETA continua aqui (GitHub Actions
++ Postgres na Oracle); o que muda é que os robôs passam a gerar e publicar os
+JSONs no fim.
+
+- `scripts/export_spreads_dashboard.py`: gera a matriz papel x dia por classe
+  (`spreads-<ipca|cdi>-recente.json` com os últimos 130 pregões e
+  `-anterior.json` com os 130 de antes), o cadastro (`spreads-cadastro.json`) e
+  a evolução sem recorte (`spreads-serie.json`). Só papel PRECIFICADO tem
+  spread; exclusões manuais ficam de fora. ~2 MB por arquivo de matriz.
+- `scripts/publicar_feeder.py`: sobe os arquivos pelo protocolo do Feeder
+  (inicializa, PUT assinado, completa). Precisa de `DASHBOARD_FEEDER_PROJECT_ID`
+  (variável do repositório) e `DASHBOARD_FEEDER_API_KEY` (secret).
+- `spreads_daily.yml` ganhou o passo "Publicar aba Spreads no hub do Itau",
+  que só avisa e sai enquanto o Feeder não estiver configurado.
+- O código do dashboard (pasta `creditResearch`) fica em `_hub_itau/`, fora do
+  Git deste repositório (que é público). Vai para o repositório do Raul por
+  pull request.
+- O navegador refaz as contas de `queries.py` (kpi_summary, time_series,
+  movers, movement_distribution, variacao_por_duration, spread_por_setor,
+  maiores_desagios). Paridade conferida contra o Python na base de 04/08/2026:
+  bate em tudo, salvo ±0,1 bps de exibição em empates de arredondamento.
+- Diferença intencional: no site atual o Top 10 Aberturas/Fechamentos
+  (`queries.movers`) IGNORA o filtro de setor/subsetor/grupo; a versão nova
+  aplica.
+- Navegação no hub: menu suspenso "Spreads" (como os grupos do dashboard de
+  Agri) com Visão Geral (`spreads`), Dispersão (`spreads-dispersao`) e Emissor
+  (`spreads-emissor`, desabilitada até ficar pronta). `deliveryPath` =
+  `fixed-income-research_dashboard` (projeto "Fixed Income Research /
+  Dashboard" no Feeder, confirmado pelo Allan).
+- Já migrados e conferidos contra o Python e contra o site ao vivo: Visão
+  Geral inteira (inclusive a decomposição em treemap, `atribuicao_variacao`;
+  bases d-1/WoW/MoM/Personalizado, as mesmas de `BASES_TELA`) e a aba
+  Dispersão (`mapa_dispersao`).
+- Aba Emissor migrada (24/11/2026), SEM os dados da B3 (pedido do Allan --
+  "vamos pensar depois em como trazer esse dado"; a aba do site já não usava
+  B3). Arquivo novo `spreads-emissores.json`: a tabela de cada emissor gerada
+  pela própria `queries.emissor_tickers`, os grupos e o emissor padrão. Cards
+  e séries por classe são calculados no navegador a partir da matriz
+  (`_bloco_de_cards`/`perfil_series`). Diferença conhecida: o navegador só
+  enxerga a janela publicada (~1 ano); o Python olha o histórico inteiro e
+  ainda conta papel cujo último preço é de 2024 (ex.: grupo Energisa no banco
+  local). No banco da Oracle (histórico de ~7 meses) os dois dão igual.
+- Detalhes/CSV da Visão Geral migrado (24/11/2026): arquivos `spreads-<classe>-detalhe-<recente|anterior>.json` (taxa e PU por papel×dia, só precificados), tabela com 10 colunas e CSV igual ao do site (BOM, `;`, número em padrão BR). No site no ar, o cabeçalho da tabela tem 8 colunas e as linhas 10 (desalinhado); o hub usa 10 nos dois. Na mesma rodada: composição virou o gráfico divergente do site, todos os gráficos passam por `utils/graficos.ts::comPadrao` (mesmo padrão de `static/chart-padrao.js`), eixo de datas em Mês-Ano, e o spread/duration publicados com 5 casas (Detalhes bate com o Python exceto empates de ponto flutuante de ±0,1 em ~10 linhas de CDI+).
+- LIÇÃO (24/11/2026): comparar cada tela com o site AO VIVO antes de dar como
+  pronta. A primeira versão saiu sem o treemap e com bases QoQ/SoS/YoY que o
+  site não oferece.
+
+### Hub do Itaú: aba Mercado Secundário — 24/11/2026
+
+Item próprio no menu do hub (ao lado do grupo "Spreads"), seção
+`mercado-secundario`. Mesma tela do site: média diária por dia útil (calendário
+ANBIMA) nas 4 janelas, volume diário/mensal/anual com drill-down, mais
+negociados (volume ou giro) e "Performance por Ativo" com a lista de emissores.
+
+- **Dados**: `scripts/export_mercado_secundario_dashboard.py` publica
+  `mercado-secundario-negocios.json` (base de volume LINHA A LINHA, colunas
+  com os nomes do export: Ticker, Data de Ref. do Negócio, Volume, Spread (bps))
+  e `mercado-secundario-cadastro.json` (ticker -> classe, emissor, setor,
+  grupo, estoque; universo inteiro das duas classes, mesma ordem de
+  `mapa_tickers`). Roda no mesmo passo do `spreads_daily.yml` que publica a
+  aba Spreads.
+- **Por que linha a linha com nome de coluna**: o Allan avisou que essa base
+  vai passar a vir de dentro do banco "com a mesma estrutura". O hub acha
+  cada coluna pelo nome do cabeçalho (`calc/mercado.ts::lerNegocios`, mesma
+  regra de `mapear_cabecalho`); quando o arquivo do banco chegar, ele
+  substitui o nosso `negocios` sem mexer no dashboard. O cadastro continua
+  saindo daqui.
+- **Contas**: `calc/mercado.ts` reproduz `app/spreads/mercado_secundario.py`
+  função a função (calendário com Páscoa, `_janelas`, `resumo`, `serie`,
+  `ranking`, `emissores_negociados`, `pontos_spread`).
+- **Paridade**: conferido com amostra de 45 mil linhas tirada das APIs do
+  site no ar (`ms_amostra_hub.json`, fora do git), carregada num SQLite e
+  passada pelo Python e pelo TS com o mesmo cadastro: 3.012 checagens, 0
+  diferença (estoque publicado com 5 casas; com 4 o giro de 1 papel diferia).
+  A amostra não traz papel que nunca teve spread no período (~0,1% do volume
+  IPCA+), por isso a tela local mostra 366 papéis/dia onde o site mostra 367.
+
+### Hub do Itaú: Início, Repositório e Notícias — 24/11/2026
+
+Seções `inicio` (agora a padrão do hub), `repositorio` e `noticias`; menu na
+ordem do site: Início, Repositório, Notícias, Spreads ▾, Mercado Secundário.
+
+- **Dados**: `scripts/export_hub_frequente.py` gera `noticias.json`,
+  `inicio.json` e `repositorio.json`; roda no fim de cada varredura
+  (`scrape.yml`, passo próprio com `continue-on-error`).
+  - `inicio.json` = saída das próprias funções de `app/inicio.py` (spreads,
+    primário, secundário, curvas, temporada) + captação mensal (13 meses). O
+    feed do Início sai do `noticias.json`, com a regra de `inicio.noticias`.
+  - `noticias.json`: tudo que é "Minha cobertura" (coberto ou rating) dos
+    últimos 30 dias + os 1.500 mais recentes fora dela, com título e resumo
+    (até 500 caracteres; liberado pelo Raul em 25/11/2026). Vórtx abre na página da operação (o link
+    assinado vence em ~1 h e o hub não tem a rota /api/documentos).
+  - `repositorio.json` = `/api/cobertura/dados` sem o campo de pendência; o
+    hub é só leitura (editar tags e "Pendências" continuam no site).
+- **Conferido** com amostra das APIs do site no ar (24/11/2026): Início
+  idêntico (placar, abertura, curvas, captação, feed), destaque de ratings
+  e documentos da aba Notícias iguais, índice do Repositório com as mesmas
+  datas por empresa.
+
+### Hub do Itaú: Mercado Primário e Captação Líquida — 24/11/2026
+
+Seções `mercado-primario` e `captacao-liquida` (itens diretos no menu). O
+Calendário NÃO vai para o hub (decisão do Allan).
+
+- **Primário**: `scripts/export_primario_dashboard.py` (passo novo no fim do
+  `ofertas_cvm.yml`) publica `primario-ofertas.json` (toda oferta não morta,
+  com quem deve/chave/setor/grupo já resolvidos pela classificação do
+  casamento), `primario-ofertas-extra.json` (colunas só do CSV, baixado só ao
+  clicar em "Baixar ofertas") e `primario-emissoes.json` (séries das DEB dos
+  últimos 3 anos). `calc/primario.ts` refaz `queries.painel` inteiro.
+  - Conferido com amostra do site no ar (CSV das 10.405 ofertas + 31
+    combinações do painel): volume, variação, ofertas, ticket, quem ficou
+    com o papel, série mensal e distribuição por trimestre iguais ao site;
+    contra o Python sobre a mesma base, 270 checagens, só sobram EMPATES DE
+    ORDEM (mesmo volume ou mesma data): o Python ordena pela ordem das linhas
+    do banco, que não é determinística.
+  - `arred` (calc/comum.ts) passou a imitar o round() do Python também no
+    empate exato (146,25 -> 146,2, metade para o par); antes arredondava para
+    longe do zero e a fila saía 0,1 diferente em alguns papéis.
+- **Captação**: `export_hub_frequente.py` publica `captacao-diaria.json`
+  (últimos 60 dias com dado) e `captacao-mensal.json` com as COLUNAS DO
+  EXPORT (data_anls/mes_ref, segmento, nom_clie_gesr, qtd_fundos, patr_liqo,
+  cpit_liqa/_mtd) e o HASH da gestora em nom_clie_gesr. `calc/captacao.ts`
+  refaz resumo, mensal, diário e amplitude. Testado com dados sintéticos;
+  falta conferir com a base real (o site só devolve a captação somada).
+
+### Tamanho dos arquivos do hub — 25/11/2026
+
+A orientação do Raul (collaborator-guide) não fixa limite em bytes: pede
+payload "razoavelmente pequeno" e, passando de poucos MB, dividir por visão
+ou empresa. A publicação no Mindassets roda a cada 5 min (arquivo novo com o
+mesmo nome substitui o pendente). Dois ajustes por isso:
+- `primario-ofertas.json`: colunas de texto repetidas (emissor, líder,
+  status, setor...) vão como índice numa lista `textos` (`codificadas` diz
+  quais). 3,8 MB → 2,1 MB; o dashboard decodifica em `lerOfertas`.
+- Mercado Secundário: `mercado-secundario-negocios-<ano>.json`, um por ano
+  (um ano passa de 8 MB). O cadastro leva `anosNegocios`; a aba abre com os
+  dois últimos anos e só busca os antigos no volume Mensal/Anual e no
+  período "Tudo". Sem `anosNegocios`, lê o arquivo único antigo.
+
 ## Regras a manter
 
 1. **Nunca** trocar `store.upsert_article` para sobrescrever corpo/título
